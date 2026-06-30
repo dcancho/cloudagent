@@ -24,19 +24,22 @@ public sealed class AgentLoop
     private readonly IInputSource _input;
     private readonly AgentContext _context;
     private readonly ToolRegistry? _tools;
+    private readonly ContextCompactor? _compactor;
 
     public AgentLoop(
         ILlmProvider provider,
         AgentOptions? options = null,
         IInputSource? input = null,
         AgentContext? context = null,
-        ToolRegistry? tools = null)
+        ToolRegistry? tools = null,
+        ContextCompactor? compactor = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _options = options ?? new AgentOptions();
         _input = input ?? new NullInputSource();
         _context = context ?? new AgentContext();
         _tools = tools;
+        _compactor = compactor;
     }
 
     public AgentContext Context => _context;
@@ -49,6 +52,9 @@ public sealed class AgentLoop
 
     /// <summary>Raised after each tool runs, with the call and its result.</summary>
     public event Action<ToolCall, ToolResult>? ToolInvoked;
+
+    /// <summary>Raised when working memory was compacted, with the number of turns evicted.</summary>
+    public event Action<int>? Compacted;
 
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
@@ -95,6 +101,9 @@ public sealed class AgentLoop
                 break;
             }
 
+            // 4. Keep working memory under budget; evicted turns become episodic memory.
+            await CompactAsync(cancellationToken).ConfigureAwait(false);
+
             await DelayAsync(cancellationToken).ConfigureAwait(false);
         }
     }
@@ -107,7 +116,7 @@ public sealed class AgentLoop
         {
             var request = new LlmRequest
             {
-                System = _options.SystemPrompt,
+                System = ComposeSystem(),
                 Messages = _context.Messages,
                 Model = _options.Model,
                 MaxTokens = _options.MaxTokens,
@@ -140,6 +149,36 @@ public sealed class AgentLoop
                 _context.Add(Message.ToolResult(call.Id, call.Name, content));
                 ToolInvoked?.Invoke(call, result);
             }
+        }
+    }
+
+    /// <summary>System prompt plus the rolling summary of compacted-out history, if any.</summary>
+    private string ComposeSystem()
+    {
+        if (string.IsNullOrWhiteSpace(_context.RollingSummary))
+            return _options.SystemPrompt;
+
+        return $"{_options.SystemPrompt}\n\n## Summary of earlier conversation\n{_context.RollingSummary}";
+    }
+
+    private async Task CompactAsync(CancellationToken cancellationToken)
+    {
+        if (_compactor is null)
+            return;
+
+        try
+        {
+            var evicted = await _compactor.CompactIfNeededAsync(_context, cancellationToken).ConfigureAwait(false);
+            if (evicted > 0)
+                Compacted?.Invoke(evicted);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Compaction is best-effort; a summariser hiccup must not kill the loop.
         }
     }
 

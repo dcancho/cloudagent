@@ -2,9 +2,11 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Collections.Generic;
 using CloudAgent.Core.Abstractions;
 using CloudAgent.Core.Loop;
 using CloudAgent.Core.Indexing;
+using CloudAgent.Core.Memory;
 using CloudAgent.Core.Providers;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Index;
@@ -72,6 +74,24 @@ var tools = Toolset.CreateDefault(workspace, search)
     .Register(new SearchIndexTool(embeddings, index))
     .Register(new SummarizeFileTool(workspace, summarizer));
 
+// Memory: Personal is user-global (follows the agent across projects); Project and Session
+// live in the workspace. A cheap local embedder keeps episodic archival/recall free.
+var sessionId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+var personalMemoryPath = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+    ".cloudagent", "memory", "personal.json");
+var memoryStore = new FileMemoryStore(new Dictionary<MemoryScope, string>
+{
+    [MemoryScope.Personal] = personalMemoryPath,
+    [MemoryScope.Project] = Path.Combine(workspace.Root, ".agent", "memory", "project.json"),
+    [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "sessions", $"{sessionId}.json"),
+});
+var memory = new MemoryManager(memoryStore, new HashEmbeddingProvider());
+
+var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
+    ? b
+    : 8000;
+
 var options = new AgentOptions
 {
     SystemPrompt =
@@ -79,7 +99,10 @@ var options = new AgentOptions
         "workspace and operate with the initiative of a capable colleague. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero, // interactive: no idle delay between turns
+    WorkingMemoryBudgetTokens = budget,
 };
+
+var compactor = new ContextCompactor(summarizer, options, memory);
 
 // Ctrl+C or typing "exit" stops the loop cleanly.
 using var cts = new CancellationTokenSource();
@@ -90,7 +113,7 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var input = new ConsoleInputSource(cts);
-var loop = new AgentLoop(provider, options, input, tools: tools);
+var loop = new AgentLoop(provider, options, input, tools: tools, compactor: compactor);
 
 loop.ResponseReceived += (iteration, response) =>
 {
@@ -106,11 +129,15 @@ loop.ToolInvoked += (call, result) =>
     Console.WriteLine($"  ⚙ {call.Name}({call.Arguments}) -> {status}");
 };
 
+loop.Compacted += evicted =>
+    Console.WriteLine($"  🧠 compacted: {evicted} turn(s) summarized + archived to episodic memory");
+
 // ---- Run --------------------------------------------------------------------
 Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
 Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
+Console.WriteLine($"Memory:    {memoryStore.Count} entr(ies); budget {options.WorkingMemoryBudgetTokens} tok; session {sessionId}");
 Console.WriteLine($"Tools:     {string.Join(", ", tools.All.Select(t => t.Name))}");
 Console.WriteLine("Type a message and press Enter. Type 'exit' or Ctrl+C to stop.");
 

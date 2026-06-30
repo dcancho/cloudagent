@@ -17,10 +17,16 @@ src/
       LlmResponse.cs            # what comes back (text, stop reason, token usage)
       ILlmProvider.cs           # the single seam to any LLM backend
     Loop/
-      AgentLoop.cs              # perceive -> think -> record, until cancelled
-      AgentContext.cs           # the running history / working memory
-      AgentOptions.cs           # model, system prompt, limits, pacing
+      AgentLoop.cs              # perceive -> think/act -> record -> compact
+      AgentContext.cs           # working memory (history, rolling summary, eviction)
+      AgentOptions.cs           # model, system prompt, limits, pacing, memory budget
+      ContextCompactor.cs       # token-budget trim + rolling summary + archival
       IInputSource.cs           # where stimulus comes from (+ NullInputSource)
+    Memory/
+      MemoryEntry.cs            # a memory + scope/kind/importance (+ MemoryHit)
+      IMemoryStore.cs           # durable, scope-partitioned memory storage
+      FileMemoryStore.cs        # JSON-per-scope store with cosine recall
+      MemoryManager.cs          # remember / recall / archive policy (own embedder)
     Providers/
       EchoLlmProvider.cs        # offline fake; runs with no API key
       AnthropicLlmProvider.cs   # real Anthropic Messages API over HTTP
@@ -147,6 +153,33 @@ offline hash provider.
 This is the substrate for memory: once the workspace is indexed, the agent can pull in only
 the relevant slices instead of carrying everything in the context window.
 
+## Memory
+
+The agent remembers across a long run and across sessions, in the coworker model.
+
+**Working memory & compaction.** `AgentContext` holds the live conversation. When it exceeds
+`WorkingMemoryBudgetTokens` (user-configurable; env `AGENT_MEMORY_BUDGET_TOKENS`), the loop's
+`ContextCompactor` evicts the oldest turns — snapping the kept window to a clean user-turn
+boundary so a tool call is never split from its result — folds them into a **rolling summary**
+(carried alongside the system prompt), and **archives the evicted turns as episodic memory**.
+Nothing is lost: trimmed turns are embedded with a cheap local embedder and stay recallable.
+
+**Durable memory, scoped.** `IMemoryStore` partitions memories three ways:
+
+| Scope | About | Location |
+| --- | --- | --- |
+| **Personal** | the user and the agent's working style; spans projects | user-global `~/.cloudagent/memory/` |
+| **Project** | this workspace: architecture, decisions, constraints | `.agent/memory/project.json` |
+| **Session** | the current run (incl. episodic archive) | `.agent/memory/sessions/<id>.json` |
+
+`MemoryManager` owns its own embedder (a local hash provider by default, so high-volume
+archival and recall stay free) and provides `RememberAsync` (curated facts), `RecallAsync`
+(cosine over scopes), and `ArchiveAsync` (episodic). Recall injects the top `RecallTopK`
+memories plus any scoring at/above `RecallThreshold` (0.80).
+
+> Status: compaction + episodic archival are wired into the loop. The explicit `remember`
+> tool, automatic recall injection, and end-of-turn consolidation are the next slices.
+
 ## Run it
 
 ```sh
@@ -176,9 +209,9 @@ The loop is deliberately a thin spine so the colleague-like capabilities hang of
 - **Tools / actions** — ✅ done: schemas advertised to the model, a think/act sub-loop
   executes calls and feeds results back. More tools (shell, HTTP, code execution) plug in
   via `ITool`.
-- **Memory** — 🚧 in progress: semantic **indexing** is in place (embeddings + vector
-  search + summaries). Next: have `AgentContext` retrieve from the index and trim/summarise
-  history so the agent runs long without overflowing the context window.
+- **Memory** — 🚧 in progress: semantic **indexing** + **context compaction with episodic
+  archival** + a **scoped memory store** (personal/project/session) are in place. Next: the
+  `remember` tool, automatic recall injection, and end-of-turn consolidation.
 - **Learning** — persist context and distilled lessons across runs in the workspace.
 - **Autonomy** — non-blocking input sources (queues, schedulers, sensors) so the agent
   acts without being prompted.
