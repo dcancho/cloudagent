@@ -33,9 +33,10 @@ src/
       TodoStore.cs              # persistent taskboard (JSON in the workspace)
     Agents/
       AgentMessage.cs           # inter-agent message envelope (+ kinds)
-      AgentHandle.cs            # one live agent: mailbox, status, cancellation
+      AgentHandle.cs            # one live agent: mailbox, status, cancellation, completion
       AgentBus.cs               # registry + router + ask/answer + supervised stop
       MailboxInputSource.cs     # an agent's mailbox as the loop's IInputSource
+      AgentOrchestrator.cs      # spawns + runs child agents (own context/memory)
     Surfaces/
       ISurface.cs               # a channel to the world (start receiving + send)
       SurfaceMessages.cs        # InboundMessage / OutboundMessage
@@ -254,11 +255,23 @@ A child's question is, to the parent's loop, just another turn to think about.
 Why nobody deadlocks: **parents never block on children** (they dispatch and keep looping, so
 they're always free to answer); a child may block on a single question, and the answer is
 delivered straight to that waiting call. Subagents share the workspace (collaborate on files)
-but get their own context and Session memory.
+but get their **own context and own memory** — they are children with scoped tasks, not
+extensions of the parent.
 
-> Status: the concurrency core (mailboxes, routing, ask/answer, supervised stop) is in place
-> and tested. Next: the management tools (`spawn_agent`, `ask_parent`, `delegate_task`, …) and
-> host wiring.
+The `AgentOrchestrator` spawns a child as a real `AgentLoop` (own context/memory, mailbox
+input, the scoped task delivered as its first message). Tools wire it up:
+
+- **Parent-side:** `spawn_agent`, `delegate_task` (blocking — spawn and await the result),
+  `list_agents`, `reply_to_agent` (answer a child's question), `stop_agent`.
+- **Child-side:** `ask_parent` (blocking question), `report_progress`, `finish` (report result
+  and wind down).
+
+A parent perceives both the human and its children through a `CompositeInputSource`, so a
+child's question is just another turn to answer.
+
+> Status: concurrency core + orchestrator + tools are in place and tested end to end (a parent
+> spawns a worker, the worker asks a question, the parent answers, the worker finishes with a
+> result). Next: wiring the spawn tools into the host's root agent so a live model can drive it.
 
 ## Surfaces (channels to the world)
 

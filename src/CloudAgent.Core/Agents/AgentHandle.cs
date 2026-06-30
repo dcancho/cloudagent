@@ -27,6 +27,8 @@ public sealed class AgentHandle
         Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions { SingleReader = true });
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _pending = new();
+    private readonly TaskCompletionSource<string> _completion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _cts;
 
     internal AgentHandle(string id, string role, string? parentId, CancellationToken linkedTo)
@@ -44,6 +46,15 @@ public sealed class AgentHandle
 
     /// <summary>The agent's final result, once it reports one.</summary>
     public string? Result { get; internal set; }
+
+    /// <summary>Completes when the agent finishes (reports a result). Awaited by a blocking delegate.</summary>
+    public Task<string> Completion => _completion.Task;
+
+    internal void Complete(string result)
+    {
+        Result = result;
+        _completion.TrySetResult(result);
+    }
 
     /// <summary>The running loop's task, set by whoever starts it.</summary>
     public Task? Runner { get; set; }
@@ -74,5 +85,6 @@ public sealed class AgentHandle
         foreach (var tcs in _pending.Values)
             tcs.TrySetCanceled();
         _pending.Clear();
+        _completion.TrySetCanceled();
     }
 }

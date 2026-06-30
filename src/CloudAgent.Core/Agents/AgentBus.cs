@@ -105,6 +105,18 @@ public sealed class AgentBus(CancellationToken rootToken = default)
         return Task.FromResult(false);
     }
 
+    /// <summary>Mark an agent finished with a result, then wind it (and any descendants) down.</summary>
+    public void Complete(AgentHandle handle, string result)
+    {
+        SetStatus(handle, AgentStatus.Done);
+        handle.Complete(result);
+
+        foreach (var child in ChildrenOf(handle.Id).ToArray())
+            Stop(child.Id);
+
+        handle.Cancel();
+    }
+
     /// <summary>Stop an agent and all of its descendants.</summary>
     public void Stop(string id)
     {
