@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudAgent.Core.Abstractions;
@@ -25,6 +27,14 @@ public sealed class AgentLoop
     private readonly AgentContext _context;
     private readonly ToolRegistry? _tools;
     private readonly ContextCompactor? _compactor;
+    private readonly Memory.MemoryManager? _memory;
+
+    /// <summary>Scopes consulted on automatic recall each turn.</summary>
+    private static readonly Memory.MemoryScope[] RecallScopes =
+        [Memory.MemoryScope.Personal, Memory.MemoryScope.Project, Memory.MemoryScope.Session];
+
+    /// <summary>Formatted memories recalled for the current turn, injected into the system prompt.</summary>
+    private string? _recalledForTurn;
 
     public AgentLoop(
         ILlmProvider provider,
@@ -32,7 +42,8 @@ public sealed class AgentLoop
         IInputSource? input = null,
         AgentContext? context = null,
         ToolRegistry? tools = null,
-        ContextCompactor? compactor = null)
+        ContextCompactor? compactor = null,
+        Memory.MemoryManager? memory = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _options = options ?? new AgentOptions();
@@ -40,6 +51,7 @@ public sealed class AgentLoop
         _context = context ?? new AgentContext();
         _tools = tools;
         _compactor = compactor;
+        _memory = memory;
     }
 
     public AgentContext Context => _context;
@@ -55,6 +67,9 @@ public sealed class AgentLoop
 
     /// <summary>Raised when working memory was compacted, with the number of turns evicted.</summary>
     public event Action<int>? Compacted;
+
+    /// <summary>Raised when memories were recalled and injected, with the count.</summary>
+    public event Action<int>? MemoriesRecalled;
 
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
@@ -91,7 +106,10 @@ public sealed class AgentLoop
                 continue;
             }
 
-            // 2/3. Think and act until the model produces a plain answer.
+            // 2. Recall: pull relevant memories for this turn and inject them.
+            _recalledForTurn = await RecallAsync(cancellationToken).ConfigureAwait(false);
+
+            // 3. Think and act until the model produces a plain answer.
             try
             {
                 await ThinkAndActAsync(iteration, cancellationToken).ConfigureAwait(false);
@@ -152,13 +170,68 @@ public sealed class AgentLoop
         }
     }
 
-    /// <summary>System prompt plus the rolling summary of compacted-out history, if any.</summary>
+    /// <summary>System prompt plus the rolling summary and any recalled memories.</summary>
     private string ComposeSystem()
     {
-        if (string.IsNullOrWhiteSpace(_context.RollingSummary))
-            return _options.SystemPrompt;
+        var sb = new StringBuilder(_options.SystemPrompt);
 
-        return $"{_options.SystemPrompt}\n\n## Summary of earlier conversation\n{_context.RollingSummary}";
+        if (!string.IsNullOrWhiteSpace(_context.RollingSummary))
+            sb.Append("\n\n## Summary of earlier conversation\n").Append(_context.RollingSummary);
+
+        if (!string.IsNullOrWhiteSpace(_recalledForTurn))
+            sb.Append("\n\n## Relevant memories\n").Append(_recalledForTurn);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Recall memories relevant to the latest turn: always the top-K, plus any others scoring
+    /// at or above the recall threshold (capped). Returns a formatted block, or null if none.
+    /// </summary>
+    private async Task<string?> RecallAsync(CancellationToken cancellationToken)
+    {
+        if (_memory is null)
+            return null;
+
+        var query = LatestUserText();
+        if (string.IsNullOrWhiteSpace(query))
+            return null;
+
+        const int maxCandidates = 10;
+        var candidates = await _memory
+            .RecallAsync(query, RecallScopes, maxCandidates, cancellationToken)
+            .ConfigureAwait(false);
+
+        var selected = new List<Memory.MemoryHit>();
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            // Always include the top-K; beyond that, keep going only while above threshold.
+            if (i < _options.RecallTopK || candidates[i].Score >= _options.RecallThreshold)
+                selected.Add(candidates[i]);
+            else
+                break;
+        }
+
+        if (selected.Count == 0)
+            return null;
+
+        var sb = new StringBuilder();
+        foreach (var hit in selected)
+            sb.AppendLine($"- ({hit.Entry.Scope}/{hit.Entry.Kind}) {hit.Entry.Content}");
+
+        MemoriesRecalled?.Invoke(selected.Count);
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Text of the most recent user message, used as the recall query.</summary>
+    private string? LatestUserText()
+    {
+        for (var i = _context.Messages.Count - 1; i >= 0; i--)
+        {
+            if (_context.Messages[i].Role == Role.User)
+                return _context.Messages[i].Content;
+        }
+        return null;
     }
 
     private async Task CompactAsync(CancellationToken cancellationToken)

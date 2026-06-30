@@ -52,6 +52,7 @@ src/
                                 #   create_directory, delete_path
       Web/                      # IWebSearchProvider (+ Null, Tavily) and web_search
       Index/                    # index_workspace, search_index, summarize_file
+      Memory/                   # remember
   CloudAgent.Host/              # console runner that wires it together
     Program.cs
     ConsoleInputSource.cs       # interactive stdin input
@@ -126,6 +127,7 @@ Built-in tools (`Toolset.CreateDefault`):
 | `index_workspace` | (Re)build the semantic index over workspace text files |
 | `search_index` | Semantic (embedding) search over the index |
 | `summarize_file` | LLM-generated summary of a workspace file |
+| `remember` | Save a durable fact to memory (personal/project/session) |
 
 Web search sits behind its own seam (`IWebSearchProvider`), mirroring the LLM provider:
 `NullWebSearchProvider` (unconfigured default) and `TavilyWebSearchProvider` (set
@@ -174,11 +176,15 @@ Nothing is lost: trimmed turns are embedded with a cheap local embedder and stay
 
 `MemoryManager` owns its own embedder (a local hash provider by default, so high-volume
 archival and recall stay free) and provides `RememberAsync` (curated facts), `RecallAsync`
-(cosine over scopes), and `ArchiveAsync` (episodic). Recall injects the top `RecallTopK`
-memories plus any scoring at/above `RecallThreshold` (0.80).
+(cosine over scopes), and `ArchiveAsync` (episodic).
 
-> Status: compaction + episodic archival are wired into the loop. The explicit `remember`
-> tool, automatic recall injection, and end-of-turn consolidation are the next slices.
+**Curating and recalling.** The agent saves durable facts explicitly with the `remember`
+tool (it picks the scope). Each turn, the loop **automatically recalls** before thinking:
+it embeds the latest user message, searches all scopes, and injects the top `RecallTopK`
+memories plus any others scoring at/above `RecallThreshold` (0.80) into the system prompt.
+
+> Status: compaction + episodic archival, the `remember` tool, and automatic recall
+> injection are wired into the loop. End-of-turn consolidation is the next slice.
 
 ## Run it
 
@@ -209,9 +215,9 @@ The loop is deliberately a thin spine so the colleague-like capabilities hang of
 - **Tools / actions** — ✅ done: schemas advertised to the model, a think/act sub-loop
   executes calls and feeds results back. More tools (shell, HTTP, code execution) plug in
   via `ITool`.
-- **Memory** — 🚧 in progress: semantic **indexing** + **context compaction with episodic
-  archival** + a **scoped memory store** (personal/project/session) are in place. Next: the
-  `remember` tool, automatic recall injection, and end-of-turn consolidation.
+- **Memory** — 🚧 in progress: semantic **indexing**, **context compaction with episodic
+  archival**, a **scoped memory store** (personal/project/session), the **`remember` tool**,
+  and **automatic recall injection** are in place. Next: end-of-turn consolidation.
 - **Learning** — persist context and distilled lessons across runs in the workspace.
 - **Autonomy** — non-blocking input sources (queues, schedulers, sensors) so the agent
   acts without being prompted.

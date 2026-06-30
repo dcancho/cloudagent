@@ -10,6 +10,7 @@ using CloudAgent.Core.Memory;
 using CloudAgent.Core.Providers;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Index;
+using CloudAgent.Core.Tools.Memory;
 using CloudAgent.Core.Tools.Web;
 using CloudAgent.Core.Workspaces;
 using CloudAgent.Host;
@@ -87,6 +88,7 @@ var memoryStore = new FileMemoryStore(new Dictionary<MemoryScope, string>
     [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "sessions", $"{sessionId}.json"),
 });
 var memory = new MemoryManager(memoryStore, new HashEmbeddingProvider());
+tools.Register(new RememberTool(memory));
 
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
@@ -113,7 +115,7 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var input = new ConsoleInputSource(cts);
-var loop = new AgentLoop(provider, options, input, tools: tools, compactor: compactor);
+var loop = new AgentLoop(provider, options, input, tools: tools, compactor: compactor, memory: memory);
 
 loop.ResponseReceived += (iteration, response) =>
 {
@@ -131,6 +133,9 @@ loop.ToolInvoked += (call, result) =>
 
 loop.Compacted += evicted =>
     Console.WriteLine($"  🧠 compacted: {evicted} turn(s) summarized + archived to episodic memory");
+
+loop.MemoriesRecalled += count =>
+    Console.WriteLine($"  🧠 recalled {count} relevant memor(ies)");
 
 // ---- Run --------------------------------------------------------------------
 Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
