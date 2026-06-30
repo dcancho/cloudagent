@@ -27,6 +27,7 @@ src/
       IMemoryStore.cs           # durable, scope-partitioned memory storage
       FileMemoryStore.cs        # JSON-per-scope store with cosine recall
       MemoryManager.cs          # remember / recall / archive policy (own embedder)
+      Consolidator.cs           # LLM-extracted durable facts during compaction
     Providers/
       EchoLlmProvider.cs        # offline fake; runs with no API key
       AnthropicLlmProvider.cs   # real Anthropic Messages API over HTTP
@@ -183,8 +184,14 @@ tool (it picks the scope). Each turn, the loop **automatically recalls** before 
 it embeds the latest user message, searches all scopes, and injects the top `RecallTopK`
 memories plus any others scoring at/above `RecallThreshold` (0.80) into the system prompt.
 
-> Status: compaction + episodic archival, the `remember` tool, and automatic recall
-> injection are wired into the loop. End-of-turn consolidation is the next slice.
+**Learning (consolidation).** When turns are compacted away, the `Consolidator` asks the LLM
+to extract durable, general facts from them and classify each as personal / project / session,
+then writes the new ones to memory (near-duplicates are skipped via a cosine check). Learning
+happens exactly when information would otherwise be summarised out — so the agent accumulates
+knowledge without being told to `remember`.
+
+> Status: compaction + episodic archival, the scoped store, the `remember` tool, automatic
+> recall injection, and consolidation-during-compaction are all wired into the loop.
 
 ## Run it
 
@@ -215,9 +222,10 @@ The loop is deliberately a thin spine so the colleague-like capabilities hang of
 - **Tools / actions** — ✅ done: schemas advertised to the model, a think/act sub-loop
   executes calls and feeds results back. More tools (shell, HTTP, code execution) plug in
   via `ITool`.
-- **Memory** — 🚧 in progress: semantic **indexing**, **context compaction with episodic
-  archival**, a **scoped memory store** (personal/project/session), the **`remember` tool**,
-  and **automatic recall injection** are in place. Next: end-of-turn consolidation.
+- **Memory** — ✅ core in place: semantic **indexing**, **context compaction with episodic
+  archival**, a **scoped store** (personal/project/session), the **`remember` tool**,
+  **automatic recall injection**, and **consolidation** (learned facts during compaction).
+  Possible follow-ups: importance/recency decay and forgetting, and a manual deep-`recall` tool.
 - **Learning** — persist context and distilled lessons across runs in the workspace.
 - **Autonomy** — non-blocking input sources (queues, schedulers, sensors) so the agent
   acts without being prompted.

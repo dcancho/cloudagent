@@ -68,6 +68,9 @@ public sealed class AgentLoop
     /// <summary>Raised when working memory was compacted, with the number of turns evicted.</summary>
     public event Action<int>? Compacted;
 
+    /// <summary>Raised when durable facts were consolidated during compaction, with the count.</summary>
+    public event Action<int>? Consolidated;
+
     /// <summary>Raised when memories were recalled and injected, with the count.</summary>
     public event Action<int>? MemoriesRecalled;
 
@@ -241,9 +244,11 @@ public sealed class AgentLoop
 
         try
         {
-            var evicted = await _compactor.CompactIfNeededAsync(_context, cancellationToken).ConfigureAwait(false);
-            if (evicted > 0)
-                Compacted?.Invoke(evicted);
+            var result = await _compactor.CompactIfNeededAsync(_context, cancellationToken).ConfigureAwait(false);
+            if (result.Evicted > 0)
+                Compacted?.Invoke(result.Evicted);
+            if (result.Consolidated > 0)
+                Consolidated?.Invoke(result.Consolidated);
         }
         catch (OperationCanceledException)
         {

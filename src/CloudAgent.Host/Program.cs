@@ -104,7 +104,9 @@ var options = new AgentOptions
     WorkingMemoryBudgetTokens = budget,
 };
 
-var compactor = new ContextCompactor(summarizer, options, memory);
+// Consolidation: extract durable facts from turns as they're compacted away (uses the chat LLM).
+var consolidator = new Consolidator(provider, memory, model);
+var compactor = new ContextCompactor(summarizer, options, memory, consolidator);
 
 // Ctrl+C or typing "exit" stops the loop cleanly.
 using var cts = new CancellationTokenSource();
@@ -136,6 +138,9 @@ loop.Compacted += evicted =>
 
 loop.MemoriesRecalled += count =>
     Console.WriteLine($"  🧠 recalled {count} relevant memor(ies)");
+
+loop.Consolidated += count =>
+    Console.WriteLine($"  🧠 consolidated {count} durable fact(s) into memory");
 
 // ---- Run --------------------------------------------------------------------
 Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");

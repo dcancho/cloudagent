@@ -18,17 +18,19 @@ public sealed class MemoryManager(
 {
     public IMemoryStore Store => store;
 
-    /// <summary>Persist a curated general fact (the explicit `remember`).</summary>
+    /// <summary>Persist a curated general fact. <paramref name="source"/> records its origin
+    /// (e.g. "remember" for the explicit tool, "consolidation" for the learned pass).</summary>
     public async Task<MemoryEntry> RememberAsync(
         string content,
         MemoryScope scope,
         double importance = 0.5,
+        string source = "remember",
         CancellationToken cancellationToken = default)
     {
         var embedding = await embeddings.EmbedAsync(content, cancellationToken).ConfigureAwait(false);
         var entry = new MemoryEntry(
             Guid.NewGuid().ToString("N"), scope, MemoryKind.Fact, content,
-            embedding, importance, DateTimeOffset.UtcNow, "remember", []);
+            embedding, importance, DateTimeOffset.UtcNow, source, []);
 
         await store.AddAsync(entry, cancellationToken).ConfigureAwait(false);
         return entry;

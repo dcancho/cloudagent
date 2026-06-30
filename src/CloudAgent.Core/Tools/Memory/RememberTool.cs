@@ -35,7 +35,9 @@ public sealed class RememberTool(MemoryManager memory) : ITool
 
         var importance = Math.Clamp(input.GetInt("importance", 50), 0, 100) / 100.0;
 
-        var entry = await memory.RememberAsync(content, scope, importance, cancellationToken).ConfigureAwait(false);
+        var entry = await memory
+            .RememberAsync(content, scope, importance, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
         return ToolResult.Ok($"Remembered ({scope}, importance {importance:0.00}): {entry.Content}");
     }
 }

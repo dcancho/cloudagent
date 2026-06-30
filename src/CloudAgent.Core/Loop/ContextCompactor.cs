@@ -8,6 +8,11 @@ using CloudAgent.Core.Memory;
 
 namespace CloudAgent.Core.Loop;
 
+/// <summary>What a compaction pass did.</summary>
+/// <param name="Evicted">Turns removed from the working window.</param>
+/// <param name="Consolidated">Durable facts learned from those turns.</param>
+public readonly record struct CompactionResult(int Evicted, int Consolidated);
+
 /// <summary>
 /// Keeps working memory under a token budget. When the context grows too large it evicts the
 /// oldest turns, folds them into a rolling summary (via the <see cref="Summarizer"/>), and —
@@ -17,21 +22,27 @@ namespace CloudAgent.Core.Loop;
 public sealed class ContextCompactor(
     Summarizer summarizer,
     AgentOptions options,
-    MemoryManager? memory = null)
+    MemoryManager? memory = null,
+    Consolidator? consolidator = null)
 {
     private const string RollingInstruction =
         "Update the running summary of this conversation. Preserve decisions made, facts " +
         "established, and open threads. Be concise and factual; no preamble.";
 
-    /// <summary>Compact the context if it exceeds the budget. Returns the number of turns evicted.</summary>
-    public async Task<int> CompactIfNeededAsync(AgentContext context, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Compact the context if it exceeds the budget: evict oldest turns, refresh the rolling
+    /// summary, archive the evicted turns as episodic memory, and consolidate durable facts
+    /// from them. Returns how much happened.
+    /// </summary>
+    public async Task<CompactionResult> CompactIfNeededAsync(
+        AgentContext context, CancellationToken cancellationToken = default)
     {
         if (EstimateTokens(context) <= options.WorkingMemoryBudgetTokens)
-            return 0;
+            return default;
 
         var evicted = context.EvictOldest(options.KeepRecentMessages);
         if (evicted.Count == 0)
-            return 0;
+            return default;
 
         var rendered = Render(context.RollingSummary, evicted);
         context.RollingSummary = await summarizer
@@ -41,7 +52,14 @@ public sealed class ContextCompactor(
         if (memory is not null)
             await memory.ArchiveAsync(evicted, cancellationToken).ConfigureAwait(false);
 
-        return evicted.Count;
+        var consolidated = 0;
+        if (consolidator is not null)
+        {
+            var facts = await consolidator.ConsolidateAsync(evicted, cancellationToken).ConfigureAwait(false);
+            consolidated = facts.Count;
+        }
+
+        return new CompactionResult(evicted.Count, consolidated);
     }
 
     /// <summary>Rough token estimate (~4 chars/token) over the summary and remaining turns.</summary>
