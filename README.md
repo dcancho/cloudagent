@@ -28,6 +28,9 @@ src/
       FileMemoryStore.cs        # JSON-per-scope store with cosine recall
       MemoryManager.cs          # remember / recall / archive policy (own embedder)
       Consolidator.cs           # LLM-extracted durable facts during compaction
+    Todos/
+      TodoItem.cs               # a taskboard entry (id, title, status)
+      TodoStore.cs              # persistent taskboard (JSON in the workspace)
     Providers/
       EchoLlmProvider.cs        # offline fake; runs with no API key
       AnthropicLlmProvider.cs   # real Anthropic Messages API over HTTP
@@ -54,6 +57,7 @@ src/
       Web/                      # IWebSearchProvider (+ Null, Tavily) and web_search
       Index/                    # index_workspace, search_index, summarize_file
       Memory/                   # remember
+      Todos/                    # todo_list/add/complete/remove/clear
   CloudAgent.Host/              # console runner that wires it together
     Program.cs
     ConsoleInputSource.cs       # interactive stdin input
@@ -129,6 +133,7 @@ Built-in tools (`Toolset.CreateDefault`):
 | `search_index` | Semantic (embedding) search over the index |
 | `summarize_file` | LLM-generated summary of a workspace file |
 | `remember` | Save a durable fact to memory (personal/project/session) |
+| `todo_list` / `todo_add` / `todo_complete` / `todo_remove` / `todo_clear` | Manage a persistent taskboard |
 
 Web search sits behind its own seam (`IWebSearchProvider`), mirroring the LLM provider:
 `NullWebSearchProvider` (unconfigured default) and `TavilyWebSearchProvider` (set

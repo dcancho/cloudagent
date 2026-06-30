@@ -11,7 +11,9 @@ using CloudAgent.Core.Providers;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Memory;
+using CloudAgent.Core.Tools.Todos;
 using CloudAgent.Core.Tools.Web;
+using CloudAgent.Core.Todos;
 using CloudAgent.Core.Workspaces;
 using CloudAgent.Host;
 
@@ -90,6 +92,15 @@ var memoryStore = new FileMemoryStore(new Dictionary<MemoryScope, string>
 var memory = new MemoryManager(memoryStore, new HashEmbeddingProvider());
 tools.Register(new RememberTool(memory));
 
+// Taskboard: a persistent todo list in the workspace.
+var todos = new TodoStore(Path.Combine(workspace.Root, ".agent", "todos.json"));
+tools
+    .Register(new TodoListTool(todos))
+    .Register(new TodoAddTool(todos))
+    .Register(new TodoCompleteTool(todos))
+    .Register(new TodoRemoveTool(todos))
+    .Register(new TodoClearTool(todos));
+
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
     : 8000;
@@ -148,6 +159,7 @@ Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
 Console.WriteLine($"Memory:    {memoryStore.Count} entr(ies); budget {options.WorkingMemoryBudgetTokens} tok; session {sessionId}");
+Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", tools.All.Select(t => t.Name))}");
 Console.WriteLine("Type a message and press Enter. Type 'exit' or Ctrl+C to stop.");
 
