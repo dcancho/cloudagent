@@ -31,6 +31,11 @@ src/
     Todos/
       TodoItem.cs               # a taskboard entry (id, title, status)
       TodoStore.cs              # persistent taskboard (JSON in the workspace)
+    Agents/
+      AgentMessage.cs           # inter-agent message envelope (+ kinds)
+      AgentHandle.cs            # one live agent: mailbox, status, cancellation
+      AgentBus.cs               # registry + router + ask/answer + supervised stop
+      MailboxInputSource.cs     # an agent's mailbox as the loop's IInputSource
     Providers/
       EchoLlmProvider.cs        # offline fake; runs with no API key
       AnthropicLlmProvider.cs   # real Anthropic Messages API over HTTP
@@ -219,6 +224,26 @@ dotnet run --project src/CloudAgent.Host
 Provider precedence: `FOUNDRY_ENDPOINT` → `ANTHROPIC_API_KEY` → echo.
 
 Type a message and press Enter. Type `exit` (or Ctrl+C) to stop.
+
+## Multi-agent (concurrent)
+
+Subagents run **concurrently**, not as blocking calls — so a child can ask its parent a
+question mid-task while the parent keeps working. Each agent is an `AgentLoop` running as its
+own `Task` with a **mailbox** (`Channel<AgentMessage>`); the `AgentBus` registers agents,
+routes messages, correlates questions with answers, and propagates stop down the tree.
+
+The trick that makes this fit cleanly: `IInputSource` already means "next stimulus, or null to
+keep running" — so a `MailboxInputSource` turns inter-agent messages into ordinary loop input.
+A child's question is, to the parent's loop, just another turn to think about.
+
+Why nobody deadlocks: **parents never block on children** (they dispatch and keep looping, so
+they're always free to answer); a child may block on a single question, and the answer is
+delivered straight to that waiting call. Subagents share the workspace (collaborate on files)
+but get their own context and Session memory.
+
+> Status: the concurrency core (mailboxes, routing, ask/answer, supervised stop) is in place
+> and tested. Next: the management tools (`spawn_agent`, `ask_parent`, `delegate_task`, …) and
+> host wiring.
 
 ## Where this is headed
 
