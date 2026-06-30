@@ -1,0 +1,177 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using CloudAgent.Core.Abstractions;
+using CloudAgent.Core.Tools;
+
+namespace CloudAgent.Core.Loop;
+
+/// <summary>
+/// The heart of the harness: a perceive → think → act cycle that runs until cancelled.
+///
+/// Each iteration it pulls any waiting input, then enters a think/act sub-loop: it sends
+/// the working context (and the available tools) to the LLM, and while the model asks to
+/// use tools, it runs them, feeds the results back, and asks again — until the model
+/// produces a plain answer. Everything is folded back into the context as it goes.
+/// </summary>
+public sealed class AgentLoop
+{
+    /// <summary>Safety bound on tool calls within a single iteration, to avoid runaway loops.</summary>
+    private const int MaxToolHopsPerIteration = 10;
+
+    private readonly ILlmProvider _provider;
+    private readonly AgentOptions _options;
+    private readonly IInputSource _input;
+    private readonly AgentContext _context;
+    private readonly ToolRegistry? _tools;
+
+    public AgentLoop(
+        ILlmProvider provider,
+        AgentOptions? options = null,
+        IInputSource? input = null,
+        AgentContext? context = null,
+        ToolRegistry? tools = null)
+    {
+        _provider = provider ?? throw new ArgumentNullException(nameof(provider));
+        _options = options ?? new AgentOptions();
+        _input = input ?? new NullInputSource();
+        _context = context ?? new AgentContext();
+        _tools = tools;
+    }
+
+    public AgentContext Context => _context;
+
+    /// <summary>Raised when external input is taken in at the start of an iteration.</summary>
+    public event Action<string>? InputReceived;
+
+    /// <summary>Raised for each model completion (may fire several times per iteration when tools are used).</summary>
+    public event Action<int, LlmResponse>? ResponseReceived;
+
+    /// <summary>Raised after each tool runs, with the call and its result.</summary>
+    public event Action<ToolCall, ToolResult>? ToolInvoked;
+
+    /// <summary>
+    /// Run the loop until <paramref name="cancellationToken"/> trips or
+    /// <see cref="AgentOptions.MaxIterations"/> is reached.
+    /// </summary>
+    public async Task RunAsync(CancellationToken cancellationToken = default)
+    {
+        var iteration = 0;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            if (_options.MaxIterations > 0 && iteration >= _options.MaxIterations)
+                break;
+
+            iteration++;
+
+            // 1. Perceive: take in anything waiting from the outside world.
+            var stimulus = await _input.NextAsync(cancellationToken).ConfigureAwait(false);
+            if (stimulus is not null)
+            {
+                _context.AddUser(stimulus);
+                InputReceived?.Invoke(stimulus);
+            }
+
+            // The input step may have signalled a stop (e.g. the user typed "exit").
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            // Nothing to act on yet and no standing context — wait for a first stimulus.
+            if (_context.IsEmpty)
+            {
+                await DelayAsync(cancellationToken).ConfigureAwait(false);
+                iteration--; // an empty idle tick doesn't count against the budget
+                continue;
+            }
+
+            // 2/3. Think and act until the model produces a plain answer.
+            try
+            {
+                await ThinkAndActAsync(iteration, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            await DelayAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ThinkAndActAsync(int iteration, CancellationToken cancellationToken)
+    {
+        var toolDefinitions = _tools?.GetDefinitions() ?? [];
+
+        for (var hop = 0; ; hop++)
+        {
+            var request = new LlmRequest
+            {
+                System = _options.SystemPrompt,
+                Messages = _context.Messages,
+                Model = _options.Model,
+                MaxTokens = _options.MaxTokens,
+                Temperature = _options.Temperature,
+                Tools = toolDefinitions,
+            };
+
+            var response = await _provider.CompleteAsync(request, cancellationToken).ConfigureAwait(false);
+
+            // Record the assistant turn (text plus any tool calls it requested).
+            _context.Add(Message.Assistant(response.Text, response.ToolCalls));
+            ResponseReceived?.Invoke(iteration, response);
+
+            // No tools requested (or none available) — the turn is done.
+            if (!response.HasToolCalls || _tools is null)
+                return;
+
+            if (hop >= MaxToolHopsPerIteration)
+            {
+                _context.AddUser(
+                    $"[harness] Tool-call limit ({MaxToolHopsPerIteration}) reached; stopping this turn.");
+                return;
+            }
+
+            // Run each requested tool and feed its result back as a tool message.
+            foreach (var call in response.ToolCalls)
+            {
+                var result = await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
+                var content = result.Success ? result.Content : $"ERROR: {result.Error}";
+                _context.Add(Message.ToolResult(call.Id, call.Name, content));
+                ToolInvoked?.Invoke(call, result);
+            }
+        }
+    }
+
+    private async Task<ToolResult> InvokeToolAsync(ToolCall call, CancellationToken cancellationToken)
+    {
+        ToolInput input;
+        try
+        {
+            input = string.IsNullOrWhiteSpace(call.Arguments)
+                ? ToolInput.Empty
+                : ToolInput.FromJson(call.Arguments);
+        }
+        catch (Exception ex)
+        {
+            return ToolResult.Fail($"Could not parse arguments for '{call.Name}': {ex.Message}");
+        }
+
+        return await _tools!.InvokeAsync(call.Name, input, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task DelayAsync(CancellationToken cancellationToken)
+    {
+        if (_options.IterationDelay <= TimeSpan.Zero)
+            return;
+
+        try
+        {
+            await Task.Delay(_options.IterationDelay, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // cancellation is the normal way out of the loop
+        }
+    }
+}

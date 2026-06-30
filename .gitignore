@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+[Aa]rtifacts/
+*.env
+
+# The agent's local workspace (its sandbox + persisted index)
+workspace/
+.agent/

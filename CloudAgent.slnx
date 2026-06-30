@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CloudAgent.Core/CloudAgent.Core.csproj" />
+    <Project Path="src/CloudAgent.Host/CloudAgent.Host.csproj" />
+  </Folder>
+</Solution>
