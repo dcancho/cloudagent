@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/CloudAgent.Core/CloudAgent.Core.csproj" />
     <Project Path="src/CloudAgent.Host/CloudAgent.Host.csproj" />
+    <Project Path="src/CloudAgent.Surfaces/CloudAgent.Surfaces.csproj" />
   </Folder>
 </Solution>

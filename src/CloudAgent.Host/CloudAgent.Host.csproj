@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CloudAgent.Core\CloudAgent.Core.csproj" />
+    <ProjectReference Include="..\CloudAgent.Surfaces\CloudAgent.Surfaces.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

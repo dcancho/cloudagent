@@ -9,6 +9,7 @@ using CloudAgent.Core.Indexing;
 using CloudAgent.Core.Memory;
 using CloudAgent.Core.Providers;
 using CloudAgent.Core.Surfaces;
+using CloudAgent.Surfaces;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Memory;
@@ -148,11 +149,24 @@ AgentConversation CreateConversation(string surface, string conversationId)
     return new AgentConversation(queue, loop);
 }
 
-// Surfaces: the console is always on; Telegram joins if a bot token is present.
+// Surfaces: the console is always on; others join when configured.
 var surfaces = new List<ISurface> { new CliSurface(cts) };
+
 var telegramToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
 if (!string.IsNullOrWhiteSpace(telegramToken))
     surfaces.Add(new TelegramSurface(telegramToken));
+
+var discordToken = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+if (!string.IsNullOrWhiteSpace(discordToken))
+    surfaces.Add(new DiscordSurface(discordToken));
+
+if (string.Equals(Environment.GetEnvironmentVariable("WEBCHAT"), "1", StringComparison.Ordinal))
+{
+    var webPort = int.TryParse(Environment.GetEnvironmentVariable("WEBCHAT_PORT"), out var wp) ? wp : 5080;
+    var webchat = new WebchatSurface(webPort);
+    surfaces.Add(webchat);
+    Console.WriteLine($"Web chat:  {webchat.Url}");
+}
 
 var router = new ConversationRouter(surfaces, CreateConversation);
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");

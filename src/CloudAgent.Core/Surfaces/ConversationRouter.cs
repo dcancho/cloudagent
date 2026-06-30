@@ -42,8 +42,11 @@ public sealed class ConversationRouter
     /// <summary>Start all surfaces and run until cancelled.</summary>
     public Task RunAsync(CancellationToken cancellationToken)
     {
-        var running = _surfaces.Select(surface =>
-            surface.StartAsync((message, ct) => OnInboundAsync(surface, message, ct), cancellationToken));
+        // Each surface runs on its own thread: some adapters (the console reader) block
+        // synchronously, and one must never stall the others from starting.
+        var running = _surfaces.Select(surface => Task.Run(
+            () => surface.StartAsync((message, ct) => OnInboundAsync(surface, message, ct), cancellationToken),
+            cancellationToken));
         return Task.WhenAll(running);
     }
 

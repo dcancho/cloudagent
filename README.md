@@ -69,9 +69,18 @@ src/
       Index/                    # index_workspace, search_index, summarize_file
       Memory/                   # remember
       Todos/                    # todo_list/add/complete/remove/clear
+  CloudAgent.Surfaces/          # surface adapters with heavier deps
+    WebchatSurface.cs           # self-hosted web chat (ASP.NET + WebSocket)
+    DiscordSurface.cs           # Discord gateway (Discord.Net)
   CloudAgent.Host/              # console runner that wires it together
     Program.cs
     CliSurface.cs               # the console as a surface
+```
+
+Web chat is the easiest to try — it needs no account:
+
+```sh
+WEBCHAT=1 dotnet run --project src/CloudAgent.Host   # then open http://localhost:5080/
 ```
 
 ## The loop
@@ -263,12 +272,16 @@ session** (own context + memory) and ships replies back to the originating surfa
 chats run side by side, like a colleague juggling threads. The CLI is no longer special; it's
 just `CliSurface`.
 
-| Surface | Transport | Status |
-| --- | --- | --- |
-| CLI | stdin/stdout | ✅ |
-| Telegram | Bot API long-poll (set `TELEGRAM_BOT_TOKEN`) | ✅ |
-| Discord | gateway (Discord.Net) | 🚧 next |
-| Web chat | ASP.NET + WebSocket | 🚧 next |
+| Surface | Transport | Enable with | Status |
+| --- | --- | --- | --- |
+| CLI | stdin/stdout | always on | ✅ |
+| Web chat | ASP.NET + WebSocket | `WEBCHAT=1` (port `WEBCHAT_PORT`, default 5080) | ✅ |
+| Telegram | Bot API long-poll | `TELEGRAM_BOT_TOKEN` | ✅ |
+| Discord | gateway (Discord.Net) | `DISCORD_BOT_TOKEN` (+ Message Content intent) | ✅ |
+
+Telegram and Discord adapters live in `CloudAgent.Surfaces` (Discord.Net + ASP.NET for web
+chat); Telegram and the abstraction are in Core. Each surface runs on its own thread, so a
+blocking adapter (the console reader) never stalls the others.
 
 > Foundation note: per-conversation sessions currently share the memory/index/todo stores,
 > which assume single-threaded use. Multi-conversation concurrency needs per-conversation

@@ -1,0 +1,80 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using CloudAgent.Core.Surfaces;
+using Discord;
+using Discord.WebSocket;
+
+namespace CloudAgent.Surfaces;
+
+/// <summary>
+/// Discord via Discord.Net's gateway client. Each channel (or DM) is a conversation. Requires a
+/// bot token and the Message Content intent enabled in the Discord developer portal.
+/// </summary>
+public sealed class DiscordSurface : ISurface
+{
+    private readonly DiscordSocketClient _client;
+    private readonly string _token;
+    private Func<InboundMessage, CancellationToken, Task>? _onMessage;
+
+    public DiscordSurface(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            throw new ArgumentException("A Discord bot token is required.", nameof(token));
+
+        _token = token;
+        _client = new DiscordSocketClient(new DiscordSocketConfig
+        {
+            GatewayIntents = GatewayIntents.Guilds
+                | GatewayIntents.GuildMessages
+                | GatewayIntents.DirectMessages
+                | GatewayIntents.MessageContent,
+        });
+    }
+
+    public string Name => "discord";
+
+    public async Task StartAsync(
+        Func<InboundMessage, CancellationToken, Task> onMessage, CancellationToken cancellationToken)
+    {
+        _onMessage = onMessage;
+        _client.MessageReceived += HandleMessageAsync;
+
+        await _client.LoginAsync(TokenType.Bot, _token);
+        await _client.StartAsync();
+
+        try
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException) { }
+
+        await _client.StopAsync();
+    }
+
+    public async Task SendAsync(OutboundMessage message, CancellationToken cancellationToken = default)
+    {
+        if (ulong.TryParse(message.ConversationId, out var channelId) &&
+            await _client.GetChannelAsync(channelId) is IMessageChannel channel)
+        {
+            await channel.SendMessageAsync(message.Text);
+        }
+    }
+
+    private async Task HandleMessageAsync(SocketMessage message)
+    {
+        // Ignore our own and other bots' messages.
+        if (message.Author.IsBot || _onMessage is null)
+            return;
+
+        await _onMessage(
+            new InboundMessage(
+                "discord",
+                message.Channel.Id.ToString(),
+                message.Author.Id.ToString(),
+                message.Author.Username,
+                message.Content,
+                DateTimeOffset.UtcNow),
+            CancellationToken.None);
+    }
+}
