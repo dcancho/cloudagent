@@ -239,6 +239,23 @@ dotnet run --project src/CloudAgent.Host
 
 Provider precedence: `FOUNDRY_ENDPOINT` → `ANTHROPIC_API_KEY` → echo.
 
+### Run locally (Windows), with the web chat UI
+
+```powershell
+# one-time: add your keys
+copy agent.secrets.example.ps1 agent.secrets.ps1   # then edit it
+# run (web chat on by default at http://localhost:5080/)
+./run.ps1
+```
+
+`run.ps1` loads `agent.secrets.ps1` (gitignored), enables the web chat surface, and starts the
+host. Open **http://localhost:5080/** to chat. Telegram/Discord are outbound-only, so if you set
+their tokens they work from the same local box with no public server or port forwarding.
+
+To keep it always-on: publish a build (`dotnet publish src/CloudAgent.Host -c Release -o publish`)
+and run `publish/CloudAgent.Host.exe` from a Windows Service (e.g. NSSM) or a Task Scheduler task
+triggered "at log on".
+
 Type a message and press Enter. Type `exit` (or Ctrl+C) to stop.
 
 ## Multi-agent (concurrent)

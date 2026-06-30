@@ -9,3 +9,7 @@ obj/
 # The agent's local workspace (its sandbox + persisted index)
 workspace/
 .agent/
+
+# Local secrets/config (copy from agent.secrets.example.ps1)
+agent.secrets.ps1
+publish/
