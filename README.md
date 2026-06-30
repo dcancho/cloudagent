@@ -269,9 +269,10 @@ input, the scoped task delivered as its first message). Tools wire it up:
 A parent perceives both the human and its children through a `CompositeInputSource`, so a
 child's question is just another turn to answer.
 
-> Status: concurrency core + orchestrator + tools are in place and tested end to end (a parent
-> spawns a worker, the worker asks a question, the parent answers, the worker finishes with a
-> result). Next: wiring the spawn tools into the host's root agent so a live model can drive it.
+> Status: wired end to end. Every surface conversation is a **root agent** that holds the
+> parent-side tools and a composite input (its surface + its mailbox), so a live model can
+> spawn children, delegate, and answer their questions. Each agent (root or child) gets its
+> own memory + compaction stack; children share only the workspace tools.
 
 ## Surfaces (channels to the world)
 

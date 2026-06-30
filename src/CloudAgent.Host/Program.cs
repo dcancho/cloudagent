@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Collections.Generic;
 using CloudAgent.Core.Abstractions;
+using CloudAgent.Core.Agents;
 using CloudAgent.Core.Loop;
 using CloudAgent.Core.Indexing;
 using CloudAgent.Core.Memory;
@@ -11,6 +12,7 @@ using CloudAgent.Core.Providers;
 using CloudAgent.Core.Surfaces;
 using CloudAgent.Surfaces;
 using CloudAgent.Core.Tools;
+using CloudAgent.Core.Tools.Agents;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Memory;
 using CloudAgent.Core.Tools.Todos;
@@ -73,35 +75,27 @@ var index = VectorIndex.Load(indexPath);
 var indexer = new WorkspaceIndexer(workspace, embeddings, index);
 var summarizer = new Summarizer(provider, model);
 
-// The agent's toolbox, scoped to the workspace.
-var tools = Toolset.CreateDefault(workspace, search)
+// Workspace tools shared by every agent — they all operate on the same workspace.
+var workspaceTools = Toolset.CreateDefault(workspace, search)
     .Register(new IndexWorkspaceTool(indexer, index, indexPath))
     .Register(new SearchIndexTool(embeddings, index))
     .Register(new SummarizeFileTool(workspace, summarizer));
 
-// Memory: Personal is user-global (follows the agent across projects); Project and Session
-// live in the workspace. A cheap local embedder keeps episodic archival/recall free.
-var sessionId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-var personalMemoryPath = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-    ".cloudagent", "memory", "personal.json");
-var memoryStore = new FileMemoryStore(new Dictionary<MemoryScope, string>
-{
-    [MemoryScope.Personal] = personalMemoryPath,
-    [MemoryScope.Project] = Path.Combine(workspace.Root, ".agent", "memory", "project.json"),
-    [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "sessions", $"{sessionId}.json"),
-});
-var memory = new MemoryManager(memoryStore, new HashEmbeddingProvider());
-tools.Register(new RememberTool(memory));
-
-// Taskboard: a persistent todo list in the workspace.
+// Taskboard: a persistent todo list in the workspace (one board, shared).
 var todos = new TodoStore(Path.Combine(workspace.Root, ".agent", "todos.json"));
-tools
+workspaceTools
     .Register(new TodoListTool(todos))
     .Register(new TodoAddTool(todos))
     .Register(new TodoCompleteTool(todos))
     .Register(new TodoRemoveTool(todos))
     .Register(new TodoClearTool(todos));
+
+// Memory paths: Personal is user-global, Project is shared; each agent gets its OWN session
+// store, so children do not share the parent's memory.
+var personalMemoryPath = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+    ".cloudagent", "memory", "personal.json");
+var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.json");
 
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
@@ -110,16 +104,47 @@ var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGE
 var options = new AgentOptions
 {
     SystemPrompt =
-        "You are an autonomous agent running on your own machine. You have a persistent " +
-        "workspace and operate with the initiative of a capable colleague. Be concise.",
+        "You are an autonomous agent running on your own machine with a persistent workspace. " +
+        "Operate with the initiative of a capable colleague. You can delegate scoped work to child " +
+        "agents (spawn_agent / delegate_task) and answer their questions. Be concise.",
     Model = model,
-    IterationDelay = TimeSpan.Zero, // interactive: no idle delay between turns
+    IterationDelay = TimeSpan.Zero,
     WorkingMemoryBudgetTokens = budget,
 };
 
-// Consolidation: extract durable facts from turns as they're compacted away (uses the chat LLM).
-var consolidator = new Consolidator(provider, memory, model);
-var compactor = new ContextCompactor(summarizer, options, memory, consolidator);
+var childOptions = new AgentOptions
+{
+    SystemPrompt =
+        "You are a subagent working on a scoped task from your parent. You have your own memory and " +
+        "the shared workspace. Use ask_parent for a decision you can't make; call finish with your " +
+        "result when done. Be concise.",
+    Model = model,
+    IterationDelay = TimeSpan.Zero,
+    WorkingMemoryBudgetTokens = budget,
+};
+
+// Per-agent memory + compaction stack: own session memory, shared personal/project knowledge.
+(MemoryManager Memory, ContextCompactor Compactor) BuildMemoryStack(string agentId)
+{
+    var store = new FileMemoryStore(new Dictionary<MemoryScope, string>
+    {
+        [MemoryScope.Personal] = personalMemoryPath,
+        [MemoryScope.Project] = projectMemoryPath,
+        [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{agentId}.json"),
+    });
+    var mem = new MemoryManager(store, new HashEmbeddingProvider());
+    var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, model));
+    return (mem, comp);
+}
+
+void AttachLogging(AgentLoop loop, string label)
+{
+    loop.ToolInvoked += (call, result) =>
+        Console.WriteLine($"  ⚙ [{label}] {call.Name} -> {(result.Success ? "ok" : "error")}");
+    loop.Compacted += n => Console.WriteLine($"  🧠 [{label}] compacted {n} turn(s)");
+    loop.MemoriesRecalled += n => Console.WriteLine($"  🧠 [{label}] recalled {n} memor(ies)");
+    loop.Consolidated += n => Console.WriteLine($"  🧠 [{label}] consolidated {n} fact(s)");
+}
 
 // Ctrl+C or typing "exit" stops everything cleanly.
 using var cts = new CancellationTokenSource();
@@ -129,23 +154,43 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-// Each conversation (surface + chat id) becomes its own agent session. Provider, tools,
-// workspace, memory and compactor are shared; the conversation gets its own context + input.
+// Multi-agent: a bus + orchestrator so any agent can spawn children that run concurrently.
+var bus = new AgentBus(cts.Token);
+bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Status}");
+
+SubagentLoopBuilder buildChild = (child, input, childTools) =>
+{
+    var (mem, comp) = BuildMemoryStack(child.Id);
+    childTools.Register(new RememberTool(mem));
+    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, mem);
+    AttachLogging(loop, $"child {child.Role}");
+    return loop;
+};
+
+var orchestrator = new AgentOrchestrator(bus, workspaceTools, buildChild);
+
+// Each conversation is a root agent that can spawn children. It perceives the human (its
+// surface queue) and its children (its mailbox) through a composite input.
 AgentConversation CreateConversation(string surface, string conversationId)
 {
+    var handle = bus.Register(role: surface, id: $"{surface}:{conversationId}");
     var queue = new QueueInputSource();
-    var context = new AgentContext();
-    var loop = new AgentLoop(provider, options, queue, context, tools, compactor, memory);
+    var input = new CompositeInputSource(queue, bus.InputFor(handle));
+    var (mem, comp) = BuildMemoryStack(handle.Id);
 
-    loop.ToolInvoked += (call, result) =>
-        Console.WriteLine($"  ⚙ [{surface}:{conversationId}] {call.Name} -> {(result.Success ? "ok" : "error")}");
-    loop.Compacted += evicted =>
-        Console.WriteLine($"  🧠 [{surface}:{conversationId}] compacted {evicted} turn(s)");
-    loop.MemoriesRecalled += count =>
-        Console.WriteLine($"  🧠 [{surface}:{conversationId}] recalled {count} memor(ies)");
-    loop.Consolidated += count =>
-        Console.WriteLine($"  🧠 [{surface}:{conversationId}] consolidated {count} fact(s)");
+    var agentTools = new ToolRegistry();
+    foreach (var tool in workspaceTools.All)
+        agentTools.Register(tool);
+    agentTools
+        .Register(new RememberTool(mem))
+        .Register(new SpawnAgentTool(orchestrator, handle))
+        .Register(new DelegateTaskTool(orchestrator, handle))
+        .Register(new ListAgentsTool(bus, handle))
+        .Register(new ReplyToAgentTool(bus, handle))
+        .Register(new StopAgentTool(bus));
 
+    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, mem);
+    AttachLogging(loop, handle.Id);
     return new AgentConversation(queue, loop);
 }
 
@@ -176,9 +221,10 @@ Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
 Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
-Console.WriteLine($"Memory:    {memoryStore.Count} entr(ies); budget {options.WorkingMemoryBudgetTokens} tok; session {sessionId}");
+Console.WriteLine($"Memory:    per-agent session store; budget {options.WorkingMemoryBudgetTokens} tok");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
-Console.WriteLine($"Tools:     {string.Join(", ", tools.All.Select(t => t.Name))}");
+Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
+Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
 
 await router.RunAsync(cts.Token);
