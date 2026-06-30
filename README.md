@@ -36,6 +36,12 @@ src/
       AgentHandle.cs            # one live agent: mailbox, status, cancellation
       AgentBus.cs               # registry + router + ask/answer + supervised stop
       MailboxInputSource.cs     # an agent's mailbox as the loop's IInputSource
+    Surfaces/
+      ISurface.cs               # a channel to the world (start receiving + send)
+      SurfaceMessages.cs        # InboundMessage / OutboundMessage
+      AgentConversation.cs      # one conversation = one agent session
+      ConversationRouter.cs     # routes (surface, chat) <-> agent sessions
+      TelegramSurface.cs        # Telegram Bot API via long polling (zero-dep)
     Providers/
       EchoLlmProvider.cs        # offline fake; runs with no API key
       AnthropicLlmProvider.cs   # real Anthropic Messages API over HTTP
@@ -65,7 +71,7 @@ src/
       Todos/                    # todo_list/add/complete/remove/clear
   CloudAgent.Host/              # console runner that wires it together
     Program.cs
-    ConsoleInputSource.cs       # interactive stdin input
+    CliSurface.cs               # the console as a surface
 ```
 
 ## The loop
@@ -244,6 +250,29 @@ but get their own context and Session memory.
 > Status: the concurrency core (mailboxes, routing, ask/answer, supervised stop) is in place
 > and tested. Next: the management tools (`spawn_agent`, `ask_parent`, `delegate_task`, …) and
 > host wiring.
+
+## Surfaces (channels to the world)
+
+The agent reaches people where they are, not just at a terminal. A **surface** is a
+bidirectional message transport (`ISurface`): start receiving (a handler per inbound message)
+and send replies out — each adapter hides its own transport (long-poll, websocket, webhook).
+
+The model reuses the same idea as the mailbox: an inbound message is a stimulus, a reply is a
+message back. The `ConversationRouter` maps each `(surface, conversationId)` to its **own agent
+session** (own context + memory) and ships replies back to the originating surface — so many
+chats run side by side, like a colleague juggling threads. The CLI is no longer special; it's
+just `CliSurface`.
+
+| Surface | Transport | Status |
+| --- | --- | --- |
+| CLI | stdin/stdout | ✅ |
+| Telegram | Bot API long-poll (set `TELEGRAM_BOT_TOKEN`) | ✅ |
+| Discord | gateway (Discord.Net) | 🚧 next |
+| Web chat | ASP.NET + WebSocket | 🚧 next |
+
+> Foundation note: per-conversation sessions currently share the memory/index/todo stores,
+> which assume single-threaded use. Multi-conversation concurrency needs per-conversation
+> isolation or locking on those stores — a tracked follow-up.
 
 ## Where this is headed
 

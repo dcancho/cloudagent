@@ -8,6 +8,7 @@ using CloudAgent.Core.Loop;
 using CloudAgent.Core.Indexing;
 using CloudAgent.Core.Memory;
 using CloudAgent.Core.Providers;
+using CloudAgent.Core.Surfaces;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Memory;
@@ -119,7 +120,7 @@ var options = new AgentOptions
 var consolidator = new Consolidator(provider, memory, model);
 var compactor = new ContextCompactor(summarizer, options, memory, consolidator);
 
-// Ctrl+C or typing "exit" stops the loop cleanly.
+// Ctrl+C or typing "exit" stops everything cleanly.
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -127,31 +128,34 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-var input = new ConsoleInputSource(cts);
-var loop = new AgentLoop(provider, options, input, tools: tools, compactor: compactor, memory: memory);
-
-loop.ResponseReceived += (iteration, response) =>
+// Each conversation (surface + chat id) becomes its own agent session. Provider, tools,
+// workspace, memory and compactor are shared; the conversation gets its own context + input.
+AgentConversation CreateConversation(string surface, string conversationId)
 {
-    if (!string.IsNullOrWhiteSpace(response.Text))
-        Console.WriteLine($"\nagent> {response.Text}");
-    if (response is { InputTokens: not null, OutputTokens: not null })
-        Console.WriteLine($"       [tokens: in {response.InputTokens}, out {response.OutputTokens}]");
-};
+    var queue = new QueueInputSource();
+    var context = new AgentContext();
+    var loop = new AgentLoop(provider, options, queue, context, tools, compactor, memory);
 
-loop.ToolInvoked += (call, result) =>
-{
-    var status = result.Success ? "ok" : "error";
-    Console.WriteLine($"  ⚙ {call.Name}({call.Arguments}) -> {status}");
-};
+    loop.ToolInvoked += (call, result) =>
+        Console.WriteLine($"  ⚙ [{surface}:{conversationId}] {call.Name} -> {(result.Success ? "ok" : "error")}");
+    loop.Compacted += evicted =>
+        Console.WriteLine($"  🧠 [{surface}:{conversationId}] compacted {evicted} turn(s)");
+    loop.MemoriesRecalled += count =>
+        Console.WriteLine($"  🧠 [{surface}:{conversationId}] recalled {count} memor(ies)");
+    loop.Consolidated += count =>
+        Console.WriteLine($"  🧠 [{surface}:{conversationId}] consolidated {count} fact(s)");
 
-loop.Compacted += evicted =>
-    Console.WriteLine($"  🧠 compacted: {evicted} turn(s) summarized + archived to episodic memory");
+    return new AgentConversation(queue, loop);
+}
 
-loop.MemoriesRecalled += count =>
-    Console.WriteLine($"  🧠 recalled {count} relevant memor(ies)");
+// Surfaces: the console is always on; Telegram joins if a bot token is present.
+var surfaces = new List<ISurface> { new CliSurface(cts) };
+var telegramToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+if (!string.IsNullOrWhiteSpace(telegramToken))
+    surfaces.Add(new TelegramSurface(telegramToken));
 
-loop.Consolidated += count =>
-    Console.WriteLine($"  🧠 consolidated {count} durable fact(s) into memory");
+var router = new ConversationRouter(surfaces, CreateConversation);
+router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
 // ---- Run --------------------------------------------------------------------
 Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
@@ -161,8 +165,8 @@ Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))
 Console.WriteLine($"Memory:    {memoryStore.Count} entr(ies); budget {options.WorkingMemoryBudgetTokens} tok; session {sessionId}");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", tools.All.Select(t => t.Name))}");
-Console.WriteLine("Type a message and press Enter. Type 'exit' or Ctrl+C to stop.");
+Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
 
-await loop.RunAsync(cts.Token);
+await router.RunAsync(cts.Token);
 
-Console.WriteLine("\nAgent loop stopped.");
+Console.WriteLine("\nAgent stopped.");
