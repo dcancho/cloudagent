@@ -24,16 +24,24 @@ using CloudAgent.Host;
 // ---- Wiring -----------------------------------------------------------------
 // Pick a provider by what's configured, falling back to the offline echo provider
 // so the harness always runs out of the box:
-//   1. Foundry   — FOUNDRY_ENDPOINT (+ optional FOUNDRY_API_KEY / FOUNDRY_MODEL)
-//   2. Anthropic — ANTHROPIC_API_KEY
-//   3. Echo      — no config
+//   1. Claude CLI — CLAUDE_CLI=1 (rides the Pro/Max subscription via `claude -p`)
+//   2. Foundry    — FOUNDRY_ENDPOINT (+ optional FOUNDRY_API_KEY / FOUNDRY_MODEL)
+//   3. Anthropic  — ANTHROPIC_API_KEY
+//   4. Echo       — no config
 var foundryEndpoint = Environment.GetEnvironmentVariable("FOUNDRY_ENDPOINT");
 var anthropicKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+var useClaudeCli = string.Equals(Environment.GetEnvironmentVariable("CLAUDE_CLI"), "1", StringComparison.Ordinal);
 
 string model = "claude-opus-4-8";
 ILlmProvider provider;
 
-if (!string.IsNullOrWhiteSpace(foundryEndpoint))
+if (useClaudeCli)
+{
+    var claudeModel = Environment.GetEnvironmentVariable("CLAUDE_MODEL"); // null => Claude Code default
+    provider = new ClaudeCliProvider(claudeModel);
+    model = claudeModel ?? ""; // empty => provider omits --model (uses the account's default)
+}
+else if (!string.IsNullOrWhiteSpace(foundryEndpoint))
 {
     model = Environment.GetEnvironmentVariable("FOUNDRY_MODEL") ?? "gpt-4o-mini";
     provider = new FoundryLlmProvider(

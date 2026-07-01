@@ -237,7 +237,17 @@ $env:FOUNDRY_EMBED_MODEL = "text-embedding-3-small"  # catalog embedding model
 dotnet run --project src/CloudAgent.Host
 ```
 
-Provider precedence: `FOUNDRY_ENDPOINT` → `ANTHROPIC_API_KEY` → echo.
+Provider precedence: `CLAUDE_CLI` → `FOUNDRY_ENDPOINT` → `ANTHROPIC_API_KEY` → echo.
+
+### Ride a Claude Pro/Max subscription (for testing)
+
+Set `CLAUDE_CLI=1` and the agent drives Claude through the local `claude` CLI (`claude -p`)
+instead of the HTTP API — billed against your Pro/Max subscription, not API credits (as long as
+`ANTHROPIC_API_KEY` is unset and you're logged into Claude Code). `CLAUDE_MODEL` overrides the
+model. Caveats: it's a **text-only** bridge (Claude Code's own tools are disabled, so CloudAgent
+tool calling doesn't flow through it), it spawns the CLI per call (slower), and Anthropic has
+signalled headless/SDK usage will eventually move off subscription pools — so treat this as a
+testing/quota-hack path, not the durable default.
 
 ### Run locally (Windows), with the web chat UI
 
