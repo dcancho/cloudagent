@@ -28,6 +28,7 @@ public sealed class AgentLoop
     private readonly ToolRegistry? _tools;
     private readonly ContextCompactor? _compactor;
     private readonly Memory.MemoryManager? _memory;
+    private readonly Memory.UtilityTracker? _utility;
 
     /// <summary>Scopes consulted on automatic recall each turn.</summary>
     private static readonly Memory.MemoryScope[] RecallScopes =
@@ -36,6 +37,9 @@ public sealed class AgentLoop
     /// <summary>Formatted memories recalled for the current turn, injected into the system prompt.</summary>
     private string? _recalledForTurn;
 
+    /// <summary>The hits behind <see cref="_recalledForTurn"/>, kept for post-turn utility judging.</summary>
+    private IReadOnlyList<Memory.MemoryHit> _recalledHitsForTurn = [];
+
     public AgentLoop(
         ILlmProvider provider,
         AgentOptions? options = null,
@@ -43,7 +47,8 @@ public sealed class AgentLoop
         AgentContext? context = null,
         ToolRegistry? tools = null,
         ContextCompactor? compactor = null,
-        Memory.MemoryManager? memory = null)
+        Memory.MemoryManager? memory = null,
+        Memory.UtilityTracker? utility = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _options = options ?? new AgentOptions();
@@ -52,6 +57,7 @@ public sealed class AgentLoop
         _tools = tools;
         _compactor = compactor;
         _memory = memory;
+        _utility = utility;
     }
 
     public AgentContext Context => _context;
@@ -73,6 +79,9 @@ public sealed class AgentLoop
 
     /// <summary>Raised when memories were recalled and injected, with the count.</summary>
     public event Action<int>? MemoriesRecalled;
+
+    /// <summary>Raised after the post-turn utility judgment, with (useful, injected) counts.</summary>
+    public event Action<int, int>? UtilityJudged;
 
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
@@ -110,7 +119,7 @@ public sealed class AgentLoop
             }
 
             // 2. Recall: pull relevant memories for this turn and inject them.
-            _recalledForTurn = await RecallAsync(cancellationToken).ConfigureAwait(false);
+            _recalledForTurn = await RecallAsync(iteration, cancellationToken).ConfigureAwait(false);
 
             // 3. Think and act until the model produces a plain answer.
             try
@@ -121,6 +130,9 @@ public sealed class AgentLoop
             {
                 break;
             }
+
+            // 3.5. Close the feedback loop: did the injected memories influence the reply?
+            await JudgeUtilityAsync(iteration, cancellationToken).ConfigureAwait(false);
 
             // 4. Keep working memory under budget; evicted turns become episodic memory.
             await CompactAsync(cancellationToken).ConfigureAwait(false);
@@ -167,22 +179,34 @@ public sealed class AgentLoop
             {
                 var result = await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
                 var content = result.Success ? result.Content : $"ERROR: {result.Error}";
+                content = JsonTruncator.Truncate(content, _options.MaxToolResultChars);
                 _context.Add(Message.ToolResult(call.Id, call.Name, content));
                 ToolInvoked?.Invoke(call, result);
             }
         }
     }
 
-    /// <summary>System prompt plus the rolling summary and any recalled memories.</summary>
+    /// <summary>System prompt plus operational state, rolling summary, and recalled memories.
+    /// Summary and memories are framed as background reference, never as active instructions —
+    /// the live conversation is always the messages themselves.</summary>
     private string ComposeSystem()
     {
         var sb = new StringBuilder(_options.SystemPrompt);
 
+        var state = _context.State.Render();
+        if (state.Length > 0)
+            sb.Append("\n\n## Operational state (maintained by the harness; authoritative)\n")
+              .Append(state);
+
         if (!string.IsNullOrWhiteSpace(_context.RollingSummary))
-            sb.Append("\n\n## Summary of earlier conversation\n").Append(_context.RollingSummary);
+            sb.Append("\n\n## Summary of earlier conversation\n")
+              .Append("(Background reference only — the messages below are the live conversation.)\n")
+              .Append(_context.RollingSummary);
 
         if (!string.IsNullOrWhiteSpace(_recalledForTurn))
-            sb.Append("\n\n## Relevant memories\n").Append(_recalledForTurn);
+            sb.Append("\n\n## Relevant memories\n")
+              .Append("(Recalled from long-term memory; may be stale — verify before relying on them.)\n")
+              .Append(_recalledForTurn);
 
         return sb.ToString();
     }
@@ -191,8 +215,9 @@ public sealed class AgentLoop
     /// Recall memories relevant to the latest turn: always the top-K, plus any others scoring
     /// at or above the recall threshold (capped). Returns a formatted block, or null if none.
     /// </summary>
-    private async Task<string?> RecallAsync(CancellationToken cancellationToken)
+    private async Task<string?> RecallAsync(int iteration, CancellationToken cancellationToken)
     {
+        _recalledHitsForTurn = [];
         if (_memory is null)
             return null;
 
@@ -222,8 +247,68 @@ public sealed class AgentLoop
         foreach (var hit in selected)
             sb.AppendLine($"- ({hit.Entry.Scope}/{hit.Entry.Kind}) {hit.Entry.Content}");
 
+        _recalledHitsForTurn = selected;
+        if (_utility is not null)
+        {
+            try
+            {
+                await _utility.RecordInjectionAsync(selected, iteration, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // measurement is best-effort; a ledger hiccup must not affect the turn
+            }
+        }
+
         MemoriesRecalled?.Invoke(selected.Count);
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// After the turn, ask the judge which injected memories actually influenced the reply,
+    /// and write the verdicts to the utility ledger. Best-effort by design.
+    /// </summary>
+    private async Task JudgeUtilityAsync(int iteration, CancellationToken cancellationToken)
+    {
+        if (_utility is null || _recalledHitsForTurn.Count == 0)
+            return;
+
+        var reply = LatestAssistantText();
+        if (string.IsNullOrWhiteSpace(reply))
+            return;
+
+        try
+        {
+            var useful = await _utility
+                .JudgeTurnAsync(_recalledHitsForTurn, LatestUserText(), reply, iteration, cancellationToken)
+                .ConfigureAwait(false);
+            if (useful is int count)
+                UtilityJudged?.Invoke(count, _recalledHitsForTurn.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            // cancellation is the normal way out of the loop
+        }
+        catch
+        {
+            // judging is best-effort; a judge hiccup must not affect the loop
+        }
+    }
+
+    /// <summary>Text of the most recent assistant message, used as the judged reply.</summary>
+    private string? LatestAssistantText()
+    {
+        for (var i = _context.Messages.Count - 1; i >= 0; i--)
+        {
+            var message = _context.Messages[i];
+            if (message.Role == Role.Assistant && !string.IsNullOrWhiteSpace(message.Content))
+                return message.Content;
+        }
+        return null;
     }
 
     /// <summary>Text of the most recent user message, used as the recall query.</summary>

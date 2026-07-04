@@ -105,6 +105,13 @@ var personalMemoryPath = Path.Combine(
     ".cloudagent", "memory", "personal.json");
 var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.json");
 
+// Utility feedback loop: a shared append-only ledger of which injected memories actually
+// helped, judged post-turn. Judging (and state snapshotting) need a real model, so both are
+// off under the echo provider to keep the ledger clean.
+var utilityLedger = new FileUtilityLedger(Path.Combine(workspace.Root, ".agent", "memory", "utility.jsonl"));
+var utilityJudge = provider is EchoLlmProvider ? null : new UtilityJudge(provider, model);
+var snapshotter = provider is EchoLlmProvider ? null : new StateSnapshotter(provider, model);
+
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
     : 8000;
@@ -131,8 +138,9 @@ var childOptions = new AgentOptions
     WorkingMemoryBudgetTokens = budget,
 };
 
-// Per-agent memory + compaction stack: own session memory, shared personal/project knowledge.
-(MemoryManager Memory, ContextCompactor Compactor) BuildMemoryStack(string agentId)
+// Per-agent memory + compaction stack: own session memory, shared personal/project knowledge,
+// shared utility ledger (memories are shared, so their track record is too).
+(MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility) BuildMemoryStack(string agentId)
 {
     var store = new FileMemoryStore(new Dictionary<MemoryScope, string>
     {
@@ -141,8 +149,9 @@ var childOptions = new AgentOptions
         [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{agentId}.json"),
     });
     var mem = new MemoryManager(store, new HashEmbeddingProvider());
-    var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, model));
-    return (mem, comp);
+    var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, model), snapshotter);
+    var utility = new UtilityTracker(utilityLedger, utilityJudge, agentId);
+    return (mem, comp, utility);
 }
 
 void AttachLogging(AgentLoop loop, string label)
@@ -152,6 +161,8 @@ void AttachLogging(AgentLoop loop, string label)
     loop.Compacted += n => Console.WriteLine($"  🧠 [{label}] compacted {n} turn(s)");
     loop.MemoriesRecalled += n => Console.WriteLine($"  🧠 [{label}] recalled {n} memor(ies)");
     loop.Consolidated += n => Console.WriteLine($"  🧠 [{label}] consolidated {n} fact(s)");
+    loop.UtilityJudged += (useful, total) =>
+        Console.WriteLine($"  📊 [{label}] memories useful this turn: {useful}/{total}");
 }
 
 // Ctrl+C or typing "exit" stops everything cleanly.
@@ -168,9 +179,9 @@ bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Sta
 
 SubagentLoopBuilder buildChild = (child, input, childTools) =>
 {
-    var (mem, comp) = BuildMemoryStack(child.Id);
+    var (mem, comp, utility) = BuildMemoryStack(child.Id);
     childTools.Register(new RememberTool(mem));
-    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, mem);
+    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, mem, utility);
     AttachLogging(loop, $"child {child.Role}");
     return loop;
 };
@@ -184,7 +195,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
     var handle = bus.Register(role: surface, id: $"{surface}:{conversationId}");
     var queue = new QueueInputSource();
     var input = new CompositeInputSource(queue, bus.InputFor(handle));
-    var (mem, comp) = BuildMemoryStack(handle.Id);
+    var (mem, comp, utility) = BuildMemoryStack(handle.Id);
 
     var agentTools = new ToolRegistry();
     foreach (var tool in workspaceTools.All)
@@ -197,7 +208,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new ReplyToAgentTool(bus, handle))
         .Register(new StopAgentTool(bus));
 
-    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, mem);
+    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, mem, utility);
     AttachLogging(loop, handle.Id);
     return new AgentConversation(queue, loop);
 }
@@ -230,6 +241,7 @@ Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
 Console.WriteLine($"Memory:    per-agent session store; budget {options.WorkingMemoryBudgetTokens} tok");
+Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");

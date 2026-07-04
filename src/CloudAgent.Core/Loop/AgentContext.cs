@@ -21,6 +21,13 @@ public sealed class AgentContext
     /// </summary>
     public string? RollingSummary { get; set; }
 
+    /// <summary>
+    /// Structured snapshot of where the work stands (active task verbatim, verified,
+    /// discarded, decisions, blockers, remaining). Carried out-of-band like the summary,
+    /// but updated field-by-field on compaction rather than re-summarized.
+    /// </summary>
+    public OperationalState State { get; set; } = new();
+
     public void Add(Message message) => _messages.Add(message);
 
     public void AddUser(string content) => Add(Message.User(content));
@@ -35,8 +42,10 @@ public sealed class AgentContext
 
     /// <summary>
     /// Remove the oldest messages, keeping roughly the most recent <paramref name="keepRecent"/>.
-    /// The kept window is snapped forward to start on a user turn, so a tool call is never
-    /// separated from its result. Returns the evicted messages in order (empty if no clean cut).
+    /// The kept window is snapped forward to start on a user turn, which upholds two
+    /// invariants at once: a tool call is never separated from its result, and the latest
+    /// user message is never evicted into the summary — it always survives as a real,
+    /// anchoring message. Returns the evicted messages in order (empty if no clean cut).
     /// </summary>
     public IReadOnlyList<Message> EvictOldest(int keepRecent)
     {

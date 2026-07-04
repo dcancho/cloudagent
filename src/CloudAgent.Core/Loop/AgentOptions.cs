@@ -37,4 +37,11 @@ public sealed class AgentOptions
 
     /// <summary>Recall any memory scoring at or above this (cosine), even beyond the top-K.</summary>
     public double RecallThreshold { get; init; } = 0.80;
+
+    /// <summary>
+    /// Cap on a single tool result's characters before it enters the context. JSON results
+    /// are shrunk structurally (leaves clipped, structure intact); plain text is cut with a
+    /// marker. 0 disables the cap.
+    /// </summary>
+    public int MaxToolResultChars { get; init; } = 16_000;
 }

@@ -23,7 +23,8 @@ public sealed class ContextCompactor(
     Summarizer summarizer,
     AgentOptions options,
     MemoryManager? memory = null,
-    Consolidator? consolidator = null)
+    Consolidator? consolidator = null,
+    StateSnapshotter? snapshotter = null)
 {
     private const string RollingInstruction =
         "Update the running summary of this conversation. Preserve decisions made, facts " +
@@ -49,6 +50,12 @@ public sealed class ContextCompactor(
             .SummarizeAsync(rendered, RollingInstruction, cancellationToken)
             .ConfigureAwait(false);
 
+        // Update (not summarize) the operational-state snapshot with the departing turns.
+        if (snapshotter is not null)
+            context.State = await snapshotter
+                .UpdateAsync(context.State, evicted, cancellationToken)
+                .ConfigureAwait(false);
+
         if (memory is not null)
             await memory.ArchiveAsync(evicted, cancellationToken).ConfigureAwait(false);
 
@@ -62,10 +69,11 @@ public sealed class ContextCompactor(
         return new CompactionResult(evicted.Count, consolidated);
     }
 
-    /// <summary>Rough token estimate (~4 chars/token) over the summary and remaining turns.</summary>
+    /// <summary>Rough token estimate (~4 chars/token) over the summary, state, and remaining turns.</summary>
     private static int EstimateTokens(AgentContext context)
     {
         var chars = context.RollingSummary?.Length ?? 0;
+        chars += context.State.Render().Length;
         foreach (var message in context.Messages)
             chars += message.Content.Length + 8; // small per-message overhead
         return chars / 4;
