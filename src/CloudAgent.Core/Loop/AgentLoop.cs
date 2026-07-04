@@ -27,7 +27,7 @@ public sealed class AgentLoop
     private readonly AgentContext _context;
     private readonly ToolRegistry? _tools;
     private readonly ContextCompactor? _compactor;
-    private readonly Memory.MemoryManager? _memory;
+    private readonly Memory.MemoryRetriever? _retriever;
     private readonly Memory.UtilityTracker? _utility;
 
     /// <summary>Scopes consulted on automatic recall each turn.</summary>
@@ -48,7 +48,8 @@ public sealed class AgentLoop
         ToolRegistry? tools = null,
         ContextCompactor? compactor = null,
         Memory.MemoryManager? memory = null,
-        Memory.UtilityTracker? utility = null)
+        Memory.UtilityTracker? utility = null,
+        Memory.MemoryRetriever? retriever = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _options = options ?? new AgentOptions();
@@ -56,7 +57,8 @@ public sealed class AgentLoop
         _context = context ?? new AgentContext();
         _tools = tools;
         _compactor = compactor;
-        _memory = memory;
+        // A bare MemoryManager still gets the plain pipeline (no rewrite, no rerank).
+        _retriever = retriever ?? (memory is null ? null : new Memory.MemoryRetriever(memory));
         _utility = utility;
     }
 
@@ -212,33 +214,24 @@ public sealed class AgentLoop
     }
 
     /// <summary>
-    /// Recall memories relevant to the latest turn: always the top-K, plus any others scoring
-    /// at or above the recall threshold (capped). Returns a formatted block, or null if none.
+    /// Recall memories for the latest turn through the retrieval pipeline (rewrite → wide
+    /// hybrid pass → rerank → budget). Returns a formatted block, or null if none.
     /// </summary>
     private async Task<string?> RecallAsync(int iteration, CancellationToken cancellationToken)
     {
         _recalledHitsForTurn = [];
-        if (_memory is null)
+        if (_retriever is null)
             return null;
 
         var query = LatestUserText();
         if (string.IsNullOrWhiteSpace(query))
             return null;
 
-        const int maxCandidates = 10;
-        var candidates = await _memory
-            .RecallAsync(query, RecallScopes, maxCandidates, cancellationToken)
+        var selected = await _retriever
+            .RetrieveAsync(
+                query, RecallScopes, _options.RecallTopK, _options.RecallThreshold,
+                budgetChars: _options.RecallBudgetTokens * 4, cancellationToken)
             .ConfigureAwait(false);
-
-        var selected = new List<Memory.MemoryHit>();
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            // Always include the top-K; beyond that, keep going only while above threshold.
-            if (i < _options.RecallTopK || candidates[i].Score >= _options.RecallThreshold)
-                selected.Add(candidates[i]);
-            else
-                break;
-        }
 
         if (selected.Count == 0)
             return null;

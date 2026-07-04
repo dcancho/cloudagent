@@ -39,6 +39,12 @@ public sealed class AgentOptions
     public double RecallThreshold { get; init; } = 0.80;
 
     /// <summary>
+    /// Strict token budget for the injected memories block each turn — fewer, better
+    /// memories beat many mediocre ones. 0 disables the cap.
+    /// </summary>
+    public int RecallBudgetTokens { get; init; } = 400;
+
+    /// <summary>
     /// Cap on a single tool result's characters before it enters the context. JSON results
     /// are shrunk structurally (leaves clipped, structure intact); plain text is cut with a
     /// marker. 0 disables the cap.

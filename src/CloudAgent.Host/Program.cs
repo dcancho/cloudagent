@@ -118,6 +118,11 @@ var utilityLedger = new FileUtilityLedger(Path.Combine(workspace.Root, ".agent",
 var utilityJudge = provider is EchoLlmProvider ? null : new UtilityJudge(provider, smallModel);
 var snapshotter = provider is EchoLlmProvider ? null : new StateSnapshotter(provider, smallModel);
 
+// Read-side pipeline: rewrite the query before searching, rerank the wide hybrid pass down
+// to the few genuinely useful memories. Both on the small model; off under echo.
+var queryRewriter = provider is EchoLlmProvider ? null : new QueryRewriter(provider, smallModel);
+var reranker = provider is EchoLlmProvider ? null : new MemoryReranker(provider, smallModel);
+
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
     : 8000;
@@ -148,7 +153,8 @@ var childOptions = new AgentOptions
 // shared utility ledger (memories are shared, so their track record is too). The hybrid
 // SQLite store (FTS5 + vector, RRF-fused) replaces the JSON files; memory embeddings use the
 // same backend as the index (Foundry when configured — pennies — else the offline hash).
-(MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility) BuildMemoryStack(string agentId)
+(MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility, MemoryRetriever Retriever)
+    BuildMemoryStack(string agentId)
 {
     var store = new SqliteMemoryStore(new Dictionary<MemoryScope, string>
     {
@@ -169,7 +175,8 @@ var childOptions = new AgentOptions
     var mem = new MemoryManager(store, embeddings, ambientMetadata: ambient);
     var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, smallModel), snapshotter);
     var utility = new UtilityTracker(utilityLedger, utilityJudge, agentId);
-    return (mem, comp, utility);
+    var retriever = new MemoryRetriever(mem, queryRewriter, reranker);
+    return (mem, comp, utility, retriever);
 }
 
 void AttachLogging(AgentLoop loop, string label)
@@ -197,9 +204,9 @@ bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Sta
 
 SubagentLoopBuilder buildChild = (child, input, childTools) =>
 {
-    var (mem, comp, utility) = BuildMemoryStack(child.Id);
+    var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id);
     childTools.Register(new RememberTool(mem));
-    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, mem, utility);
+    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, mem, utility, retriever);
     AttachLogging(loop, $"child {child.Role}");
     return loop;
 };
@@ -213,7 +220,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
     var handle = bus.Register(role: surface, id: $"{surface}:{conversationId}");
     var queue = new QueueInputSource();
     var input = new CompositeInputSource(queue, bus.InputFor(handle));
-    var (mem, comp, utility) = BuildMemoryStack(handle.Id);
+    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id);
 
     var agentTools = new ToolRegistry();
     foreach (var tool in workspaceTools.All)
@@ -226,7 +233,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new ReplyToAgentTool(bus, handle))
         .Register(new StopAgentTool(bus));
 
-    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, mem, utility);
+    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, mem, utility, retriever);
     AttachLogging(loop, handle.Id);
     return new AgentConversation(queue, loop);
 }
@@ -259,6 +266,7 @@ Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
 Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok");
+Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {options.RecallBudgetTokens} tok");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
 Console.WriteLine($"Models:    main '{model}', background '{smallModel}'");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
