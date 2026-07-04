@@ -47,7 +47,8 @@ public sealed class FileMemoryStore : IMemoryStore
     }
 
     public Task<IReadOnlyList<MemoryHit>> RecallAsync(
-        float[] query,
+        string queryText,
+        float[] queryVector,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
         CancellationToken cancellationToken = default)
@@ -58,7 +59,7 @@ public sealed class FileMemoryStore : IMemoryStore
         var hits = scopes
             .Where(_byScope.ContainsKey)
             .SelectMany(scope => _byScope[scope])
-            .Select(entry => new MemoryHit(entry, VectorIndex.Cosine(query, entry.Embedding)))
+            .Select(entry => new MemoryHit(entry, VectorIndex.Cosine(queryVector, entry.Embedding)))
             .OrderByDescending(hit => hit.Score)
             .Take(topK)
             .ToArray();

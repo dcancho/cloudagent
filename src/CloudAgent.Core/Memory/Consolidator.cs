@@ -61,7 +61,7 @@ public sealed class Consolidator(
 
             var importance = Math.Clamp(candidate.Importance, 0, 100) / 100.0;
             stored.Add(await memory
-                .RememberAsync(candidate.Fact, scope, importance, "consolidation", cancellationToken)
+                .RememberAsync(candidate.Fact, scope, importance, "consolidation", cancellationToken: cancellationToken)
                 .ConfigureAwait(false));
         }
 

@@ -23,8 +23,10 @@ using CloudAgent.Host;
 
 // ---- Wiring -----------------------------------------------------------------
 // Pick a provider by what's configured, falling back to the offline echo provider
-// so the harness always runs out of the box:
-//   1. Claude CLI — CLAUDE_CLI=1 (rides the Pro/Max subscription via `claude -p`)
+// so the harness always runs out of the box. Foundry is the production choice (one
+// endpoint serves the whole catalog; the model is picked per request, so background
+// jobs can run on a cheap model via AGENT_SMALL_MODEL):
+//   1. Claude CLI — CLAUDE_CLI=1 (explicit opt-in; rides Pro/Max via `claude -p`)
 //   2. Foundry    — FOUNDRY_ENDPOINT (+ optional FOUNDRY_API_KEY / FOUNDRY_MODEL)
 //   3. Anthropic  — ANTHROPIC_API_KEY
 //   4. Echo       — no config
@@ -81,7 +83,11 @@ IEmbeddingProvider embeddings = !string.IsNullOrWhiteSpace(foundryEndpoint)
 var indexPath = Path.Combine(workspace.Root, ".agent", "index.json");
 var index = VectorIndex.Load(indexPath);
 var indexer = new WorkspaceIndexer(workspace, embeddings, index);
-var summarizer = new Summarizer(provider, model);
+
+// Background jobs (summaries, consolidation, utility judging, state snapshots) run on a
+// cheap catalog model when one is configured; the main loop keeps the big one.
+var smallModel = Environment.GetEnvironmentVariable("AGENT_SMALL_MODEL") ?? model;
+var summarizer = new Summarizer(provider, smallModel);
 
 // Workspace tools shared by every agent — they all operate on the same workspace.
 var workspaceTools = Toolset.CreateDefault(workspace, search)
@@ -102,15 +108,15 @@ workspaceTools
 // store, so children do not share the parent's memory.
 var personalMemoryPath = Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-    ".cloudagent", "memory", "personal.json");
-var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.json");
+    ".cloudagent", "memory", "personal.db");
+var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.db");
 
 // Utility feedback loop: a shared append-only ledger of which injected memories actually
 // helped, judged post-turn. Judging (and state snapshotting) need a real model, so both are
 // off under the echo provider to keep the ledger clean.
 var utilityLedger = new FileUtilityLedger(Path.Combine(workspace.Root, ".agent", "memory", "utility.jsonl"));
-var utilityJudge = provider is EchoLlmProvider ? null : new UtilityJudge(provider, model);
-var snapshotter = provider is EchoLlmProvider ? null : new StateSnapshotter(provider, model);
+var utilityJudge = provider is EchoLlmProvider ? null : new UtilityJudge(provider, smallModel);
+var snapshotter = provider is EchoLlmProvider ? null : new StateSnapshotter(provider, smallModel);
 
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
@@ -139,17 +145,29 @@ var childOptions = new AgentOptions
 };
 
 // Per-agent memory + compaction stack: own session memory, shared personal/project knowledge,
-// shared utility ledger (memories are shared, so their track record is too).
+// shared utility ledger (memories are shared, so their track record is too). The hybrid
+// SQLite store (FTS5 + vector, RRF-fused) replaces the JSON files; memory embeddings use the
+// same backend as the index (Foundry when configured — pennies — else the offline hash).
 (MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility) BuildMemoryStack(string agentId)
 {
-    var store = new FileMemoryStore(new Dictionary<MemoryScope, string>
+    var store = new SqliteMemoryStore(new Dictionary<MemoryScope, string>
     {
         [MemoryScope.Personal] = personalMemoryPath,
         [MemoryScope.Project] = projectMemoryPath,
-        [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{agentId}.json"),
+        [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{agentId}.db"),
     });
-    var mem = new MemoryManager(store, new HashEmbeddingProvider());
-    var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, model), snapshotter);
+
+    // Ambient metadata stamped on every write: who was writing, where, in which conversation.
+    var separator = agentId.IndexOf(':');
+    var ambient = new Dictionary<string, string> { ["agent"] = agentId };
+    if (separator > 0)
+    {
+        ambient["surface"] = agentId[..separator];
+        ambient["conversation"] = agentId[(separator + 1)..];
+    }
+
+    var mem = new MemoryManager(store, embeddings, ambientMetadata: ambient);
+    var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, smallModel), snapshotter);
     var utility = new UtilityTracker(utilityLedger, utilityJudge, agentId);
     return (mem, comp, utility);
 }
@@ -240,8 +258,9 @@ Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
 Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
-Console.WriteLine($"Memory:    per-agent session store; budget {options.WorkingMemoryBudgetTokens} tok");
+Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
+Console.WriteLine($"Models:    main '{model}', background '{smallModel}'");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");

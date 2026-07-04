@@ -12,9 +12,15 @@ public interface IMemoryStore
 {
     Task AddAsync(MemoryEntry entry, CancellationToken cancellationToken = default);
 
-    /// <summary>Return the closest memories to <paramref name="query"/> within the given scopes.</summary>
+    /// <summary>
+    /// Return the memories most relevant to the query within the given scopes. Both forms of
+    /// the query are provided so a store can search lexically (<paramref name="queryText"/>),
+    /// semantically (<paramref name="queryVector"/>), or fuse the two; a vector-only store
+    /// simply ignores the text.
+    /// </summary>
     Task<IReadOnlyList<MemoryHit>> RecallAsync(
-        float[] query,
+        string queryText,
+        float[] queryVector,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
         CancellationToken cancellationToken = default);

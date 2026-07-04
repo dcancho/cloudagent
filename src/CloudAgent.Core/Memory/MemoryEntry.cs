@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace CloudAgent.Core.Memory;
 
@@ -41,7 +42,17 @@ public sealed record MemoryEntry(
     double Importance,
     DateTimeOffset CreatedAt,
     string? Source,
-    IReadOnlyList<string> Links);
+    IReadOnlyList<string> Links)
+{
+    /// <summary>
+    /// Structured context captured at write time — keys like "agent", "surface",
+    /// "conversation", "person". Enriching on write is cheap (it happens once, and the
+    /// writer knows the context); it makes keyed lookup and filtered recall possible later
+    /// without re-deriving anything at read time.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } =
+        ReadOnlyDictionary<string, string>.Empty;
+}
 
 /// <summary>A recalled memory and how closely it matched.</summary>
 /// <param name="Entry">The matched memory.</param>
