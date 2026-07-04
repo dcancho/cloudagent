@@ -30,6 +30,23 @@ public enum MemoryKind
 }
 
 /// <summary>
+/// Which residence stratum a memory lives in — a generational ladder driven by measured
+/// utility (the ledger), not by guesses:
+/// <list type="bullet">
+/// <item><see cref="Resident"/> — earns a permanent place in the system prompt (high hit rate).</item>
+/// <item><see cref="Active"/> — participates in per-turn recall (the default).</item>
+/// <item><see cref="Cold"/> — parked on disk; excluded from recall, retrievable only deliberately.
+/// Demotion here is this harness's "forgetting": reversible, never destructive.</item>
+/// </list>
+/// </summary>
+public enum MemoryResidency
+{
+    Resident,
+    Active,
+    Cold,
+}
+
+/// <summary>
 /// One durable memory: a piece of content with its embedding and metadata. Stored as a
 /// record so memory files are plain, inspectable data.
 /// </summary>
@@ -52,6 +69,9 @@ public sealed record MemoryEntry(
     /// </summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } =
         ReadOnlyDictionary<string, string>.Empty;
+
+    /// <summary>Residence stratum; moved between strata by the sleep job, never by hand.</summary>
+    public MemoryResidency Residency { get; init; } = MemoryResidency.Active;
 }
 
 /// <summary>A recalled memory and how closely it matched.</summary>

@@ -61,10 +61,12 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
                     created_at TEXT NOT NULL,
                     source TEXT,
                     links TEXT NOT NULL,
-                    metadata TEXT NOT NULL
+                    metadata TEXT NOT NULL,
+                    residency TEXT NOT NULL DEFAULT 'Active'
                 );
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(content, id UNINDEXED);
                 """);
+            MigrateResidencyColumn(connection);
 
             _connections[scope] = connection;
         }
@@ -83,9 +85,10 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
         insert.Transaction = transaction;
         insert.CommandText =
             """
-            INSERT INTO memories (id, scope, kind, content, embedding, importance, created_at, source, links, metadata)
-            VALUES ($id, $scope, $kind, $content, $embedding, $importance, $createdAt, $source, $links, $metadata)
+            INSERT INTO memories (id, scope, kind, content, embedding, importance, created_at, source, links, metadata, residency)
+            VALUES ($id, $scope, $kind, $content, $embedding, $importance, $createdAt, $source, $links, $metadata, $residency)
             """;
+        insert.Parameters.AddWithValue("$residency", entry.Residency.ToString());
         insert.Parameters.AddWithValue("$id", entry.Id);
         insert.Parameters.AddWithValue("$scope", entry.Scope.ToString());
         insert.Parameters.AddWithValue("$kind", entry.Kind.ToString());
@@ -121,13 +124,18 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
 
         var active = scopes.Where(_connections.ContainsKey).ToArray();
 
-        // Semantic leg: cosine over every entry in scope (linear scan, same as the rest of
-        // the harness — fine until the corpus outgrows memory).
+        // Semantic leg: cosine over every Active entry in scope (linear scan, same as the
+        // rest of the harness — fine until the corpus outgrows memory). Resident entries are
+        // already standing in the prompt and Cold ones are deliberately forgotten, so recall
+        // considers only the Active stratum.
         var entries = new Dictionary<string, MemoryEntry>();
         foreach (var scope in active)
         {
             foreach (var entry in LoadScope(_connections[scope]))
-                entries[entry.Id] = entry;
+            {
+                if (entry.Residency == MemoryResidency.Active)
+                    entries[entry.Id] = entry;
+            }
         }
 
         var cosineById = entries.Values.ToDictionary(
@@ -150,6 +158,7 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
         }
 
         var lexicalLeg = lexical
+            .Where(hit => entries.ContainsKey(hit.Id)) // FTS is stratum-blind; filter to Active
             .OrderBy(hit => hit.Bm25)
             .Take(CandidatesPerLeg)
             .Select(hit => hit.Id)
@@ -167,6 +176,54 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
             .ToArray();
 
         return Task.FromResult<IReadOnlyList<MemoryHit>>(hits);
+    }
+
+    public Task<IReadOnlyList<MemoryEntry>> ListAsync(
+        IReadOnlyCollection<MemoryScope> scopes, CancellationToken cancellationToken = default)
+    {
+        var entries = scopes
+            .Where(_connections.ContainsKey)
+            .SelectMany(scope => LoadScope(_connections[scope]))
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<MemoryEntry>>(entries);
+    }
+
+    public Task UpdateAsync(MemoryEntry entry, CancellationToken cancellationToken = default)
+    {
+        if (!_connections.TryGetValue(entry.Scope, out var connection))
+            throw new InvalidOperationException($"No storage path configured for scope '{entry.Scope}'.");
+
+        using var transaction = connection.BeginTransaction();
+
+        using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText =
+            """
+            UPDATE memories SET content = $content, embedding = $embedding, importance = $importance,
+                source = $source, links = $links, metadata = $metadata, residency = $residency
+            WHERE id = $id
+            """;
+        update.Parameters.AddWithValue("$id", entry.Id);
+        update.Parameters.AddWithValue("$content", entry.Content);
+        update.Parameters.AddWithValue("$embedding", MemoryMarshal.AsBytes<float>(entry.Embedding).ToArray());
+        update.Parameters.AddWithValue("$importance", entry.Importance);
+        update.Parameters.AddWithValue("$source", (object?)entry.Source ?? DBNull.Value);
+        update.Parameters.AddWithValue("$links", JsonSerializer.Serialize(entry.Links, JsonOptions));
+        update.Parameters.AddWithValue("$metadata", JsonSerializer.Serialize(entry.Metadata, JsonOptions));
+        update.Parameters.AddWithValue("$residency", entry.Residency.ToString());
+        update.ExecuteNonQuery();
+
+        // Refresh the FTS row in case the content changed.
+        using var fts = connection.CreateCommand();
+        fts.Transaction = transaction;
+        fts.CommandText =
+            "DELETE FROM memories_fts WHERE id = $id; INSERT INTO memories_fts (content, id) VALUES ($content, $id);";
+        fts.Parameters.AddWithValue("$id", entry.Id);
+        fts.Parameters.AddWithValue("$content", entry.Content);
+        fts.ExecuteNonQuery();
+
+        transaction.Commit();
+        return Task.CompletedTask;
     }
 
     public Task ForgetAsync(string id, CancellationToken cancellationToken = default)
@@ -225,7 +282,7 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
     {
         using var command = connection.CreateCommand();
         command.CommandText =
-            "SELECT id, scope, kind, content, embedding, importance, created_at, source, links, metadata FROM memories";
+            "SELECT id, scope, kind, content, embedding, importance, created_at, source, links, metadata, residency FROM memories";
 
         using var reader = command.ExecuteReader();
         while (reader.Read())
@@ -247,8 +304,20 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
             {
                 Metadata = JsonSerializer
                     .Deserialize<Dictionary<string, string>>(reader.GetString(9), JsonOptions) ?? [],
+                Residency = Enum.Parse<MemoryResidency>(reader.GetString(10)),
             };
         }
+    }
+
+    /// <summary>Add the residency column to databases created before it existed.</summary>
+    private static void MigrateResidencyColumn(SqliteConnection connection)
+    {
+        using var check = connection.CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'residency'";
+        if (Convert.ToInt32(check.ExecuteScalar()) > 0)
+            return;
+
+        Execute(connection, "ALTER TABLE memories ADD COLUMN residency TEXT NOT NULL DEFAULT 'Active'");
     }
 
     private static void Execute(SqliteConnection connection, string sql)

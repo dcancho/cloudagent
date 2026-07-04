@@ -27,5 +27,12 @@ public interface IMemoryStore
 
     Task ForgetAsync(string id, CancellationToken cancellationToken = default);
 
+    /// <summary>Enumerate every entry in the given scopes (all strata) — the sleep job's view.</summary>
+    Task<IReadOnlyList<MemoryEntry>> ListAsync(
+        IReadOnlyCollection<MemoryScope> scopes, CancellationToken cancellationToken = default);
+
+    /// <summary>Replace the stored entry with the same id (residency/importance moves).</summary>
+    Task UpdateAsync(MemoryEntry entry, CancellationToken cancellationToken = default);
+
     int Count { get; }
 }

@@ -123,6 +123,26 @@ var snapshotter = provider is EchoLlmProvider ? null : new StateSnapshotter(prov
 var queryRewriter = provider is EchoLlmProvider ? null : new QueryRewriter(provider, smallModel);
 var reranker = provider is EchoLlmProvider ? null : new MemoryReranker(provider, smallModel);
 
+// Sleep-time consolidation: tamper-evident ledger of every decision, a staging area for
+// distilled knowledge (applied only through the approval tools), and the written policy
+// that judges distillation — editable prose, versioned in git, injected as the system
+// prompt of the sleep pass.
+var consolidationLedger = new ConsolidationLedger(
+    Path.Combine(workspace.Root, ".agent", "memory", "consolidation.jsonl"));
+var pendingConsolidations = new PendingConsolidations(
+    Path.Combine(workspace.Root, ".agent", "memory", "pending"));
+
+var policyPath = Environment.GetEnvironmentVariable("CONSOLIDATION_POLICY")
+    ?? Path.Combine(Directory.GetCurrentDirectory(), "docs", "consolidation-policy.md");
+var consolidationPolicy = File.Exists(policyPath)
+    ? File.ReadAllText(policyPath)
+    : "You are the memory-consolidation process of an autonomous agent. Only propose a fact " +
+      "when the same lesson appears in at least 3 independent episodes; cite the episode " +
+      "numbers as evidence. Never distill secrets or one-off remarks. Prefer few, " +
+      "well-grounded facts over many speculative ones.";
+
+var sleepJobs = new System.Collections.Concurrent.ConcurrentBag<SleepJob>();
+
 var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
     ? b
     : 8000;
@@ -176,6 +196,12 @@ var childOptions = new AgentOptions
     var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, smallModel), snapshotter);
     var utility = new UtilityTracker(utilityLedger, utilityJudge, agentId);
     var retriever = new MemoryRetriever(mem, queryRewriter, reranker);
+
+    if (provider is not EchoLlmProvider)
+        sleepJobs.Add(new SleepJob(
+            provider, mem, utilityLedger, consolidationLedger, pendingConsolidations,
+            agentId, consolidationPolicy, smallModel));
+
     return (mem, comp, utility, retriever);
 }
 
@@ -227,6 +253,8 @@ AgentConversation CreateConversation(string surface, string conversationId)
         agentTools.Register(tool);
     agentTools
         .Register(new RememberTool(mem))
+        .Register(new ListConsolidationsTool(pendingConsolidations))
+        .Register(new ApplyConsolidationTool(pendingConsolidations, mem, consolidationLedger))
         .Register(new SpawnAgentTool(orchestrator, handle))
         .Register(new DelegateTaskTool(orchestrator, handle))
         .Register(new ListAgentsTool(bus, handle))
@@ -260,6 +288,50 @@ if (string.Equals(Environment.GetEnvironmentVariable("WEBCHAT"), "1", StringComp
 var router = new ConversationRouter(surfaces, CreateConversation);
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
+// Sleep timer: every interval, run each registered agent's consolidation pass. Mechanical
+// strata moves auto-apply; distillation only stages proposals for review.
+var sleepMinutes = int.TryParse(Environment.GetEnvironmentVariable("SLEEP_INTERVAL_MIN"), out var sm) ? sm : 30;
+if (provider is not EchoLlmProvider && sleepMinutes > 0)
+{
+    _ = Task.Run(async () =>
+    {
+        while (!cts.Token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(sleepMinutes), cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            foreach (var job in sleepJobs)
+            {
+                if (cts.Token.IsCancellationRequested)
+                    break;
+
+                try
+                {
+                    var result = await job.RunAsync(cts.Token);
+                    if (result.Demoted > 0 || result.Promoted > 0 || result.StagedProposalId is not null)
+                        Console.WriteLine(
+                            $"  😴 sleep: {result.Demoted} demoted, {result.Promoted} strata move(s), " +
+                            $"staged: {result.StagedProposalId ?? "none"}");
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // sleep is best-effort; it gets another chance next interval
+                }
+            }
+        }
+    });
+}
+
 // ---- Run --------------------------------------------------------------------
 Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
 Console.WriteLine($"Workspace: {workspace.Root}");
@@ -269,6 +341,8 @@ Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {optio
 Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {options.RecallBudgetTokens} tok");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
 Console.WriteLine($"Models:    main '{model}', background '{smallModel}'");
+Console.WriteLine($"Sleep:     {(provider is EchoLlmProvider || sleepMinutes <= 0 ? "off" : $"every {sleepMinutes} min")}; " +
+    $"pending proposals: {pendingConsolidations.List().Count}; ledger chain {(consolidationLedger.Verify() ? "OK" : "BROKEN")}");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");

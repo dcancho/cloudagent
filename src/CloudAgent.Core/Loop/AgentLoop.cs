@@ -40,6 +40,9 @@ public sealed class AgentLoop
     /// <summary>The hits behind <see cref="_recalledForTurn"/>, kept for post-turn utility judging.</summary>
     private IReadOnlyList<Memory.MemoryHit> _recalledHitsForTurn = [];
 
+    /// <summary>Resident-stratum memories, standing in the system prompt every turn.</summary>
+    private string? _residentForTurn;
+
     public AgentLoop(
         ILlmProvider provider,
         AgentOptions? options = null,
@@ -120,7 +123,8 @@ public sealed class AgentLoop
                 continue;
             }
 
-            // 2. Recall: pull relevant memories for this turn and inject them.
+            // 2. Recall: resident memories stand every turn; the rest is retrieved on demand.
+            _residentForTurn = await LoadResidentsAsync(cancellationToken).ConfigureAwait(false);
             _recalledForTurn = await RecallAsync(iteration, cancellationToken).ConfigureAwait(false);
 
             // 3. Think and act until the model produces a plain answer.
@@ -194,6 +198,11 @@ public sealed class AgentLoop
     private string ComposeSystem()
     {
         var sb = new StringBuilder(_options.SystemPrompt);
+
+        if (!string.IsNullOrWhiteSpace(_residentForTurn))
+            sb.Append("\n\n## Standing memories\n")
+              .Append("(These earned permanent residence through measured usefulness.)\n")
+              .Append(_residentForTurn);
 
         var state = _context.State.Render();
         if (state.Length > 0)
@@ -290,6 +299,24 @@ public sealed class AgentLoop
         {
             // judging is best-effort; a judge hiccup must not affect the loop
         }
+    }
+
+    /// <summary>Formatted resident-stratum memories, or null when there are none.</summary>
+    private async Task<string?> LoadResidentsAsync(CancellationToken cancellationToken)
+    {
+        if (_retriever is null)
+            return null;
+
+        var residents = await _retriever.Memory
+            .GetResidentAsync(RecallScopes, cancellationToken)
+            .ConfigureAwait(false);
+        if (residents.Count == 0)
+            return null;
+
+        var sb = new StringBuilder();
+        foreach (var entry in residents)
+            sb.AppendLine($"- {entry.Content}");
+        return sb.ToString().TrimEnd();
     }
 
     /// <summary>Text of the most recent assistant message, used as the judged reply.</summary>

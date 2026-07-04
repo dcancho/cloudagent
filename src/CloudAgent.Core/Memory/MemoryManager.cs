@@ -86,6 +86,47 @@ public sealed class MemoryManager(
         }
     }
 
+    /// <summary>Every entry in the given scopes, all strata — the sleep job's working view.</summary>
+    public Task<IReadOnlyList<MemoryEntry>> ListAsync(
+        IReadOnlyCollection<MemoryScope> scopes, CancellationToken cancellationToken = default) =>
+        store.ListAsync(scopes, cancellationToken);
+
+    /// <summary>The entries that have earned a standing place in the system prompt.</summary>
+    public async Task<IReadOnlyList<MemoryEntry>> GetResidentAsync(
+        IReadOnlyCollection<MemoryScope> scopes, CancellationToken cancellationToken = default)
+    {
+        var entries = await store.ListAsync(scopes, cancellationToken).ConfigureAwait(false);
+        return entries.Where(e => e.Residency == MemoryResidency.Resident).ToArray();
+    }
+
+    /// <summary>Move an entry to another stratum (the sleep job's promote/demote primitive).</summary>
+    public async Task<MemoryEntry> SetResidencyAsync(
+        MemoryEntry entry, MemoryResidency residency, CancellationToken cancellationToken = default)
+    {
+        var moved = entry with { Residency = residency };
+        await store.UpdateAsync(moved, cancellationToken).ConfigureAwait(false);
+        return moved;
+    }
+
+    /// <summary>
+    /// Store a dense episodic summary produced by sleep-time compaction — it replaces the
+    /// individual episodes it condenses (which get demoted to Cold, not deleted).
+    /// </summary>
+    public async Task<MemoryEntry> ArchiveSummaryAsync(
+        string content, CancellationToken cancellationToken = default)
+    {
+        var embedding = await embeddings.EmbedAsync(content, cancellationToken).ConfigureAwait(false);
+        var entry = new MemoryEntry(
+            Guid.NewGuid().ToString("N"), sessionScope, MemoryKind.Episodic, content,
+            embedding, 0.4, DateTimeOffset.UtcNow, "sleep-compaction", [])
+        {
+            Metadata = Merge(null),
+        };
+
+        await store.AddAsync(entry, cancellationToken).ConfigureAwait(false);
+        return entry;
+    }
+
     /// <summary>Ambient metadata overlaid with per-write keys (per-write wins on conflict).</summary>
     private IReadOnlyDictionary<string, string> Merge(IReadOnlyDictionary<string, string>? metadata)
     {

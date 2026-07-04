@@ -24,6 +24,9 @@ public sealed class MemoryRetriever(
     /// <summary>Rough per-hit formatting overhead (bullet, scope/kind tag) in characters.</summary>
     private const int PerHitOverheadChars = 24;
 
+    /// <summary>The underlying manager, for reads outside the pipeline (e.g. resident memories).</summary>
+    public MemoryManager Memory => memory;
+
     /// <summary>
     /// Retrieve the memories to inject for a turn. <paramref name="topK"/> and
     /// <paramref name="threshold"/> drive the fallback selection when no reranker decides;

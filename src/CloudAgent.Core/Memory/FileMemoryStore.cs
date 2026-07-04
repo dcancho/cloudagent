@@ -59,12 +59,37 @@ public sealed class FileMemoryStore : IMemoryStore
         var hits = scopes
             .Where(_byScope.ContainsKey)
             .SelectMany(scope => _byScope[scope])
+            .Where(entry => entry.Residency == MemoryResidency.Active)
             .Select(entry => new MemoryHit(entry, VectorIndex.Cosine(queryVector, entry.Embedding)))
             .OrderByDescending(hit => hit.Score)
             .Take(topK)
             .ToArray();
 
         return Task.FromResult<IReadOnlyList<MemoryHit>>(hits);
+    }
+
+    public Task<IReadOnlyList<MemoryEntry>> ListAsync(
+        IReadOnlyCollection<MemoryScope> scopes, CancellationToken cancellationToken = default)
+    {
+        var entries = scopes
+            .Where(_byScope.ContainsKey)
+            .SelectMany(scope => _byScope[scope])
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<MemoryEntry>>(entries);
+    }
+
+    public Task UpdateAsync(MemoryEntry entry, CancellationToken cancellationToken = default)
+    {
+        if (!_byScope.TryGetValue(entry.Scope, out var list))
+            throw new InvalidOperationException($"No storage path configured for scope '{entry.Scope}'.");
+
+        var index = list.FindIndex(e => e.Id == entry.Id);
+        if (index < 0)
+            throw new InvalidOperationException($"No memory with id '{entry.Id}' in scope '{entry.Scope}'.");
+
+        list[index] = entry;
+        Save(entry.Scope);
+        return Task.CompletedTask;
     }
 
     public Task ForgetAsync(string id, CancellationToken cancellationToken = default)
