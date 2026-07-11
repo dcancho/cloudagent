@@ -19,65 +19,30 @@ using CloudAgent.Core.Tools.Todos;
 using CloudAgent.Core.Tools.Web;
 using CloudAgent.Core.Todos;
 using CloudAgent.Core.Workspaces;
+using CloudAgent.Core.Attention;
 using CloudAgent.Host;
+using CloudAgent.Host.Configuration;
 
 // ---- Wiring -----------------------------------------------------------------
-// Pick a provider by what's configured, falling back to the offline echo provider
-// so the harness always runs out of the box. Foundry is the production choice (one
-// endpoint serves the whole catalog; the model is picked per request, so background
-// jobs can run on a cheap model via AGENT_SMALL_MODEL):
-//   1. Claude CLI — CLAUDE_CLI=1 (explicit opt-in; rides Pro/Max via `claude -p`)
-//   2. Foundry    — FOUNDRY_ENDPOINT (+ optional FOUNDRY_API_KEY / FOUNDRY_MODEL)
-//   3. Anthropic  — ANTHROPIC_API_KEY
-//   4. Echo       — no config
-var foundryEndpoint = Environment.GetEnvironmentVariable("FOUNDRY_ENDPOINT");
-var anthropicKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
-var useClaudeCli = string.Equals(Environment.GetEnvironmentVariable("CLAUDE_CLI"), "1", StringComparison.Ordinal);
-
-string model = "claude-opus-4-8";
-ILlmProvider provider;
-
-if (useClaudeCli)
-{
-    var claudeModel = Environment.GetEnvironmentVariable("CLAUDE_MODEL"); // null => Claude Code default
-    provider = new ClaudeCliProvider(claudeModel);
-    model = claudeModel ?? ""; // empty => provider omits --model (uses the account's default)
-}
-else if (!string.IsNullOrWhiteSpace(foundryEndpoint))
-{
-    model = Environment.GetEnvironmentVariable("FOUNDRY_MODEL") ?? "gpt-4o-mini";
-    provider = new FoundryLlmProvider(
-        new Uri(foundryEndpoint),
-        Environment.GetEnvironmentVariable("FOUNDRY_API_KEY"),
-        model);
-}
-else if (!string.IsNullOrWhiteSpace(anthropicKey))
-{
-    provider = new AnthropicLlmProvider(anthropicKey);
-}
-else
-{
-    provider = new EchoLlmProvider();
-}
+// All environment resolution lives in HostConfig; the composition root below only constructs.
+// Provider/LLM selection (LlmConfig + ProviderFactory) keeps the precedence — highest first:
+// Claude CLI → Foundry → Anthropic → echo. Foundry is the production choice (one endpoint
+// serves the whole catalog; background jobs run on a cheap model via AGENT_SMALL_MODEL).
+var config = HostConfig.FromEnvironment();
+var providers = new ProviderFactory(config.Llm);
+ILlmProvider provider = providers.CreateLlm();
+var model = config.Llm.Model;
 
 // The agent's world: a rooted area it may act within (env AGENT_WORKSPACE, else ./workspace).
-var workspaceRoot = Environment.GetEnvironmentVariable("AGENT_WORKSPACE")
-    ?? Path.Combine(Directory.GetCurrentDirectory(), "workspace");
-IWorkspace workspace = new Workspace(workspaceRoot);
+IWorkspace workspace = new Workspace(config.WorkspaceRoot);
 
 // Web search backend: Tavily if a key is present, otherwise unconfigured.
-var tavilyKey = Environment.GetEnvironmentVariable("TAVILY_API_KEY");
-IWebSearchProvider search = string.IsNullOrWhiteSpace(tavilyKey)
+IWebSearchProvider search = string.IsNullOrWhiteSpace(config.TavilyApiKey)
     ? new NullWebSearchProvider()
-    : new TavilyWebSearchProvider(tavilyKey);
+    : new TavilyWebSearchProvider(config.TavilyApiKey);
 
 // Embeddings backend: Foundry if its endpoint is set, else a deterministic offline hash.
-IEmbeddingProvider embeddings = !string.IsNullOrWhiteSpace(foundryEndpoint)
-    ? new FoundryEmbeddingProvider(
-        new Uri(foundryEndpoint),
-        Environment.GetEnvironmentVariable("FOUNDRY_API_KEY"),
-        Environment.GetEnvironmentVariable("FOUNDRY_EMBED_MODEL") ?? "text-embedding-3-small")
-    : new HashEmbeddingProvider();
+IEmbeddingProvider embeddings = providers.CreateEmbeddings();
 
 // Semantic index over the workspace, persisted under .agent/index.json.
 var indexPath = Path.Combine(workspace.Root, ".agent", "index.json");
@@ -86,7 +51,7 @@ var indexer = new WorkspaceIndexer(workspace, embeddings, index);
 
 // Background jobs (summaries, consolidation, utility judging, state snapshots) run on a
 // cheap catalog model when one is configured; the main loop keeps the big one.
-var smallModel = Environment.GetEnvironmentVariable("AGENT_SMALL_MODEL") ?? model;
+var smallModel = config.Llm.SmallModel;
 var summarizer = new Summarizer(provider, smallModel);
 
 // Workspace tools shared by every agent — they all operate on the same workspace.
@@ -132,8 +97,7 @@ var consolidationLedger = new ConsolidationLedger(
 var pendingConsolidations = new PendingConsolidations(
     Path.Combine(workspace.Root, ".agent", "memory", "pending"));
 
-var policyPath = Environment.GetEnvironmentVariable("CONSOLIDATION_POLICY")
-    ?? Path.Combine(Directory.GetCurrentDirectory(), "docs", "consolidation-policy.md");
+var policyPath = config.ConsolidationPolicyPath;
 var consolidationPolicy = File.Exists(policyPath)
     ? File.ReadAllText(policyPath)
     : "You are the memory-consolidation process of an autonomous agent. Only propose a fact " +
@@ -143,10 +107,6 @@ var consolidationPolicy = File.Exists(policyPath)
 
 var sleepJobs = new System.Collections.Concurrent.ConcurrentBag<SleepJob>();
 
-var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
-    ? b
-    : 8000;
-
 var options = new AgentOptions
 {
     SystemPrompt =
@@ -155,7 +115,7 @@ var options = new AgentOptions
         "agents (spawn_agent / delegate_task) and answer their questions. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
-    WorkingMemoryBudgetTokens = budget,
+    WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
 };
 
 var childOptions = new AgentOptions
@@ -166,8 +126,25 @@ var childOptions = new AgentOptions
         "result when done. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
-    WorkingMemoryBudgetTokens = budget,
+    WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
 };
+
+// Attention (eje 5) knobs — recall shape and budget — live with the module, not AgentOptions.
+var attentionOptions = new AttentionOptions();
+
+// Wrap the assembler in the metacognitive gate (eje 8) when enabled: it suppresses injected
+// memories whose measured track record says they keep not helping, logging each suppression.
+IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, string label)
+{
+    IAttentionManager attention = new ContextAssembler(persona, retriever, attentionOptions);
+    if (attentionOptions.MetacognitionEnabled)
+        attention = new MetacognitiveAttentionManager(
+            attention, utilityLedger, attentionOptions,
+            onSuppressed: hit => Console.WriteLine(
+                $"  🚫 [{label}] suppressed low-confidence memory: " +
+                (hit.Entry.Content.Length <= 80 ? hit.Entry.Content : hit.Entry.Content[..80] + "…")));
+    return attention;
+}
 
 // Per-agent memory + compaction stack: own session memory, shared personal/project knowledge,
 // shared utility ledger (memories are shared, so their track record is too). The hybrid
@@ -207,6 +184,13 @@ var childOptions = new AgentOptions
 
 void AttachLogging(AgentLoop loop, string label)
 {
+    loop.ResponseReceived += (_, r) =>
+    {
+        if (r.CacheReadTokens is > 0 || r.CacheWriteTokens is > 0)
+            Console.WriteLine(
+                $"  💰 [{label}] prompt tokens — {r.CacheReadTokens ?? 0} cached, " +
+                $"{r.CacheWriteTokens ?? 0} written, {r.InputTokens ?? 0} fresh");
+    };
     loop.ToolInvoked += (call, result) =>
         Console.WriteLine($"  ⚙ [{label}] {call.Name} -> {(result.Success ? "ok" : "error")}");
     loop.Compacted += n => Console.WriteLine($"  🧠 [{label}] compacted {n} turn(s)");
@@ -232,7 +216,8 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
 {
     var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id);
     childTools.Register(new RememberTool(mem));
-    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, mem, utility, retriever);
+    var attention = BuildAttention(childOptions.SystemPrompt, retriever, $"child {child.Role}");
+    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, attention, utility);
     AttachLogging(loop, $"child {child.Role}");
     return loop;
 };
@@ -261,7 +246,8 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new ReplyToAgentTool(bus, handle))
         .Register(new StopAgentTool(bus));
 
-    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, mem, utility, retriever);
+    var attention = BuildAttention(options.SystemPrompt, retriever, handle.Id);
+    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, attention, utility);
     AttachLogging(loop, handle.Id);
     return new AgentConversation(queue, loop);
 }
@@ -269,18 +255,15 @@ AgentConversation CreateConversation(string surface, string conversationId)
 // Surfaces: the console is always on; others join when configured.
 var surfaces = new List<ISurface> { new CliSurface(cts) };
 
-var telegramToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
-if (!string.IsNullOrWhiteSpace(telegramToken))
-    surfaces.Add(new TelegramSurface(telegramToken));
+if (!string.IsNullOrWhiteSpace(config.TelegramBotToken))
+    surfaces.Add(new TelegramSurface(config.TelegramBotToken));
 
-var discordToken = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
-if (!string.IsNullOrWhiteSpace(discordToken))
-    surfaces.Add(new DiscordSurface(discordToken));
+if (!string.IsNullOrWhiteSpace(config.DiscordBotToken))
+    surfaces.Add(new DiscordSurface(config.DiscordBotToken));
 
-if (string.Equals(Environment.GetEnvironmentVariable("WEBCHAT"), "1", StringComparison.Ordinal))
+if (config.WebchatEnabled)
 {
-    var webPort = int.TryParse(Environment.GetEnvironmentVariable("WEBCHAT_PORT"), out var wp) ? wp : 5080;
-    var webchat = new WebchatSurface(webPort);
+    var webchat = new WebchatSurface(config.WebchatPort);
     surfaces.Add(webchat);
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
@@ -290,7 +273,7 @@ router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation op
 
 // Sleep timer: every interval, run each registered agent's consolidation pass. Mechanical
 // strata moves auto-apply; distillation only stages proposals for review.
-var sleepMinutes = int.TryParse(Environment.GetEnvironmentVariable("SLEEP_INTERVAL_MIN"), out var sm) ? sm : 30;
+var sleepMinutes = config.SleepIntervalMinutes;
 if (provider is not EchoLlmProvider && sleepMinutes > 0)
 {
     _ = Task.Run(async () =>
@@ -338,7 +321,8 @@ Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
 Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok");
-Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {options.RecallBudgetTokens} tok");
+Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {attentionOptions.RecallBudgetTokens} tok");
+Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
 Console.WriteLine($"Models:    main '{model}', background '{smallModel}'");
 Console.WriteLine($"Sleep:     {(provider is EchoLlmProvider || sleepMinutes <= 0 ? "off" : $"every {sleepMinutes} min")}; " +

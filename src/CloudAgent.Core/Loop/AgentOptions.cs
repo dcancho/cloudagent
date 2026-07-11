@@ -32,17 +32,8 @@ public sealed class AgentOptions
     /// <summary>How many recent messages to keep verbatim when compacting.</summary>
     public int KeepRecentMessages { get; init; } = 12;
 
-    /// <summary>Baseline number of memories to recall and inject each turn.</summary>
-    public int RecallTopK { get; init; } = 3;
-
-    /// <summary>Recall any memory scoring at or above this (cosine), even beyond the top-K.</summary>
-    public double RecallThreshold { get; init; } = 0.80;
-
-    /// <summary>
-    /// Strict token budget for the injected memories block each turn — fewer, better
-    /// memories beat many mediocre ones. 0 disables the cap.
-    /// </summary>
-    public int RecallBudgetTokens { get; init; } = 400;
+    // Recall knobs (RecallTopK/RecallThreshold/RecallBudgetTokens) now live in
+    // CloudAgent.Core.Attention.AttentionOptions — they belong to the attention module.
 
     /// <summary>
     /// Cap on a single tool result's characters before it enters the context. JSON results

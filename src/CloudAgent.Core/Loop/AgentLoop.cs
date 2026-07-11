@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudAgent.Core.Abstractions;
@@ -27,21 +25,12 @@ public sealed class AgentLoop
     private readonly AgentContext _context;
     private readonly ToolRegistry? _tools;
     private readonly ContextCompactor? _compactor;
-    private readonly Memory.MemoryRetriever? _retriever;
+    private readonly Attention.IAttentionManager _attention;
     private readonly Memory.UtilityTracker? _utility;
 
-    /// <summary>Scopes consulted on automatic recall each turn.</summary>
-    private static readonly Memory.MemoryScope[] RecallScopes =
-        [Memory.MemoryScope.Personal, Memory.MemoryScope.Project, Memory.MemoryScope.Session];
-
-    /// <summary>Formatted memories recalled for the current turn, injected into the system prompt.</summary>
-    private string? _recalledForTurn;
-
-    /// <summary>The hits behind <see cref="_recalledForTurn"/>, kept for post-turn utility judging.</summary>
-    private IReadOnlyList<Memory.MemoryHit> _recalledHitsForTurn = [];
-
-    /// <summary>Resident-stratum memories, standing in the system prompt every turn.</summary>
-    private string? _residentForTurn;
+    /// <summary>What attention assembled for the current turn: system prefix, volatile context,
+    /// and the injected hits (kept for the feedback loop's recording and post-turn judging).</summary>
+    private Attention.AssembledContext? _assembled;
 
     public AgentLoop(
         ILlmProvider provider,
@@ -50,9 +39,8 @@ public sealed class AgentLoop
         AgentContext? context = null,
         ToolRegistry? tools = null,
         ContextCompactor? compactor = null,
-        Memory.MemoryManager? memory = null,
-        Memory.UtilityTracker? utility = null,
-        Memory.MemoryRetriever? retriever = null)
+        Attention.IAttentionManager? attention = null,
+        Memory.UtilityTracker? utility = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _options = options ?? new AgentOptions();
@@ -60,8 +48,9 @@ public sealed class AgentLoop
         _context = context ?? new AgentContext();
         _tools = tools;
         _compactor = compactor;
-        // A bare MemoryManager still gets the plain pipeline (no rewrite, no rerank).
-        _retriever = retriever ?? (memory is null ? null : new Memory.MemoryRetriever(memory));
+        // Even without memory, the loop needs an assembler for the persona / system prompt.
+        _attention = attention ?? new Attention.ContextAssembler(
+            _options.SystemPrompt, retriever: null, new Attention.AttentionOptions());
         _utility = utility;
     }
 
@@ -123,9 +112,15 @@ public sealed class AgentLoop
                 continue;
             }
 
-            // 2. Recall: resident memories stand every turn; the rest is retrieved on demand.
-            _residentForTurn = await LoadResidentsAsync(cancellationToken).ConfigureAwait(false);
-            _recalledForTurn = await RecallAsync(iteration, cancellationToken).ConfigureAwait(false);
+            // 2. Attention: assemble what reaches the model this turn (residents, state, summary,
+            // recalled memories). Attention returns the injected hits; the loop feeds the ledger.
+            _assembled = await _attention
+                .AssembleAsync(_context, LatestUserText(), cancellationToken).ConfigureAwait(false);
+            if (_assembled.InjectedMemories.Count > 0)
+            {
+                await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);
+                MemoriesRecalled?.Invoke(_assembled.InjectedMemories.Count);
+            }
 
             // 3. Think and act until the model produces a plain answer.
             try
@@ -155,7 +150,8 @@ public sealed class AgentLoop
         {
             var request = new LlmRequest
             {
-                System = ComposeSystem(),
+                System = _assembled!.System,
+                EphemeralContext = _assembled.EphemeralContext,
                 Messages = _context.Messages,
                 Model = _options.Model,
                 MaxTokens = _options.MaxTokens,
@@ -192,82 +188,30 @@ public sealed class AgentLoop
         }
     }
 
-    /// <summary>System prompt plus operational state, rolling summary, and recalled memories.
-    /// Summary and memories are framed as background reference, never as active instructions —
-    /// the live conversation is always the messages themselves.</summary>
-    private string ComposeSystem()
-    {
-        var sb = new StringBuilder(_options.SystemPrompt);
-
-        if (!string.IsNullOrWhiteSpace(_residentForTurn))
-            sb.Append("\n\n## Standing memories\n")
-              .Append("(These earned permanent residence through measured usefulness.)\n")
-              .Append(_residentForTurn);
-
-        var state = _context.State.Render();
-        if (state.Length > 0)
-            sb.Append("\n\n## Operational state (maintained by the harness; authoritative)\n")
-              .Append(state);
-
-        if (!string.IsNullOrWhiteSpace(_context.RollingSummary))
-            sb.Append("\n\n## Summary of earlier conversation\n")
-              .Append("(Background reference only — the messages below are the live conversation.)\n")
-              .Append(_context.RollingSummary);
-
-        if (!string.IsNullOrWhiteSpace(_recalledForTurn))
-            sb.Append("\n\n## Relevant memories\n")
-              .Append("(Recalled from long-term memory; may be stale — verify before relying on them.)\n")
-              .Append(_recalledForTurn);
-
-        return sb.ToString();
-    }
-
     /// <summary>
-    /// Recall memories for the latest turn through the retrieval pipeline (rewrite → wide
-    /// hybrid pass → rerank → budget). Returns a formatted block, or null if none.
+    /// Record the memories attention injected into the utility ledger — the feedback loop (eje 7).
+    /// Attention itself no longer touches the ledger; it hands back the hits and the loop records
+    /// them. Best-effort: a ledger hiccup must not affect the turn.
     /// </summary>
-    private async Task<string?> RecallAsync(int iteration, CancellationToken cancellationToken)
+    private async Task RecordInjectionAsync(int iteration, CancellationToken cancellationToken)
     {
-        _recalledHitsForTurn = [];
-        if (_retriever is null)
-            return null;
+        if (_utility is null || _assembled is null)
+            return;
 
-        var query = LatestUserText();
-        if (string.IsNullOrWhiteSpace(query))
-            return null;
-
-        var selected = await _retriever
-            .RetrieveAsync(
-                query, RecallScopes, _options.RecallTopK, _options.RecallThreshold,
-                budgetChars: _options.RecallBudgetTokens * 4, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (selected.Count == 0)
-            return null;
-
-        var sb = new StringBuilder();
-        foreach (var hit in selected)
-            sb.AppendLine($"- ({hit.Entry.Scope}/{hit.Entry.Kind}) {hit.Entry.Content}");
-
-        _recalledHitsForTurn = selected;
-        if (_utility is not null)
+        try
         {
-            try
-            {
-                await _utility.RecordInjectionAsync(selected, iteration, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                // measurement is best-effort; a ledger hiccup must not affect the turn
-            }
+            await _utility
+                .RecordInjectionAsync(_assembled.InjectedMemories, iteration, cancellationToken)
+                .ConfigureAwait(false);
         }
-
-        MemoriesRecalled?.Invoke(selected.Count);
-        return sb.ToString().TrimEnd();
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // measurement is best-effort; a ledger hiccup must not affect the turn
+        }
     }
 
     /// <summary>
@@ -276,7 +220,7 @@ public sealed class AgentLoop
     /// </summary>
     private async Task JudgeUtilityAsync(int iteration, CancellationToken cancellationToken)
     {
-        if (_utility is null || _recalledHitsForTurn.Count == 0)
+        if (_utility is null || _assembled is null || _assembled.InjectedMemories.Count == 0)
             return;
 
         var reply = LatestAssistantText();
@@ -286,10 +230,10 @@ public sealed class AgentLoop
         try
         {
             var useful = await _utility
-                .JudgeTurnAsync(_recalledHitsForTurn, LatestUserText(), reply, iteration, cancellationToken)
+                .JudgeTurnAsync(_assembled.InjectedMemories, LatestUserText(), reply, iteration, cancellationToken)
                 .ConfigureAwait(false);
             if (useful is int count)
-                UtilityJudged?.Invoke(count, _recalledHitsForTurn.Count);
+                UtilityJudged?.Invoke(count, _assembled.InjectedMemories.Count);
         }
         catch (OperationCanceledException)
         {
@@ -299,24 +243,6 @@ public sealed class AgentLoop
         {
             // judging is best-effort; a judge hiccup must not affect the loop
         }
-    }
-
-    /// <summary>Formatted resident-stratum memories, or null when there are none.</summary>
-    private async Task<string?> LoadResidentsAsync(CancellationToken cancellationToken)
-    {
-        if (_retriever is null)
-            return null;
-
-        var residents = await _retriever.Memory
-            .GetResidentAsync(RecallScopes, cancellationToken)
-            .ConfigureAwait(false);
-        if (residents.Count == 0)
-            return null;
-
-        var sb = new StringBuilder();
-        foreach (var entry in residents)
-            sb.AppendLine($"- {entry.Content}");
-        return sb.ToString().TrimEnd();
     }
 
     /// <summary>Text of the most recent assistant message, used as the judged reply.</summary>
