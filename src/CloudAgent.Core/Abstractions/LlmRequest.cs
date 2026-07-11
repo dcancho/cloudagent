@@ -8,8 +8,21 @@ namespace CloudAgent.Core.Abstractions;
 /// </summary>
 public sealed class LlmRequest
 {
-    /// <summary>Standing instructions / persona, sent out-of-band where the provider supports it.</summary>
+    /// <summary>
+    /// Standing instructions / persona, sent out-of-band where the provider supports it. This
+    /// is the <em>stable</em> part of the prompt — it changes rarely (persona, and memories that
+    /// have earned permanent residence), so providers treat it as a cacheable prefix.
+    /// </summary>
     public string? System { get; init; }
+
+    /// <summary>
+    /// Per-turn context that changes almost every turn — recalled memories, the rolling summary,
+    /// the operational-state snapshot. Kept out of <see cref="System"/> on purpose: baking
+    /// volatile text into the system prefix invalidates the prompt cache every turn. Providers
+    /// place this at the tail (adjacent to the latest turn) so the stable prefix stays a cache
+    /// hit. Framed as background reference, exactly as if it were the trailing system sections.
+    /// </summary>
+    public string? EphemeralContext { get; init; }
 
     /// <summary>The conversation so far, oldest first.</summary>
     public IReadOnlyList<Message> Messages { get; init; } = [];

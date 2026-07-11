@@ -54,11 +54,22 @@ public sealed class FoundryLlmProvider : ILlmProvider
             Temperature = (float)request.Temperature,
         };
 
+        // The system message stays stable across turns so Azure's automatic prefix caching keeps
+        // hitting it; per-turn volatile context is folded into the latest human turn instead.
         if (!string.IsNullOrWhiteSpace(request.System))
             options.Messages.Add(new ChatRequestSystemMessage(request.System));
 
-        foreach (var message in request.Messages)
+        var ephemeralTarget = string.IsNullOrWhiteSpace(request.EphemeralContext)
+            ? -1
+            : LastUserIndex(request.Messages);
+
+        for (var i = 0; i < request.Messages.Count; i++)
+        {
+            var message = request.Messages[i];
+            if (i == ephemeralTarget)
+                message = message with { Content = $"{request.EphemeralContext}\n\n{message.Content}" };
             options.Messages.Add(MapMessage(message));
+        }
 
         foreach (var tool in request.Tools)
         {
@@ -74,6 +85,15 @@ public sealed class FoundryLlmProvider : ILlmProvider
             await _client.CompleteAsync(options, cancellationToken).ConfigureAwait(false);
 
         return MapResponse(response.Value);
+    }
+
+    /// <summary>Index of the most recent human turn — where per-turn context is folded in.</summary>
+    private static int LastUserIndex(IReadOnlyList<Message> messages)
+    {
+        for (var i = messages.Count - 1; i >= 0; i--)
+            if (messages[i].Role == Role.User)
+                return i;
+        return -1;
     }
 
     private static ChatRequestMessage MapMessage(Message message)

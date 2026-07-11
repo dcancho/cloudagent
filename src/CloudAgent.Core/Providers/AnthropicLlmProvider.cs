@@ -42,11 +42,13 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             ["model"] = request.Model ?? "claude-opus-4-8",
             ["max_tokens"] = request.MaxTokens,
             ["temperature"] = request.Temperature,
-            ["messages"] = BuildMessages(request.Messages),
+            ["messages"] = BuildMessages(request.Messages, request.EphemeralContext),
         };
 
+        // The stable system prefix is marked cacheable; per-turn volatile context rides at the
+        // message tail instead (see BuildMessages), so this prefix stays a cache hit across turns.
         if (!string.IsNullOrWhiteSpace(request.System))
-            body["system"] = request.System;
+            body["system"] = new JsonArray { TextBlock(request.System, cache: true) };
 
         if (request.Tools.Count > 0)
             body["tools"] = BuildTools(request.Tools);
@@ -80,10 +82,16 @@ public sealed class AnthropicLlmProvider : ILlmProvider
                 ["input_schema"] = tool.Schema.DeepClone(),
             });
         }
+
+        // Cache the whole (stable) tool-schema block: a breakpoint on the last tool caches
+        // every tool before it. Tool definitions are large and never change mid-conversation.
+        if (array.Count > 0 && array[^1] is JsonObject last)
+            last["cache_control"] = CacheControl();
+
         return array;
     }
 
-    private static JsonArray BuildMessages(IReadOnlyList<Message> messages)
+    private static JsonArray BuildMessages(IReadOnlyList<Message> messages, string? ephemeralContext)
     {
         var result = new JsonArray();
         JsonArray? pendingToolResults = null;
@@ -143,8 +151,62 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         }
 
         FlushToolResults();
+
+        // Volatile per-turn context rides just ahead of the latest human turn, so it never
+        // pollutes the cacheable system/tool/history prefix.
+        PrependEphemeralToLatestUserTurn(result, ephemeralContext);
+
+        // Incremental conversation caching: a breakpoint on the last block means each new turn
+        // reads the entire prior conversation from cache and pays fresh only for the new tail.
+        MarkTailCacheable(result);
+
         return result;
     }
+
+    /// <summary>
+    /// Prepend the volatile context to the most recent human turn (a user message with plain
+    /// string content — tool-result user messages carry array content and are skipped).
+    /// </summary>
+    private static void PrependEphemeralToLatestUserTurn(JsonArray messages, string? ephemeralContext)
+    {
+        if (string.IsNullOrWhiteSpace(ephemeralContext))
+            return;
+
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            if (messages[i] is JsonObject message
+                && (string?)message["role"] == "user"
+                && message["content"] is JsonValue value
+                && value.TryGetValue(out string? text))
+            {
+                message["content"] = $"{ephemeralContext}\n\n{text}";
+                return;
+            }
+        }
+    }
+
+    /// <summary>Attach a cache breakpoint to the last content block of the last message,
+    /// normalising plain-string content to a one-block array so the marker has somewhere to sit.</summary>
+    private static void MarkTailCacheable(JsonArray messages)
+    {
+        if (messages.Count == 0 || messages[^1] is not JsonObject last)
+            return;
+
+        if (last["content"] is JsonValue value && value.TryGetValue(out string? text))
+            last["content"] = new JsonArray { TextBlock(text, cache: true) };
+        else if (last["content"] is JsonArray blocks && blocks.Count > 0 && blocks[^1] is JsonObject block)
+            block["cache_control"] = CacheControl();
+    }
+
+    private static JsonObject TextBlock(string text, bool cache)
+    {
+        var block = new JsonObject { ["type"] = "text", ["text"] = text };
+        if (cache)
+            block["cache_control"] = CacheControl();
+        return block;
+    }
+
+    private static JsonObject CacheControl() => new() { ["type"] = "ephemeral" };
 
     private static JsonNode ParseArgumentsOrEmpty(string arguments)
     {
@@ -195,16 +257,20 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             _ => StopReason.Other,
         };
 
-        int? inputTokens = null, outputTokens = null;
+        int? inputTokens = null, outputTokens = null, cacheRead = null, cacheWrite = null;
         if (root.TryGetProperty("usage", out var usage))
         {
             if (usage.TryGetProperty("input_tokens", out var it)) inputTokens = it.GetInt32();
             if (usage.TryGetProperty("output_tokens", out var ot)) outputTokens = ot.GetInt32();
+            if (usage.TryGetProperty("cache_read_input_tokens", out var cr)) cacheRead = cr.GetInt32();
+            if (usage.TryGetProperty("cache_creation_input_tokens", out var cw)) cacheWrite = cw.GetInt32();
         }
 
         return new LlmResponse(text.ToString(), stopReason, inputTokens, outputTokens)
         {
             ToolCalls = toolCalls,
+            CacheReadTokens = cacheRead,
+            CacheWriteTokens = cacheWrite,
         };
     }
 }

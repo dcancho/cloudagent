@@ -22,7 +22,8 @@ public enum StopReason
 /// </summary>
 /// <param name="Text">The assistant's generated text.</param>
 /// <param name="StopReason">Why generation ended.</param>
-/// <param name="InputTokens">Tokens consumed by the prompt, if reported.</param>
+/// <param name="InputTokens">Tokens consumed by the prompt, if reported. On providers with
+/// prompt caching this counts only the <em>fresh</em> (uncached) input tokens.</param>
 /// <param name="OutputTokens">Tokens generated, if reported.</param>
 public sealed record LlmResponse(
     string Text,
@@ -35,4 +36,10 @@ public sealed record LlmResponse(
 
     /// <summary>True when the model requested at least one tool call.</summary>
     public bool HasToolCalls => ToolCalls.Count > 0;
+
+    /// <summary>Prompt tokens served from cache this turn (cheap), if the provider reports them.</summary>
+    public int? CacheReadTokens { get; init; }
+
+    /// <summary>Prompt tokens written to cache this turn (a one-time premium), if reported.</summary>
+    public int? CacheWriteTokens { get; init; }
 }
