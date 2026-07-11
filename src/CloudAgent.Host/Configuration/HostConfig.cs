@@ -1,0 +1,74 @@
+using System;
+using System.IO;
+
+namespace CloudAgent.Host.Configuration;
+
+/// <summary>
+/// Everything the host resolves from the environment at startup, as data. This is the umbrella
+/// over <see cref="LlmConfig"/> (which stays a cohesive, independently-testable unit) plus the
+/// workspace, surface tokens, and memory/sleep knobs. Reading env lives here once; the
+/// composition root keeps only construction — it never touches <c>Environment</c> again.
+/// </summary>
+/// <param name="Llm">Provider/model configuration (see <see cref="LlmConfig"/>).</param>
+/// <param name="WorkspaceRoot">Rooted area the agent may act within (<c>AGENT_WORKSPACE</c>).</param>
+/// <param name="TavilyApiKey">Web-search key; null leaves search unconfigured.</param>
+/// <param name="ConsolidationPolicyPath">Resolved path to the consolidation policy doc
+/// (<c>CONSOLIDATION_POLICY</c>); the host reads it with a built-in fallback if absent.</param>
+/// <param name="MemoryBudgetTokens">Working-memory compaction budget (<c>AGENT_MEMORY_BUDGET_TOKENS</c>).</param>
+/// <param name="SleepIntervalMinutes">Consolidation cadence (<c>SLEEP_INTERVAL_MIN</c>); ≤0 disables.</param>
+/// <param name="TelegramBotToken">Telegram surface token; null skips the surface.</param>
+/// <param name="DiscordBotToken">Discord surface token; null skips the surface.</param>
+/// <param name="WebchatEnabled">Whether to start the web-chat surface (<c>WEBCHAT=1</c>).</param>
+/// <param name="WebchatPort">Web-chat port (<c>WEBCHAT_PORT</c>) when enabled.</param>
+public sealed record HostConfig(
+    LlmConfig Llm,
+    string WorkspaceRoot,
+    string? TavilyApiKey,
+    string ConsolidationPolicyPath,
+    int MemoryBudgetTokens,
+    int SleepIntervalMinutes,
+    string? TelegramBotToken,
+    string? DiscordBotToken,
+    bool WebchatEnabled,
+    int WebchatPort)
+{
+    public const int DefaultMemoryBudgetTokens = 8000;
+    public const int DefaultSleepIntervalMinutes = 30;
+    public const int DefaultWebchatPort = 5080;
+
+    /// <summary>Resolve the full host configuration from environment variables and defaults.</summary>
+    public static HostConfig FromEnvironment()
+    {
+        var workspaceRoot = Environment.GetEnvironmentVariable("AGENT_WORKSPACE")
+            ?? Path.Combine(Directory.GetCurrentDirectory(), "workspace");
+
+        var policyPath = Environment.GetEnvironmentVariable("CONSOLIDATION_POLICY")
+            ?? Path.Combine(Directory.GetCurrentDirectory(), "docs", "consolidation-policy.md");
+
+        var budget = int.TryParse(Environment.GetEnvironmentVariable("AGENT_MEMORY_BUDGET_TOKENS"), out var b)
+            ? b
+            : DefaultMemoryBudgetTokens;
+
+        var sleep = int.TryParse(Environment.GetEnvironmentVariable("SLEEP_INTERVAL_MIN"), out var sm)
+            ? sm
+            : DefaultSleepIntervalMinutes;
+
+        var webchatEnabled = string.Equals(
+            Environment.GetEnvironmentVariable("WEBCHAT"), "1", StringComparison.Ordinal);
+        var webchatPort = int.TryParse(Environment.GetEnvironmentVariable("WEBCHAT_PORT"), out var wp)
+            ? wp
+            : DefaultWebchatPort;
+
+        return new HostConfig(
+            LlmConfig.FromEnvironment(),
+            workspaceRoot,
+            Environment.GetEnvironmentVariable("TAVILY_API_KEY"),
+            policyPath,
+            budget,
+            sleep,
+            Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN"),
+            Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN"),
+            webchatEnabled,
+            webchatPort);
+    }
+}
