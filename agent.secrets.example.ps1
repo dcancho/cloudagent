@@ -18,6 +18,6 @@ $env:FOUNDRY_EMBED_MODEL = "text-embedding-3-small"
 
 # --- Optional extras ---
 # $env:TAVILY_API_KEY             = "..."            # real web search (else web_search is a no-op)
-# $env:AGENT_WORKSPACE            = "C:\Users\diego\agent-workspace"  # default: .\workspace
+# $env:AGENT_WORKSPACE            = "C:\path\to\agent-workspace"  # default: .\workspace
 # $env:AGENT_MEMORY_BUDGET_TOKENS = "8000"
 # $env:WEBCHAT_PORT               = "5080"
