@@ -17,6 +17,13 @@ it names the type involved.
 4. [Roadmap](roadmap.md): built, partial, and open.
 5. [References](references.md): related work.
 
+Proposals are ideas that are reasoned through but not built. Each states its status at the top.
+
+- [People](proposals/people.md): knowing who said what, and learning how each person works.
+- [Participation](proposals/participation.md): deciding when to wake the agent in a group.
+- [Thinking without speaking](proposals/thinking-without-speaking.md): a turn that does not
+  have to end in a message.
+
 The consolidation judge prompt lives at [../consolidation-policy.md](../consolidation-policy.md)
 because the host loads it at runtime. It is part of the design and is meant to be edited.
 

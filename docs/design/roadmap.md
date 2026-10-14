@@ -37,7 +37,13 @@ harnesses kept outside the repository. The repository has no test project yet.
   and there are no stubs that would let a cold memory be found and restored on demand.
 - **Planning and flow as a seam.** Sequencing lives inside the loop.
 - **Identity and behavior policy as a seam.** The persona is a string.
-- **Speak or stay quiet.** A gate for deciding whether to respond in a shared conversation.
+- **Speak or stay quiet.** A gate for deciding whether to respond in a shared conversation. See
+  the [participation](proposals/participation.md) proposal.
+- **Knowing the people in a conversation.** Sender identity and a person memory scope. See the
+  [people](proposals/people.md) proposal.
+- **Turns that do not end in a message.** See the
+  [thinking without speaking](proposals/thinking-without-speaking.md) proposal. Suggested build
+  order for these three: thinking without speaking, then participation, then people.
 - **Threshold tuning.** The sleep job's defaults are placeholders awaiting real ledger data.
 - **Consolidation policy review.** The policy is a draft.
 
