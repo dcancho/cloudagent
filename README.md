@@ -1,344 +1,128 @@
 # CloudAgent
 
-An autonomous agent harness in .NET 10. The long-term goal is an agent that behaves
-like a capable colleague: it has its own machine/workspace, and it can think, act,
-remember, and learn over time.
+An autonomous agent harness in .NET 10, built around one question: how does an agent
+remember, decide what to pay attention to, and learn from its own history over time?
 
-This is the **foundation**: the core loop and the LLM provider seam behind it.
+The harness is a reference implementation. The ideas behind it are written up separately in
+[docs/design](docs/design/README.md), so you can read the design without the code.
+
+## What is distinctive
+
+- **Memory that measures itself.** Every memory injected into a prompt is later judged for
+  whether it was actually used. That record drives promotion, demotion, and suppression.
+- **A sleep job.** Between conversations, a consolidation pass moves memories between strata
+  mechanically and proposes distilled facts that wait for human approval. Every change is written
+  to a hash-chained ledger.
+- **Attention as its own module.** What goes into the context window is assembled by one
+  component, separate from memory storage and from the loop, with a metacognitive gate that
+  withholds memories whose track record says they keep not applying.
+- **Cache-aware prompts.** Stable and volatile content are split so the provider's prompt cache
+  keeps working.
+
+Design documents:
+
+| Document | Covers |
+| --- | --- |
+| [Eight axes](docs/design/eight-axes.md) | The frame: what an agent is made of and which parts this project owns |
+| [Memory and learning](docs/design/memory-and-learning.md) | Strata, hybrid retrieval, the utility loop, the sleep job |
+| [Attention and metacognition](docs/design/attention-and-metacognition.md) | Context assembly, cache awareness, the confidence gate |
+| [Roadmap](docs/design/roadmap.md) | What is built, what is partial, what is only designed |
+| [References](docs/design/references.md) | Related work |
 
 ## Layout
 
 ```
 src/
-  CloudAgent.Core/              # the harness (no host concerns)
-    Abstractions/
-      Message.cs                # Role + Message: a turn in the working context
-      LlmRequest.cs             # what the loop hands a provider each iteration
-      LlmResponse.cs            # what comes back (text, stop reason, token usage)
-      ILlmProvider.cs           # the single seam to any LLM backend
-    Loop/
-      AgentLoop.cs              # perceive -> think/act -> record -> compact
-      AgentContext.cs           # working memory (history, rolling summary, eviction)
-      AgentOptions.cs           # model, system prompt, limits, pacing, memory budget
-      ContextCompactor.cs       # token-budget trim + rolling summary + archival
-      IInputSource.cs           # where stimulus comes from (+ NullInputSource)
-    Memory/
-      MemoryEntry.cs            # a memory + scope/kind/importance (+ MemoryHit)
-      IMemoryStore.cs           # durable, scope-partitioned memory storage
-      FileMemoryStore.cs        # JSON-per-scope store with cosine recall
-      MemoryManager.cs          # remember / recall / archive policy (own embedder)
-      Consolidator.cs           # LLM-extracted durable facts during compaction
-    Todos/
-      TodoItem.cs               # a taskboard entry (id, title, status)
-      TodoStore.cs              # persistent taskboard (JSON in the workspace)
-    Agents/
-      AgentMessage.cs           # inter-agent message envelope (+ kinds)
-      AgentHandle.cs            # one live agent: mailbox, status, cancellation, completion
-      AgentBus.cs               # registry + router + ask/answer + supervised stop
-      MailboxInputSource.cs     # an agent's mailbox as the loop's IInputSource
-      AgentOrchestrator.cs      # spawns + runs child agents (own context/memory)
-    Surfaces/
-      ISurface.cs               # a channel to the world (start receiving + send)
-      SurfaceMessages.cs        # InboundMessage / OutboundMessage
-      AgentConversation.cs      # one conversation = one agent session
-      ConversationRouter.cs     # routes (surface, chat) <-> agent sessions
-      TelegramSurface.cs        # Telegram Bot API via long polling (zero-dep)
-    Providers/
-      EchoLlmProvider.cs        # offline fake; runs with no API key
-      AnthropicLlmProvider.cs   # real Anthropic Messages API over HTTP
-      FoundryLlmProvider.cs     # Microsoft Foundry catalog (Azure AI Inference)
-      HashEmbeddingProvider.cs  # offline deterministic embeddings
-      FoundryEmbeddingProvider.cs  # Foundry catalog embeddings (/embeddings)
-    Indexing/
-      TextChunker.cs            # overlapping text windows
-      IndexedChunk.cs           # a chunk + its embedding (+ SearchHit)
-      VectorIndex.cs            # cosine search + JSON persistence
-      WorkspaceIndexer.cs       # walk workspace -> chunk -> embed -> index
-      Summarizer.cs             # LLM-backed summaries
-    Workspaces/
-      IWorkspace.cs             # the area the agent may act within (+ access guard)
-      Workspace.cs              # local-filesystem, traversal-hardened workspace
-    Tools/
-      ITool.cs                  # a capability the agent can invoke
-      ToolParameter.cs          # one declared argument (basis for a JSON schema)
-      ToolInput.cs / ToolResult.cs
-      ToolRegistry.cs           # the toolbox: dispatch by name
-      Toolset.cs                # builds the default toolbox
-      Files/                    # read_file, write_file, list_directory,
-                                #   create_directory, delete_path
-      Web/                      # IWebSearchProvider (+ Null, Tavily) and web_search
-      Index/                    # index_workspace, search_index, summarize_file
-      Memory/                   # remember
-      Todos/                    # todo_list/add/complete/remove/clear
-  CloudAgent.Surfaces/          # surface adapters with heavier deps
-    WebchatSurface.cs           # self-hosted web chat (ASP.NET + WebSocket)
-    DiscordSurface.cs           # Discord gateway (Discord.Net)
-  CloudAgent.Host/              # console runner that wires it together
-    Program.cs
-    CliSurface.cs               # the console as a surface
+  CloudAgent.Core/        the harness, no host concerns
+    Abstractions/         messages, requests, ILlmProvider, IEmbeddingProvider
+    Loop/                 AgentLoop, working context, compaction, operational state
+    Attention/            context assembly and the metacognitive gate
+    Memory/               stores, retrieval pipeline, utility tracking, sleep job, ledger
+    Indexing/             chunking, embeddings, vector index, summaries
+    Agents/               concurrent subagents: bus, mailboxes, orchestrator
+    Surfaces/             ISurface, conversation router, Telegram
+    Providers/            Echo (offline), Anthropic, Foundry, embedding providers
+    Tools/                ITool, registry, file, web, index, memory, todo, agent tools
+    Workspaces/           the sandbox the agent acts within
+  CloudAgent.Surfaces/    web chat and Discord adapters
+  CloudAgent.Host/        console runner, typed configuration, composition root
+docs/
+  design/                 the ideas, independent of the code
+  consolidation-policy.md the judge prompt used by the sleep job (loaded at runtime)
 ```
-
-Web chat is the easiest to try — it needs no account:
-
-```sh
-WEBCHAT=1 dotnet run --project src/CloudAgent.Host   # then open http://localhost:5080/
-```
-
-## The loop
-
-`AgentLoop.RunAsync` repeats one cycle until cancelled:
-
-1. **Perceive** — pull any waiting input from the `IInputSource` and append it to the context.
-2. **Think & act** — send the working context (and the available tools) to the
-   `ILlmProvider`. While the model asks to use tools, run them, feed the results back, and
-   ask again — until the model produces a plain answer.
-3. **Record** — each completion, tool call, and tool result is folded back into the context.
-
-Returning `null` from an input source means "nothing right now" — the agent keeps
-running on its own initiative rather than blocking. That's the hook for true autonomy.
-
-### Tool calling
-
-When a `ToolRegistry` is supplied, the loop advertises the tools' JSON schemas on every
-request and runs an inner think/act sub-loop: a model completion with `ToolCalls` triggers
-tool execution, the results return as `Role.Tool` messages, and the loop re-prompts —
-bounded by a per-iteration hop limit so it can't run away. Providers translate the shared
-`ToolDefinition` / `ToolCall` abstraction to their own wire format:
-
-- **Anthropic** — `tool_use` / `tool_result` content blocks.
-- **Foundry** — Azure AI Inference `ChatCompletionsToolDefinition` + `tool` messages.
-- **Echo** — ignores tools (always answers in plain text).
-
-## The provider seam
-
-`ILlmProvider` is the only thing the loop knows about an LLM. Swap implementations
-freely:
-
-- `EchoLlmProvider` — no dependencies, no key; lets the harness run end to end.
-- `AnthropicLlmProvider` — calls the Anthropic Messages API directly over HTTP.
-- `FoundryLlmProvider` — the Microsoft Foundry model catalog in chat-completions mode,
-  via the `Azure.AI.Inference` SDK (`ChatCompletionsClient`, the `/chat/completions`
-  route). One endpoint serves the whole catalog; choose the model per request
-  (e.g. `DeepSeek-V3.1`, `mistral-large`, `gpt-4o-mini`). Auth is an API key, or
-  Entra ID via `DefaultAzureCredential` when no key is given.
-
-## Workspace — where the agent may act
-
-`IWorkspace` is the agent's world: a single rooted directory it's allowed to act within.
-`Workspace` is the local-filesystem implementation. Every filesystem tool resolves paths
-through `Workspace.Resolve`, which is hardened against traversal — anything that would
-land outside the root (`../`, an absolute path elsewhere) is rejected with a
-`WorkspaceAccessException`. So the workspace is both the agent's home and its sandbox.
-
-Default root is `./workspace`, overridable with `AGENT_WORKSPACE`.
-
-## Tools — what the agent can do
-
-`ITool` is one capability: a `Name`, a `Description`, declared `Parameters`, and an
-`InvokeAsync(ToolInput) -> ToolResult`. `ToolInput` is JSON-object backed (matching what
-an LLM emits for a tool call); `ToolParameter` carries JSON-schema-style types so the set
-can later be emitted as a schema for provider-side tool calling. `ToolRegistry` is the
-toolbox and dispatches by name, turning unexpected exceptions into `ToolResult.Fail`.
-
-Built-in tools (`Toolset.CreateDefault`):
-
-| Tool | Purpose |
-| --- | --- |
-| `read_file` | Read a text file in the workspace |
-| `write_file` | Create/overwrite (or `append`) a text file |
-| `list_directory` | List a folder's files and subfolders |
-| `create_directory` | Create a folder (and parents) |
-| `delete_path` | Delete a file or folder (`recursive` required for non-empty) |
-| `web_search` | Search the web via an `IWebSearchProvider` |
-| `index_workspace` | (Re)build the semantic index over workspace text files |
-| `search_index` | Semantic (embedding) search over the index |
-| `summarize_file` | LLM-generated summary of a workspace file |
-| `remember` | Save a durable fact to memory (personal/project/session) |
-| `todo_list` / `todo_add` / `todo_complete` / `todo_remove` / `todo_clear` | Manage a persistent taskboard |
-
-Web search sits behind its own seam (`IWebSearchProvider`), mirroring the LLM provider:
-`NullWebSearchProvider` (unconfigured default) and `TavilyWebSearchProvider` (set
-`TAVILY_API_KEY`). Swap in Bing/Brave/etc. by implementing the interface.
-
-The loop invokes these tools automatically when the model calls them (see *Tool calling*).
-
-## Indexing — search and summarize by meaning
-
-The agent can index its workspace and retrieve by meaning, not just keywords:
-
-- **Embeddings** sit behind `IEmbeddingProvider` (same pattern as the LLM seam).
-  `FoundryEmbeddingProvider` uses the Foundry catalog's `/embeddings` route;
-  `HashEmbeddingProvider` is a deterministic offline fallback so the whole pipeline runs
-  with no API key.
-- **`WorkspaceIndexer`** walks the workspace, splits text files into overlapping chunks
-  (`TextChunker`), embeds them, and stores them in a **`VectorIndex`** — an in-memory store
-  with cosine search, persisted to `.agent/index.json`. Re-running refreshes changed files.
-- **`Summarizer`** turns a file (or retrieved chunks) into a short description via the LLM.
-
-Exposed to the agent as `index_workspace`, `search_index`, and `summarize_file`. Embedding
-backend: Foundry when `FOUNDRY_ENDPOINT` is set (model via `FOUNDRY_EMBED_MODEL`), else the
-offline hash provider.
-
-This is the substrate for memory: once the workspace is indexed, the agent can pull in only
-the relevant slices instead of carrying everything in the context window.
-
-## Memory
-
-The agent remembers across a long run and across sessions, in the coworker model.
-
-**Working memory & compaction.** `AgentContext` holds the live conversation. When it exceeds
-`WorkingMemoryBudgetTokens` (user-configurable; env `AGENT_MEMORY_BUDGET_TOKENS`), the loop's
-`ContextCompactor` evicts the oldest turns — snapping the kept window to a clean user-turn
-boundary so a tool call is never split from its result — folds them into a **rolling summary**
-(carried alongside the system prompt), and **archives the evicted turns as episodic memory**.
-Nothing is lost: trimmed turns are embedded with a cheap local embedder and stay recallable.
-
-**Durable memory, scoped.** `IMemoryStore` partitions memories three ways:
-
-| Scope | About | Location |
-| --- | --- | --- |
-| **Personal** | the user and the agent's working style; spans projects | user-global `~/.cloudagent/memory/` |
-| **Project** | this workspace: architecture, decisions, constraints | `.agent/memory/project.json` |
-| **Session** | the current run (incl. episodic archive) | `.agent/memory/sessions/<id>.json` |
-
-`MemoryManager` owns its own embedder (a local hash provider by default, so high-volume
-archival and recall stay free) and provides `RememberAsync` (curated facts), `RecallAsync`
-(cosine over scopes), and `ArchiveAsync` (episodic).
-
-**Curating and recalling.** The agent saves durable facts explicitly with the `remember`
-tool (it picks the scope). Each turn, the loop **automatically recalls** before thinking:
-it embeds the latest user message, searches all scopes, and injects the top `RecallTopK`
-memories plus any others scoring at/above `RecallThreshold` (0.80) into the system prompt.
-
-**Learning (consolidation).** When turns are compacted away, the `Consolidator` asks the LLM
-to extract durable, general facts from them and classify each as personal / project / session,
-then writes the new ones to memory (near-duplicates are skipped via a cosine check). Learning
-happens exactly when information would otherwise be summarised out — so the agent accumulates
-knowledge without being told to `remember`.
-
-> Status: compaction + episodic archival, the scoped store, the `remember` tool, automatic
-> recall injection, and consolidation-during-compaction are all wired into the loop.
 
 ## Run it
 
-```sh
-# Offline (echo provider):
-dotnet run --project src/CloudAgent.Host
-
-# Against Anthropic:
-$env:ANTHROPIC_API_KEY = "sk-ant-..."   # PowerShell
-dotnet run --project src/CloudAgent.Host
-
-# Against the Microsoft Foundry catalog (chat completions):
-$env:FOUNDRY_ENDPOINT = "https://<resource>.services.ai.azure.com/models"
-$env:FOUNDRY_API_KEY  = "<key>"          # omit to use Entra ID (DefaultAzureCredential)
-$env:FOUNDRY_MODEL    = "gpt-4o-mini"           # any catalog chat model
-$env:FOUNDRY_EMBED_MODEL = "text-embedding-3-small"  # catalog embedding model
-dotnet run --project src/CloudAgent.Host
-```
-
-Provider precedence: `CLAUDE_CLI` → `FOUNDRY_ENDPOINT` → `ANTHROPIC_API_KEY` → echo.
-
-### Ride a Claude Pro/Max subscription (for testing)
-
-Set `CLAUDE_CLI=1` and the agent drives Claude through the local `claude` CLI (`claude -p`)
-instead of the HTTP API — billed against your Pro/Max subscription, not API credits (as long as
-`ANTHROPIC_API_KEY` is unset and you're logged into Claude Code). `CLAUDE_MODEL` overrides the
-model. Caveats: it's a **text-only** bridge (Claude Code's own tools are disabled, so CloudAgent
-tool calling doesn't flow through it), it spawns the CLI per call (slower), and Anthropic has
-signalled headless/SDK usage will eventually move off subscription pools — so treat this as a
-testing/quota-hack path, not the durable default.
-
-### Run locally (Windows), with the web chat UI
+With no provider configured the agent runs offline on an echo provider.
 
 ```powershell
-# one-time: add your keys
-copy agent.secrets.example.ps1 agent.secrets.ps1   # then edit it
-# run (web chat on by default at http://localhost:5080/)
-./run.ps1
+dotnet run --project src/CloudAgent.Host
 ```
 
-`run.ps1` loads `agent.secrets.ps1` (gitignored), enables the web chat surface, and starts the
-host. Open **http://localhost:5080/** to chat. Telegram/Discord are outbound-only, so if you set
-their tokens they work from the same local box with no public server or port forwarding.
+Against Anthropic:
 
-To keep it always-on: publish a build (`dotnet publish src/CloudAgent.Host -c Release -o publish`)
-and run `publish/CloudAgent.Host.exe` from a Windows Service (e.g. NSSM) or a Task Scheduler task
-triggered "at log on".
+```powershell
+$env:ANTHROPIC_API_KEY = "<key>"
+dotnet run --project src/CloudAgent.Host
+```
 
-Type a message and press Enter. Type `exit` (or Ctrl+C) to stop.
+Against the Microsoft Foundry model catalog:
 
-## Multi-agent (concurrent)
+```powershell
+$env:FOUNDRY_ENDPOINT    = "https://<resource>.services.ai.azure.com/models"
+$env:FOUNDRY_API_KEY     = "<key>"
+$env:FOUNDRY_MODEL       = "gpt-4o-mini"
+$env:FOUNDRY_EMBED_MODEL = "text-embedding-3-small"
+dotnet run --project src/CloudAgent.Host
+```
 
-Subagents run **concurrently**, not as blocking calls — so a child can ask its parent a
-question mid-task while the parent keeps working. Each agent is an `AgentLoop` running as its
-own `Task` with a **mailbox** (`Channel<AgentMessage>`); the `AgentBus` registers agents,
-routes messages, correlates questions with answers, and propagates stop down the tree.
+Provider precedence is `CLAUDE_CLI`, then `FOUNDRY_ENDPOINT`, then `ANTHROPIC_API_KEY`, then echo.
+`AGENT_SMALL_MODEL` routes background jobs (summaries, judging, consolidation) to a cheaper model.
 
-The trick that makes this fit cleanly: `IInputSource` already means "next stimulus, or null to
-keep running" — so a `MailboxInputSource` turns inter-agent messages into ordinary loop input.
-A child's question is, to the parent's loop, just another turn to think about.
+For local use on Windows, copy `agent.secrets.example.ps1` to `agent.secrets.ps1` (gitignored),
+fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 
-Why nobody deadlocks: **parents never block on children** (they dispatch and keep looping, so
-they're always free to answer); a child may block on a single question, and the answer is
-delivered straight to that waiting call. Subagents share the workspace (collaborate on files)
-but get their **own context and own memory** — they are children with scoped tasks, not
-extensions of the parent.
+### Configuration
 
-The `AgentOrchestrator` spawns a child as a real `AgentLoop` (own context/memory, mailbox
-input, the scoped task delivered as its first message). Tools wire it up:
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `AGENT_WORKSPACE` | Directory the agent may act within | `./workspace` |
+| `AGENT_MEMORY_BUDGET_TOKENS` | Working-memory budget before compaction | 8000 |
+| `SLEEP_INTERVAL_MIN` | Minutes between consolidation passes, 0 or less disables | 30 |
+| `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
+| `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
+| `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
+| `TAVILY_API_KEY` | Real web search | no-op search |
 
-- **Parent-side:** `spawn_agent`, `delegate_task` (blocking — spawn and await the result),
-  `list_agents`, `reply_to_agent` (answer a child's question), `stop_agent`.
-- **Child-side:** `ask_parent` (blocking question), `report_progress`, `finish` (report result
-  and wind down).
+## The loop
 
-A parent perceives both the human and its children through a `CompositeInputSource`, so a
-child's question is just another turn to answer.
+`AgentLoop.RunAsync` repeats one cycle until cancelled: perceive new input, assemble the
+context, think and act (tool calls run in a bounded inner loop), and record the results. An
+input source returning nothing means the agent keeps running on its own initiative.
 
-> Status: wired end to end. Every surface conversation is a **root agent** that holds the
-> parent-side tools and a composite input (its surface + its mailbox), so a live model can
-> spawn children, delegate, and answer their questions. Each agent (root or child) gets its
-> own memory + compaction stack; children share only the workspace tools.
+`ILlmProvider` is the only thing the loop knows about a model. `ITool` is one capability with a
+name, description, declared parameters, and an invoke method. `ISurface` is one channel to the
+world. Each is a small interface with several implementations behind it.
 
-## Surfaces (channels to the world)
+## Subagents
 
-The agent reaches people where they are, not just at a terminal. A **surface** is a
-bidirectional message transport (`ISurface`): start receiving (a handler per inbound message)
-and send replies out — each adapter hides its own transport (long-poll, websocket, webhook).
+Subagents run concurrently. Each is an `AgentLoop` with its own context, its own memory, and a
+mailbox. A child can ask its parent a question while the parent keeps working, and stop requests
+propagate down the tree. Children share the workspace but not memory.
 
-The model reuses the same idea as the mailbox: an inbound message is a stimulus, a reply is a
-message back. The `ConversationRouter` maps each `(surface, conversationId)` to its **own agent
-session** (own context + memory) and ships replies back to the originating surface — so many
-chats run side by side, like a colleague juggling threads. The CLI is no longer special; it's
-just `CliSurface`.
+## Surfaces
 
-| Surface | Transport | Enable with | Status |
-| --- | --- | --- | --- |
-| CLI | stdin/stdout | always on | ✅ |
-| Web chat | ASP.NET + WebSocket | `WEBCHAT=1` (port `WEBCHAT_PORT`, default 5080) | ✅ |
-| Telegram | Bot API long-poll | `TELEGRAM_BOT_TOKEN` | ✅ |
-| Discord | gateway (Discord.Net) | `DISCORD_BOT_TOKEN` (+ Message Content intent) | ✅ |
+Each `(surface, conversation)` pair maps to its own agent session, so many chats run side by
+side. The console, the web chat, Telegram, and Discord are all surfaces.
 
-Telegram and Discord adapters live in `CloudAgent.Surfaces` (Discord.Net + ASP.NET for web
-chat); Telegram and the abstraction are in Core. Each surface runs on its own thread, so a
-blocking adapter (the console reader) never stalls the others.
+## Status
 
-> Foundation note: per-conversation sessions currently share the memory/index/todo stores,
-> which assume single-threaded use. Multi-conversation concurrency needs per-conversation
-> isolation or locking on those stores — a tracked follow-up.
+This is a working research harness, not a product. Memory, attention, and consolidation are
+implemented and were checked with out-of-repo test harnesses; the repository does not yet have
+a test project. Several of the central ideas are designed but not built. The
+[roadmap](docs/design/roadmap.md) says which.
 
-## Where this is headed
+## License
 
-The loop is deliberately a thin spine so the colleague-like capabilities hang off it:
-
-- **Tools / actions** — ✅ done: schemas advertised to the model, a think/act sub-loop
-  executes calls and feeds results back. More tools (shell, HTTP, code execution) plug in
-  via `ITool`.
-- **Memory** — ✅ core in place: semantic **indexing**, **context compaction with episodic
-  archival**, a **scoped store** (personal/project/session), the **`remember` tool**,
-  **automatic recall injection**, and **consolidation** (learned facts during compaction).
-  Possible follow-ups: importance/recency decay and forgetting, and a manual deep-`recall` tool.
-- **Learning** — persist context and distilled lessons across runs in the workspace.
-- **Autonomy** — non-blocking input sources (queues, schedulers, sensors) so the agent
-  acts without being prompted.
+Code is licensed under Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). The documents
+in `docs/design` are licensed under CC BY 4.0 (see [docs/design/LICENSE.md](docs/design/LICENSE.md)).
