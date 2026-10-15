@@ -144,6 +144,16 @@ public sealed class AgentLoop
                 _assembled = await _attention
                     .AssembleAsync(_context, LatestUserText(), _decision?.Memory ?? Attention.MemoryLevel.Full, cancellationToken)
                     .ConfigureAwait(false);
+                if (_decision is { Guidance.Count: > 0 })
+                {
+                    var guidance = "Guidance for this turn:\n" + string.Join('\n', _decision.Guidance.Select(g => $"- {g}"));
+                    _assembled = _assembled with
+                    {
+                        EphemeralContext = string.IsNullOrWhiteSpace(_assembled.EphemeralContext)
+                            ? guidance
+                            : $"{_assembled.EphemeralContext}\n\n{guidance}",
+                    };
+                }
                 if (_assembled.InjectedMemories.Count > 0)
                 {
                     await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);

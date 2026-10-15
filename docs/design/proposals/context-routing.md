@@ -94,6 +94,23 @@ below it falls back to the full behavior:
 The thresholds are asymmetric on purpose. Leaving out memory or a tool that was needed produces a
 wrong or empty answer, which costs far more than sending a few hundred unnecessary tokens.
 
+### Guidance: steering, not only trimming
+
+Routing can also add to a turn. Some failures are predictable from the message alone: a model
+asked for a loan schedule will do the arithmetic in its head and get it wrong while sounding sure.
+The decision model cannot do the arithmetic either, but it can recognize that a message needs exact
+numbers.
+
+So the router may add fixed instructions to a turn's context. Each one is a yes or no question and
+a text written by a person, for example: when the message involves calculating or stating exact
+numbers, tell the agent to compute every figure with the calculation tool. The router decides
+whether an instruction applies; it never writes one.
+
+The threshold is low, because a reminder that was not needed costs a sentence, while a missing one
+costs a wrong number. Guidance only adds, so it applies in shadow turns as well, and it is dropped
+when the decision model fails, since nothing is known about the turn then. The persona carries the
+same rule in general terms; guidance repeats it at the moment it matters.
+
 ### An escape hatch for tools
 
 A dropped category can still be reached. The model always has one more tool, `request_tools`,
@@ -159,3 +176,4 @@ is a net gain depends on the decision model's real latency, which is the first t
 - Memory levels in the retriever: skipping rewrite and rerank, and a smaller budget for light.
 - Shadow sampling and router outcomes recorded in the utility ledger.
 - Per-call latency in the token meter, to measure the effect.
+- Fixed guidance texts with their questions, added to the turn context when they apply.

@@ -239,7 +239,8 @@ void AttachLogging(AgentLoop loop, string label)
         var note = d.FellBack ? " (router failed, full pipeline)"
             : d.Shadow ? $" (shadow; router chose memory {d.ProposedMemory}, tools {string.Join(", ", d.ProposedCategories.Order())})"
             : "";
-        Console.WriteLine($"  🧭 [{label}] {applied}{note}, decided in {d.Elapsed.TotalMilliseconds:0} ms");
+        var guided = d.Guidance.Count == 0 ? "" : $", guidance {d.Guidance.Count}";
+        Console.WriteLine($"  🧭 [{label}] {applied}{guided}{note}, decided in {d.Elapsed.TotalMilliseconds:0} ms");
     };
     loop.TurnFailed += (i, ex) => Console.Error.WriteLine($"  ✖ [{label}] turn {i} failed: {ex.GetType().Name}: {ex.Message}");
     loop.Compacted += n => Console.WriteLine($"  🧠 [{label}] compacted {n} turn(s)");
@@ -285,6 +286,13 @@ var routingOptions = new RoutingOptions
         ["consolidation"] = "reviewing or applying proposed long-term memory changes",
     },
     LedgerPath = Path.Combine(workspace.Root, ".agent", "routing.jsonl"),
+    Guidance =
+    [
+        new RoutingGuidance(
+            "exact_numbers",
+            "Does answering the latest message involve calculating, converting, or stating exact numbers?",
+            "This turn involves numbers. Compute every figure with the calculate tool and report its results; do not do arithmetic yourself."),
+    ],
 };
 IDecisionModel? decisionModel = config.ContextRouting switch
 {

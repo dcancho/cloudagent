@@ -97,6 +97,17 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `CONTEXT_ROUTING` | Who chooses per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)): `decision` for the Foundry decision model, `generative` for the background chat model, `off` for the full pipeline every turn. Decisions go to `.agent/routing.jsonl` | `decision` when the two variables below are set, else `off` |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
 
+### Records
+
+Everything the agent does is kept under the workspace's `.agent` folder, which is not in git:
+
+| Path | Contents |
+| --- | --- |
+| `transcripts/<agent>.jsonl` | One line per event of each agent: messages, model replies with tool calls and token counts, tool results, routing, recall, judging, errors |
+| `logs/host-<date>.log` | The host's console output |
+| `routing.jsonl` | Each routing decision and its outcome, including the router's misses |
+| `memory/` | The memory databases |
+
 ## The loop
 
 `AgentLoop.RunAsync` repeats one cycle until cancelled: perceive new input, assemble the
