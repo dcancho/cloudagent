@@ -13,6 +13,10 @@ namespace CloudAgent.Core.Loop;
 /// </summary>
 public sealed class TranscriptRecorder
 {
+    /// <summary>JSON written for people to read: accents and symbols stay as they are, not as escapes.</summary>
+    public static readonly System.Text.Json.JsonSerializerOptions Readable =
+        new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     private readonly string _path;
     private readonly int _maxChars;
     private readonly object _gate = new();
@@ -114,7 +118,7 @@ public sealed class TranscriptRecorder
         try
         {
             lock (_gate)
-                File.AppendAllText(_path, line.ToJsonString() + Environment.NewLine);
+                File.AppendAllText(_path, line.ToJsonString(Readable) + Environment.NewLine);
         }
         catch (IOException)
         {

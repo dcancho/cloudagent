@@ -184,7 +184,7 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
         lock (_ledgerGate)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(options.LedgerPath)!);
-            File.AppendAllText(options.LedgerPath, entry.ToJsonString() + Environment.NewLine);
+            File.AppendAllText(options.LedgerPath, entry.ToJsonString(TranscriptRecorder.Readable) + Environment.NewLine);
         }
     }
 
