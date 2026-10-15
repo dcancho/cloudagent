@@ -1,0 +1,46 @@
+/* =============================================================================
+ * Spinner — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-spinner   (.lucent-spinner--sm|md|lg)   ← a rotating 270° ring
+ *
+ * Two forms share one class:
+ *  • Bare `.lucent-spinner` — the arc is `currentColor`, so it inherits the surrounding
+ *    text colour. This is what `button`/`icon-button` emit for their loading state, so the
+ *    spinner contrasts against a filled button automatically. (Previously undefined — the
+ *    loading span rendered nothing; see icon-button.css note.)
+ *  • `.lucent-spinner--sm|md|lg` — the standalone component form: fixed size + the accent
+ *    colour by default.
+ * ============================================================================= */
+
+.lucent-spinner {
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--dimension--primitive--icon-md);   /* 16 — buttons override via inline size */
+  height: var(--dimension--primitive--icon-md);
+  border: var(--dimension--primitive--spacing-0-5) solid;
+  /* 270° arc (top/right/bottom) + a faint remaining quarter as the track. */
+  border-color: currentColor currentColor currentColor
+    color-mix(in oklab, currentColor 20%, transparent);
+  border-radius: var(--radius-full);
+  animation: lucent-spin 0.7s linear infinite;
+  flex: none;
+}
+
+@keyframes lucent-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lucent-spinner { animation-duration: 1.6s; }
+}
+
+/* ─── Standalone sizes (the component form → accent by default) ─────────────── */
+
+.lucent-spinner--sm,
+.lucent-spinner--md,
+.lucent-spinner--lg { color: var(--color--semantic--accent-default); }
+
+.lucent-spinner--sm { width: var(--dimension--primitive--icon-sm); height: var(--dimension--primitive--icon-sm); }
+.lucent-spinner--md { width: var(--dimension--primitive--icon-md); height: var(--dimension--primitive--icon-md); }
+.lucent-spinner--lg { width: var(--dimension--primitive--icon-lg); height: var(--dimension--primitive--icon-lg); border-width: var(--dimension--primitive--spacing-1); }

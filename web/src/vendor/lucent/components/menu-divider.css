@@ -1,0 +1,17 @@
+/* =============================================================================
+ * Menu divider — framework-neutral component styles.
+ *
+ * DEPRECATED — use the unified `.lucent-divider--plain` (Divider) instead. Kept for
+ * back-compat; will be removed in a future major.
+ *
+ * A hairline between groups of menu items. Ported verbatim from
+ * packages/angular/src/menu-divider/menu-divider.scss.
+ * ============================================================================= */
+
+.lucent-menu-divider {
+  display: block;
+  height: 1px;
+  margin: var(--dimension--primitive--spacing-1) 0;
+  background: var(--color--semantic--border-subtle);
+  flex-shrink: 0;
+}

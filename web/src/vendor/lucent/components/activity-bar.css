@@ -1,0 +1,21 @@
+/* =============================================================================
+ * Activity bar — framework-neutral component styles.
+ *
+ * Horizontal glass container for a dense cluster of controls. Content projects in.
+ * Ported verbatim from packages/angular/src/activity-bar/activity-bar.scss.
+ * ============================================================================= */
+
+.lucent-activity-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  height: var(--dimension--primitive--sizing-12);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-md);
+  background: var(--color--semantic--surface-glass-strong);
+  border: 1px solid var(--color--semantic--border-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}

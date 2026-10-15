@@ -1,0 +1,87 @@
+/* =============================================================================
+ * Breadcrumbs — framework-neutral component styles.
+ *
+ * Structure all kits emit:
+ *   nav.lucent-breadcrumbs               ← glass pill + aria-label="Breadcrumb"
+ *                                          (Angular/WC put the class + role on the host element)
+ *     ol.lucent-breadcrumbs__list        ← the flex track (native list chrome reset)
+ *       li.lucent-breadcrumbs__crumb
+ *         a|span.lucent-breadcrumbs__item  ← <a href> when the crumb has a path, else <span>;
+ *                                            the last item is .is-last + aria-current="page"
+ *                                            (muted, non-interactive, the current page)
+ *         span.lucent-breadcrumbs__sep     ← "/" between items (aria-hidden)
+ *
+ * Ported from packages/angular/src/breadcrumbs/breadcrumbs.scss.
+ * ============================================================================= */
+
+.lucent-breadcrumbs {
+  display: inline-flex;
+  align-items: center;
+  height: var(--dimension--primitive--sizing-12);
+  padding: 7px var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-md);
+  background: var(--color--semantic--surface-glass-strong);
+  border: 1px solid var(--color--semantic--border-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--body-md--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-default);
+}
+
+/* -----------------------------------------------------------------------------
+ * Bare — structure only, no container.
+ *
+ * The default breadcrumbs render as a glass PILL: their own surface, border, blur and
+ * elevation. That reads correctly when they float over the page with no framing around
+ * them. Inside an already-demarcated bar it becomes a box inside a box — two containers
+ * competing to be the edge.
+ *
+ * `--bare` keeps the composition (the trail, the separators, the is-last treatment) and
+ * drops the container entirely, so the surrounding bar is the only frame.
+ * -------------------------------------------------------------------------- */
+.lucent-breadcrumbs--bare {
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* The ordered list is the flex track; strip the native list chrome. */
+.lucent-breadcrumbs__list {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lucent-breadcrumbs__crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+}
+
+.lucent-breadcrumbs__item {
+  color: inherit;
+  text-decoration: none; /* items styled as the trail, not as underlined links */
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.lucent-breadcrumbs__item:hover:not(.is-last) { color: var(--color--semantic--accent-default); }
+.lucent-breadcrumbs__item.is-last {
+  color: var(--color--semantic--text-muted);
+  cursor: default;
+}
+
+.lucent-breadcrumbs__sep { color: var(--color--semantic--text-subtle); }

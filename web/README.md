@@ -1,37 +1,32 @@
 # CloudAgent Web
 
-The web client for [CloudAgent](https://github.com/dcancho/cloudagent) — a React + Vite SPA,
-built on the **Lucent** design system, that talks to the agent over WebSocket. Designed to be
-wrapped with **Tauri** later for a desktop companion.
+The web client for CloudAgent: a React and Vite single-page app that talks to the agent's web
+chat over WebSocket. It is meant to be wrapped with Tauri later as a desktop companion.
 
 ## Stack
 
-- **React + Vite + TypeScript** — the SPA (and Tauri's happy path).
-- **Lucent**: Design Foundry's design system, consumed as framework-neutral CSS
-  (`styles/core.css` + `styles/packs/messaging.css`). Lucent has no React kit, so
-  `src/lucent/` holds thin React wrappers that emit the `lucent-*` class contract. The CSS is
-  referenced locally through a Vite alias; point `LUCENT_DIR` at your checkout if it isn't the
-  sibling `../design-foundry/lucent`.
+- **React, Vite and TypeScript.**
+- **Lucent**, the Design Foundry design system, used as plain CSS. The styles are vendored in
+  `src/vendor/lucent/` (Apache-2.0, see its README for the version). Lucent has no React kit, so
+  `src/lucent/` holds thin React wrappers that emit its `lucent-*` classes.
 
 ## Run
 
+Start the agent with the web chat on (`WEBCHAT=1`), then:
+
 ```sh
 npm install
-npm run dev        # http://localhost:5173
+npm run dev
 ```
 
-It connects to the agent's web-chat WebSocket at `ws://localhost:5080/ws` (override with
-`VITE_AGENT_WS`). So: start the agent with the web chat on (`WEBCHAT=1` in the cloudagent
-repo), then run this — you'll be talking to the real agent.
+The app runs at `http://localhost:5173` and connects to `ws://localhost:5080/ws`; set
+`VITE_AGENT_WS` to use another address.
 
-## Status
+It keeps the current conversation id in local storage, so a reload continues the same
+conversation and shows its history. The button in the header starts a new one.
 
-First slice: a working chat against the agent's existing WebSocket surface, built from
-Lucent's message bubble, composer, status tag and icon. Next: grow into the fuller CloudAgent API
-(conversation list, live agent/subagent tree, memory, todos), then wrap in Tauri.
+## Notes on Lucent
 
-### Lucent dogfooding notes
-
-- The `--font--primitive--sans` token names **Outfit**, but nothing in the kit loads it; the
-  consumer has to (done in `index.html`).
-- Components use **Material Icons** ligatures, so the consumer must load that font too.
+- The `--font--primitive--sans` token names Outfit, but Lucent does not load it, so
+  `index.html` does.
+- Components use Material Icons ligatures, so `index.html` loads that font too.

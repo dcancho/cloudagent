@@ -1,0 +1,124 @@
+/* =============================================================================
+ * Select — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-select  (.lucent-select--{xs|sm|md|lg})
+ *     .lucent-select__label?
+ *     .lucent-select__field            ← Razor positioning anchor (Angular omits it)
+ *       .lucent-select__trigger  (--focus|--filled|--error|--disabled)
+ *         .lucent-select__value (.is-placeholder)
+ *         .lucent-icon.lucent-select__caret (.is-open)
+ *       .lucent-select__dropdown  > .lucent-option…
+ *     .lucent-select__message (--error)?
+ *
+ * The dropdown appearance is shared; positioning differs: Angular portals it into a CDK
+ * overlay, Razor renders it as a child of .lucent-select__field (absolute, below the trigger).
+ * Ported from packages/angular/src/select/select.scss.
+ * ============================================================================= */
+
+.lucent-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-0-5);
+  width: 100%;
+  position: relative;
+
+  --_h: var(--control-height-md);
+  --_text: var(--control-text-md);
+  --_radius: var(--control-radius-md);
+  --_px: var(--control-pad-x-md);
+}
+
+.lucent-select--xs { --_h: var(--control-height-xs); --_text: var(--control-text-xs); --_radius: var(--control-radius-xs); --_px: var(--control-pad-x-xs); }
+.lucent-select--sm { --_h: var(--control-height-sm); --_text: var(--control-text-sm); --_radius: var(--control-radius-sm); --_px: var(--control-pad-x-sm); }
+.lucent-select--lg { --_h: var(--control-height-lg); --_text: var(--control-text-lg); --_radius: var(--control-radius-lg); --_px: var(--control-pad-x-lg); }
+
+.lucent-select__label { color: var(--color--semantic--text-strong); }
+
+/* ─── Trigger ──────────────────────────────────────────────────────────────── */
+
+.lucent-select__trigger {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--_h);
+  padding: 0 var(--_px);
+  border-radius: var(--_radius);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-default);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.lucent-select__trigger--focus { border: var(--border-strong); }
+.lucent-select__trigger--filled { border: var(--border-default); }
+.lucent-select__trigger--error { border: 1px solid var(--color--semantic--error-subtle); }
+.lucent-select__trigger--disabled { opacity: 0.4; cursor: not-allowed; }
+.lucent-select__trigger:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+.lucent-select__value {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--control-line);
+  color: var(--color--semantic--text-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 0 0;
+  min-width: 0;
+}
+.lucent-select__value.is-placeholder { color: var(--color--semantic--text-muted); }
+.lucent-select__trigger--error .lucent-select__value { color: var(--color--semantic--error); }
+
+.lucent-select__caret {
+  color: var(--color--semantic--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.lucent-select__caret.is-open { transform: rotate(180deg); }
+
+/* ─── Dropdown ─────────────────────────────────────────────────────────────── */
+
+.lucent-select__dropdown {
+  /* On the BASE class, not only on the Razor `field > dropdown` path below: the WC and
+   * Angular kits portal this panel to <body>, where a descendant selector no longer
+   * matches and the panel would carry no stacking declaration at all — landing under any
+   * dialog it was opened from. See tokens/layers.css. */
+  z-index: var(--layer-popover);
+  background: var(--color--semantic--surface-default);
+  border: var(--border-strong);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-0-5);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* Razor: position the dropdown below the trigger (Angular portals it instead). */
+.lucent-select__field { position: relative; width: 100%; }
+.lucent-select__field > .lucent-select__dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: var(--layer-popover);
+  margin-top: 4px;
+}
+
+/* ─── Messages ─────────────────────────────────────────────────────────────── */
+
+.lucent-select__message {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--micro--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-muted);
+}
+.lucent-select__message--error { color: var(--color--semantic--error); }

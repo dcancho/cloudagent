@@ -1,0 +1,180 @@
+/* =============================================================================
+ * Button — framework-neutral component styles.
+ *
+ * Both kits emit the same class names, so this one file styles both:
+ *   Angular: <lucent-button class="lucent-button lucent-button--primary lucent-button--md">
+ *   Razor:   <span class="lucent-button lucent-button--primary lucent-button--md"> … </span>
+ * The interactive element inside carries `.lucent-button__inner`.
+ *
+ * Ported from packages/angular/src/button/button.scss — the Angular `:host`
+ * became `.lucent-button`; nested `&` variants were expanded to full selectors.
+ * ============================================================================= */
+
+.lucent-button {
+  display: inline-flex;
+  text-decoration: none; /* host may be an <a> (link-styled button) — stop the underline here, not on __inner */
+
+  /* Density (default md). Same inline padding as fields, so a button beside an input shares its rhythm. */
+  --_h: var(--control-height-md);
+  --_text: var(--control-text-md);
+  --_radius: var(--control-radius-md);
+  --_gap: var(--control-gap-md);
+  --_px: var(--control-pad-x-md);
+}
+
+.lucent-button--xs {
+  --_h: var(--control-height-xs); --_text: var(--control-text-xs);
+  --_radius: var(--control-radius-xs); --_gap: var(--control-gap-xs);
+  --_px: var(--control-pad-x-xs);
+}
+.lucent-button--sm {
+  --_h: var(--control-height-sm); --_text: var(--control-text-sm);
+  --_radius: var(--control-radius-sm); --_gap: var(--control-gap-sm);
+  --_px: var(--control-pad-x-sm);
+}
+.lucent-button--lg {
+  --_h: var(--control-height-lg); --_text: var(--control-text-lg);
+  --_radius: var(--control-radius-lg); --_gap: var(--control-gap-lg);
+  --_px: var(--control-pad-x-lg);
+}
+
+.lucent-button__inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--_gap);
+  height: var(--_h);
+  padding: 0 var(--_px);
+  border-radius: var(--_radius);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--control-line);
+  white-space: nowrap;
+  background: transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.lucent-button__inner:focus-visible {
+  outline: 2px solid var(--color--semantic--border-focus);
+  outline-offset: 2px;
+}
+
+/* Disabled keeps each variant's shape and hue family, opaque (no opacity, so a glass
+   backdrop never shows through). Per-variant fills and labels are below. */
+.lucent-button__inner:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── Primary ──────────────────────────────────────────────────────────────── */
+/* The one action that completes the view's task. Hover lifts, press darkens. */
+
+.lucent-button--primary .lucent-button__inner {
+  background: var(--color--semantic--accent-strong);
+  color: var(--color--semantic--text-onaccent);
+}
+.lucent-button--primary .lucent-button__inner:hover:not(:disabled) {
+  background: oklch(from var(--color--semantic--accent-strong) calc(l + 0.05) c h);
+}
+.lucent-button--primary .lucent-button__inner:active:not(:disabled) {
+  background: oklch(from var(--color--semantic--accent-strong) calc(l - 0.06) c h);
+}
+.lucent-button--primary .lucent-button__inner:disabled {
+  background: color-mix(in oklab, var(--color--semantic--accent-strong) 38%, var(--color--semantic--surface-default));
+  color: var(--color--semantic--surface-default);
+}
+
+/* ─── Secondary ────────────────────────────────────────────────────────────── */
+/* Alternatives and the dismiss half of a pair. Filled with the surface, like fields, so
+   it stays readable on glass and tinted backgrounds. The border is an inset shadow so it
+   never changes the box size. */
+
+.lucent-button--secondary .lucent-button__inner {
+  background: var(--color--semantic--surface-default);
+  color: var(--color--semantic--text-strong);
+  box-shadow: inset 0 0 0 1px var(--color--semantic--border-default);
+}
+.lucent-button--secondary .lucent-button__inner:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color--semantic--text-strong) 5%, var(--color--semantic--surface-default));
+  box-shadow: inset 0 0 0 1px var(--color--semantic--border-strong);
+}
+.lucent-button--secondary .lucent-button__inner:active:not(:disabled) {
+  background: color-mix(in oklab, var(--color--semantic--text-strong) 10%, var(--color--semantic--surface-default));
+  box-shadow: inset 0 0 0 1px var(--color--semantic--border-strong);
+}
+.lucent-button--secondary .lucent-button__inner:disabled {
+  color: var(--color--semantic--disabled-fg);
+  box-shadow: inset 0 0 0 1px var(--color--semantic--border-subtle);
+}
+
+/* ─── Text ─────────────────────────────────────────────────────────────────── */
+/* Transparent, accent label. Rows, toolbars, panel chrome and inline actions. The only
+   label above weight 300: with no fill or border, the label carries the affordance.
+   `ghost` is a deprecated alias. */
+
+:is(.lucent-button--text, .lucent-button--ghost) .lucent-button__inner {
+  color: var(--color--semantic--accent-text);
+  font-weight: var(--dimension--primitive--fw-regular);
+}
+:is(.lucent-button--text, .lucent-button--ghost) .lucent-button__inner:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color--semantic--accent-text) 12%, transparent);
+}
+:is(.lucent-button--text, .lucent-button--ghost) .lucent-button__inner:active:not(:disabled) {
+  background: color-mix(in oklab, var(--color--semantic--accent-text) 22%, transparent);
+}
+:is(.lucent-button--text, .lucent-button--ghost) .lucent-button__inner:disabled { color: var(--color--semantic--disabled-fg); }
+
+/* ─── Danger tone ──────────────────────────────────────────────────────────── */
+/* A tone, not an emphasis level. Alone (or with primary) it is the final destructive
+   confirm; with secondary it is the entry point into a destructive flow. */
+
+.lucent-button--danger .lucent-button__inner {
+  background: var(--color--semantic--error);
+  color: var(--color--primitive--neutral-100);
+}
+.lucent-button--danger .lucent-button__inner:hover:not(:disabled) {
+  background: oklch(from var(--color--semantic--error) calc(l + 0.04) c h);
+}
+.lucent-button--danger .lucent-button__inner:active:not(:disabled) {
+  background: oklch(from var(--color--semantic--error) calc(l - 0.08) c h);
+}
+.lucent-button--danger .lucent-button__inner:disabled {
+  background: color-mix(in oklab, var(--color--semantic--error) 38%, var(--color--semantic--surface-default));
+  color: var(--color--semantic--surface-default);
+}
+
+.lucent-button--secondary.lucent-button--danger .lucent-button__inner {
+  background: var(--color--semantic--surface-default);
+  color: var(--color--semantic--error-on-subtle);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color--semantic--error) 45%, transparent);
+}
+.lucent-button--secondary.lucent-button--danger .lucent-button__inner:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color--semantic--error) 8%, var(--color--semantic--surface-default));
+}
+.lucent-button--secondary.lucent-button--danger .lucent-button__inner:active:not(:disabled) {
+  background: color-mix(in oklab, var(--color--semantic--error) 16%, var(--color--semantic--surface-default));
+}
+.lucent-button--secondary.lucent-button--danger .lucent-button__inner:disabled {
+  background: var(--color--semantic--surface-default);
+  color: var(--color--semantic--disabled-fg);
+  box-shadow: inset 0 0 0 1px var(--color--semantic--border-subtle);
+}
+
+/* ─── On glass (deprecated) ────────────────────────────────────────────────── */
+/* Glass is a surface, not a button type. Kept for existing markup: a transparent ink
+   button whose state layer frosts. Use text or secondary inside a glass surface. */
+
+.lucent-button--on-glass .lucent-button__inner {
+  color: var(--color--semantic--text-strong);
+}
+.lucent-button--on-glass .lucent-button__inner:hover:not(:disabled) {
+  background: var(--color--semantic--surface-glass-strong);
+  box-shadow: var(--shadow-xs);
+}
+.lucent-button--on-glass .lucent-button__inner:active:not(:disabled) {
+  background: var(--color--semantic--surface-default);
+}
+.lucent-button--on-glass .lucent-button__inner:disabled { color: var(--color--semantic--disabled-fg); }

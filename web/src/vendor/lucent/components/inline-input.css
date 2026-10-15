@@ -1,0 +1,35 @@
+/* =============================================================================
+ * Inline input — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-inline-input
+ *     .lucent-inline-input__field  (<input>, + a typography class)
+ *
+ * A borderless field that underlines on hover/focus — for editing a title in place. The
+ * field inherits its font from a typography utility class the consumer adds. State is pure
+ * CSS (:hover/:focus/:disabled), so it needs no JS.
+ *
+ * Ported from packages/angular/src/inline-input/inline-input.scss (bare `input` → `__field`).
+ * ============================================================================= */
+
+.lucent-inline-input {
+  display: block;
+  min-width: 0;
+}
+
+.lucent-inline-input__field {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  outline: none;
+  padding: 0;
+  color: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.lucent-inline-input__field::placeholder { color: var(--color--semantic--text-muted); }
+.lucent-inline-input__field:hover:not(:disabled) { border-bottom-color: var(--color--semantic--border-subtle); }
+.lucent-inline-input__field:focus { border-bottom-color: var(--color--semantic--border-strong); }
+.lucent-inline-input__field:disabled { cursor: not-allowed; opacity: 0.4; }

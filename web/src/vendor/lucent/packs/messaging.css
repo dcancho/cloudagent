@@ -1,0 +1,12 @@
+/* Lucent pack — Messaging & conversation.
+   Opt-in: not part of styles/core.css. Import alongside it. */
+
+@import "../components/reference-tag.css";
+@import "../components/message-bubble.css";
+@import "../components/typing-indicator.css";
+@import "../components/code-block.css";
+@import "../components/prompt-suggestion.css";
+@import "../components/composer.css";
+@import "../components/chat-trigger.css";
+@import "../components/conversation-row.css";
+@import "../components/jump-to-latest.css";

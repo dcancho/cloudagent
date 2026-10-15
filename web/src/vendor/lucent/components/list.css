@@ -1,0 +1,41 @@
+/* =============================================================================
+ * List — framework-neutral component styles.
+ *
+ * A glass container that stacks .lucent-list-item rows. Content projects in.
+ * Ported verbatim from packages/angular/src/list/list.scss.
+ * ============================================================================= */
+
+.lucent-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--color--semantic--surface-glass-strong);
+  border: var(--border-glass);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-md);
+  padding: var(--dimension--primitive--spacing-1) 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* -----------------------------------------------------------------------------
+ * Bare — rows without a container.
+ *
+ * The default list is a glass container, which assumes it floats free over the page.
+ * Nested inside a card, a modal body or a panel it becomes a second frame inside the
+ * first. `--bare` keeps the stack (rows, padding rhythm, dividers) and drops the
+ * container so the parent stays the only edge.
+ *
+ * Same convention as .lucent-breadcrumbs--bare — see that file for the reasoning.
+ * -------------------------------------------------------------------------- */
+.lucent-list--bare {
+  background: none;
+  border: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
+}

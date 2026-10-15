@@ -1,0 +1,41 @@
+/* =============================================================================
+ * Nav icon — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-nav-icon  (.is-active / .is-disabled)
+ *     .lucent-icon                ← lg glyph
+ *
+ * An icon-only nav item for the rail. Ported from
+ * packages/angular/src/nav-icon/nav-icon.scss. The `background: transparent; border: none`
+ * baseline lets the Razor kit render it as a real <button> (keyboard-focusable) while keeping
+ * the same class contract as the Angular custom element.
+ * ============================================================================= */
+
+.lucent-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--dimension--primitive--spacing-2);
+  border-radius: var(--radius-sm);
+  color: var(--color--semantic--text-default);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  background: transparent;
+  border: none;
+}
+
+.lucent-nav-icon:hover:not(.is-disabled):not(:disabled) {
+  background: var(--color--semantic--surface-glass-strong);
+}
+
+.lucent-nav-icon.is-active {
+  background: var(--color--semantic--accent-subtle);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-nav-icon.is-disabled,
+.lucent-nav-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
