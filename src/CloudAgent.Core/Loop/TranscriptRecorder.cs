@@ -54,6 +54,7 @@ public sealed class TranscriptRecorder
             ["categories"] = Array(d.Categories.Order()),
             ["proposedMemory"] = d.ProposedMemory.ToString(),
             ["proposedCategories"] = Array(d.ProposedCategories.Order()),
+            ["guidance"] = Array(d.Guidance),
             ["shadow"] = d.Shadow,
             ["fellBack"] = d.FellBack,
             ["elapsedMs"] = (int)d.Elapsed.TotalMilliseconds,

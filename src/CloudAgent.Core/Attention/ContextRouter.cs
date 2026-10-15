@@ -39,7 +39,21 @@ public sealed record RoutingDecision(
     IReadOnlySet<string> ProposedCategories,
     bool Shadow,
     bool FellBack,
-    TimeSpan Elapsed);
+    TimeSpan Elapsed)
+{
+    /// <summary>Fixed instructions added to this turn's context because their question came out yes.</summary>
+    public IReadOnlyList<string> Guidance { get; init; } = [];
+}
+
+/// <summary>
+/// An instruction the router adds to a turn when the decision model says it applies. The text is
+/// fixed and written by a person; the router only decides whether it applies, never what it says.
+/// </summary>
+/// <param name="Id">Stable identifier, used in the question and the ledger.</param>
+/// <param name="Question">A yes or no question about the latest message.</param>
+/// <param name="Text">What the agent is told when the answer is yes.</param>
+/// <param name="Threshold">Probability of yes needed to add it; low, because adding a reminder costs little.</param>
+public sealed record RoutingGuidance(string Id, string Question, string Text, double Threshold = 0.5);
 
 /// <summary>Knobs for context routing.</summary>
 public sealed class RoutingOptions
@@ -68,6 +82,9 @@ public sealed class RoutingOptions
 
     /// <summary>Append-only log of decisions and outcomes; null keeps none.</summary>
     public string? LedgerPath { get; init; }
+
+    /// <summary>Fixed instructions the router may add to a turn.</summary>
+    public IReadOnlyList<RoutingGuidance> Guidance { get; init; } = [];
 }
 
 /// <summary>
@@ -79,6 +96,7 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
 {
     private const string MemoryQuestion = "memory";
     private const string ToolPrefix = "tools_";
+    private const string GuidancePrefix = "guide_";
 
     private readonly Random _random = new();
     private readonly object _ledgerGate = new();
@@ -115,6 +133,12 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
             .Where(c => answers.FirstOrDefault(a => a.QuestionId == ToolPrefix + c) is not { } a || a["no"] < options.DropConfidence)
             .ToHashSet();
 
+        // Guidance only adds to a turn, so it applies in shadow turns too.
+        var guidance = options.Guidance
+            .Where(g => answers.FirstOrDefault(a => a.QuestionId == GuidancePrefix + g.Id) is { } a && a["yes"] >= g.Threshold)
+            .Select(g => g.Text)
+            .ToList();
+
         var shadow = _random.NextDouble() < options.ShadowRate;
         return new RoutingDecision(
             shadow ? MemoryLevel.Full : memory,
@@ -123,7 +147,10 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
             categories,
             shadow,
             FellBack: false,
-            System.Diagnostics.Stopwatch.GetElapsedTime(started));
+            System.Diagnostics.Stopwatch.GetElapsedTime(started))
+        {
+            Guidance = guidance,
+        };
     }
 
     /// <summary>
@@ -151,6 +178,7 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
             ["useful"] = useful,
             ["memoryMiss"] = decision.Shadow && decision.ProposedMemory != MemoryLevel.Full && useful is > 0,
             ["toolMiss"] = usedCategories.Any(c => !decision.ProposedCategories.Contains(c)),
+            ["guidance"] = new JsonArray(decision.Guidance.Select(g => (JsonNode)g).ToArray()),
         };
 
         lock (_ledgerGate)
@@ -190,6 +218,9 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
             questions.Add(DecisionQuestion.YesNo(
                 ToolPrefix + category, $"Could answering the latest message need tools for {description}?"));
         }
+
+        foreach (var guidance in options.Guidance)
+            questions.Add(DecisionQuestion.YesNo(GuidancePrefix + guidance.Id, guidance.Question));
 
         return questions;
     }
