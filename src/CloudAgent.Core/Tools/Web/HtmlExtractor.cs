@@ -20,6 +20,8 @@ public sealed record ExtractedPage(string Title, string Markdown, bool NeedsScri
 public static partial class HtmlExtractor
 {
     private const int MinReadableChars = 200;
+    private const int NearlyEmptyChars = 40;
+    private const string AppMountPoints = "#root, #app, #__next, #__nuxt, #svelte, [data-reactroot]";
 
     private static readonly string[] AlwaysRemoved =
     [
@@ -31,6 +33,8 @@ public static partial class HtmlExtractor
     {
         var document = new HtmlParser().ParseDocument(html);
         var hadScripts = document.QuerySelectorAll("script").Length > 0;
+        var looksLikeApp = document.QuerySelector(AppMountPoints) is not null
+            || document.QuerySelector("noscript") is not null;
         var title = Collapse(document.Title ?? string.Empty);
 
         IElement? root = document.QuerySelector("main")
@@ -53,7 +57,9 @@ public static partial class HtmlExtractor
         var markdown = Tidy(sb.ToString());
 
         var readable = markdown.Count(c => !char.IsWhiteSpace(c) && c != '#' && c != '-');
-        return new ExtractedPage(title, markdown, hadScripts && readable < MinReadableChars);
+        var needsScript = hadScripts
+            && (readable < NearlyEmptyChars || (readable < MinReadableChars && looksLikeApp));
+        return new ExtractedPage(title, markdown, needsScript);
     }
 
     /// <summary>Plain text passes through with only whitespace tidied.</summary>

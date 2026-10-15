@@ -24,6 +24,8 @@ public sealed class AgentConversation
             if (!string.IsNullOrWhiteSpace(response.Text))
                 Responded?.Invoke(response.Text);
         };
+        _loop.TurnFailed += (_, _) =>
+            Responded?.Invoke("I couldn't finish that turn because of an error on my side. The details are in the host log.");
     }
 
     /// <summary>Raised with the agent's reply text for this conversation.</summary>
