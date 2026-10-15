@@ -11,8 +11,10 @@ namespace CloudAgent.Surfaces;
 /// Discord via Discord.Net's gateway client. Each channel (or DM) is a conversation. Requires a
 /// bot token and the Message Content intent enabled in the Discord developer portal.
 /// </summary>
-public sealed class DiscordSurface : ISurface
+public sealed class DiscordSurface : ITypingSource, ITypingIndicator
 {
+    private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(10);
+
     private readonly DiscordSocketClient _client;
     private readonly string _token;
     private Func<InboundMessage, CancellationToken, Task>? _onMessage;
@@ -28,17 +30,22 @@ public sealed class DiscordSurface : ISurface
             GatewayIntents = GatewayIntents.Guilds
                 | GatewayIntents.GuildMessages
                 | GatewayIntents.DirectMessages
-                | GatewayIntents.MessageContent,
+                | GatewayIntents.MessageContent
+                | GatewayIntents.GuildMessageTyping
+                | GatewayIntents.DirectMessageTyping,
         });
     }
 
     public string Name => "discord";
+
+    public event Action<InboundTyping>? TypingReceived;
 
     public async Task StartAsync(
         Func<InboundMessage, CancellationToken, Task> onMessage, CancellationToken cancellationToken)
     {
         _onMessage = onMessage;
         _client.MessageReceived += HandleMessageAsync;
+        _client.UserIsTyping += HandleTypingAsync;
 
         await _client.LoginAsync(TokenType.Bot, _token);
         await _client.StartAsync();
@@ -59,6 +66,25 @@ public sealed class DiscordSurface : ISurface
         {
             await channel.SendMessageAsync(message.Text);
         }
+    }
+
+    public async Task SendTypingAsync(string conversationId, CancellationToken cancellationToken = default)
+    {
+        if (ulong.TryParse(conversationId, out var channelId) &&
+            await _client.GetChannelAsync(channelId) is IMessageChannel channel)
+        {
+            await channel.TriggerTypingAsync();
+        }
+    }
+
+    private Task HandleTypingAsync(Cacheable<IUser, ulong> user, Cacheable<IMessageChannel, ulong> channel)
+    {
+        if (user.Id != _client.CurrentUser?.Id)
+        {
+            TypingReceived?.Invoke(new InboundTyping(
+                "discord", channel.Id.ToString(), user.Id.ToString(), DateTimeOffset.UtcNow + TypingLifetime));
+        }
+        return Task.CompletedTask;
     }
 
     private async Task HandleMessageAsync(SocketMessage message)
