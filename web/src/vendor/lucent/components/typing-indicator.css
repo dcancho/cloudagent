@@ -1,0 +1,58 @@
+/* =============================================================================
+ * Typing / generating indicator — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-typing-indicator  (--typing|generating)
+ *     .lucent-typing-indicator__dots
+ *       .lucent-typing-indicator__dot × 3
+ *     .lucent-typing-indicator__label?
+ *
+ * `typing` = a person is composing (3 bouncing dots). `generating` = the agent is producing
+ * (accent dots + an optional label). Sits in the stream where the next bubble will appear.
+ * ============================================================================= */
+
+.lucent-typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-md);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-raised);
+  color: var(--color--semantic--text-muted);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-xs);
+  line-height: var(--dimension--primitive--lh-tight);
+}
+
+.lucent-typing-indicator__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+}
+
+.lucent-typing-indicator__dot {
+  width: var(--dimension--primitive--spacing-1-5);   /* 6 */
+  height: var(--dimension--primitive--spacing-1-5);
+  border-radius: var(--radius-full);
+  background: var(--color--semantic--text-subtle);
+  animation: lucent-typing-bounce 1.2s infinite ease-in-out;
+}
+.lucent-typing-indicator__dot:nth-child(2) { animation-delay: 0.15s; }
+.lucent-typing-indicator__dot:nth-child(3) { animation-delay: 0.3s; }
+
+.lucent-typing-indicator--generating .lucent-typing-indicator__dot {
+  background: var(--color--semantic--accent-default);
+}
+
+@keyframes lucent-typing-bounce {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lucent-typing-indicator__dot {
+    animation: lucent-typing-pulse 1.4s infinite ease-in-out;
+  }
+  @keyframes lucent-typing-pulse { 50% { opacity: 1; } }
+}

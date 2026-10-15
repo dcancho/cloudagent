@@ -46,6 +46,7 @@ src/
     Workspaces/           the sandbox the agent acts within
   CloudAgent.Surfaces/    web chat and Discord adapters
   CloudAgent.Host/        console runner, typed configuration, composition root
+web/                      React client for the web chat (see web/README.md)
 docs/
   design/                 the ideas, independent of the code
   consolidation-policy.md the judge prompt used by the sleep job (loaded at runtime)
@@ -146,7 +147,8 @@ propagate down the tree. Children share the workspace but not memory.
 ## Surfaces
 
 Each `(surface, conversation)` pair maps to its own agent session, so many chats run side by
-side. The console, the web chat, Telegram, and Discord are all surfaces.
+side. The console, the web chat, Telegram, and Discord are all surfaces. The web chat serves a
+minimal page of its own; the client in [web/](web/README.md) is the fuller one.
 
 People rarely write one message per thought, so the agent answers bursts, not messages. It waits
 until the person has probably finished: a wait measured from that person's own rhythm, shortened
@@ -173,3 +175,5 @@ a test project. Several of the central ideas are designed but not built. The
 
 Code is licensed under Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). The documents
 in `docs/design` are licensed under CC BY 4.0 (see [docs/design/LICENSE.md](docs/design/LICENSE.md)).
+The Lucent styles in `web/src/vendor/lucent` are a copy from Design Foundry, also under Apache-2.0,
+with their own license and notice.

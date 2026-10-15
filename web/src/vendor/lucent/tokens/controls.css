@@ -1,0 +1,65 @@
+/* ============================================================================= */
+/* Control density scale — the side-by-side alignment contract. */
+/* */
+/* Every interactive control (button, input, select, chip, checkbox, …) consumes */
+/* these per-size tokens so that controls set to the same `size` line up in a row. */
+/* The shared properties are height, text, icon, radius and gap; inline padding is */
+/* a field baseline that some controls (buttons) deliberately exceed. */
+/* */
+/* Scale:  xs 24 · sm 28 · md 32 (default) · lg 40 */
+/* `md` matches the kit's historical 32px control height, so existing usages are */
+/* unchanged; panels opt into `sm`/`xs`, forms/touch use `lg`. */
+/* */
+/* See docs/FOUNDATIONS-DENSITY.md. */
+/* ============================================================================= */
+
+:root {
+	/* ─── Height ──────────────────────────────────────────────────────────────── */
+	--control-height-xs: var(--dimension--primitive--sizing-6);  /* 24 */
+	--control-height-sm: var(--dimension--primitive--sizing-7);  /* 28 */
+	--control-height-md: var(--dimension--primitive--sizing-8);  /* 32 */
+	--control-height-lg: var(--dimension--primitive--sizing-10); /* 40 */
+
+	/* ─── Text (font-size) — skewed dense; see docs/FOUNDATIONS-TYPOGRAPHY.md ────── */
+	--control-text-xs: var(--dimension--primitive--fs-2xs);       /* 11 */
+	--control-text-sm: var(--dimension--primitive--fs-xs);  /* 12 */
+	--control-text-md: var(--dimension--primitive--fs-sm);  /* 14 (unchanged default) */
+	--control-text-lg: var(--dimension--primitive--fs-md);  /* 16 */
+
+	/* Single-line control text — tight, never the reading line-height (1.6). */
+	--control-line: var(--dimension--primitive--lh-snug);  /* 1.15 */
+
+	/* ─── Icon glyph ────────────────────────────────────────────────────────────── */
+	--control-icon-xs: var(--dimension--primitive--icon-sm);  /* 14 */
+	--control-icon-sm: var(--dimension--primitive--icon-md);  /* 16 */
+	--control-icon-md: var(--dimension--primitive--icon-md);  /* 16 */
+	--control-icon-lg: var(--dimension--primitive--icon-lg);  /* 24 */
+
+	/* ─── Corner radius ─────────────────────────────────────────────────────────── */
+	--control-radius-xs: var(--radius-xs);  /* 4 */
+	--control-radius-sm: var(--radius-xs);  /* 4 */
+	--control-radius-md: var(--radius-sm);  /* 8 */
+	--control-radius-lg: var(--radius-sm);  /* 8 */
+
+	/* ─── Inline padding (field baseline; buttons exceed it) ─────────────────────── */
+	--control-pad-x-xs: var(--dimension--primitive--spacing-2);    /* 8 */
+	--control-pad-x-sm: var(--dimension--primitive--spacing-2-5);  /* 10 */
+	--control-pad-x-md: var(--dimension--primitive--spacing-3);    /* 12 */
+	--control-pad-x-lg: var(--dimension--primitive--spacing-4);    /* 16 */
+
+	/* ─── Gap (adornment ↔ label) ───────────────────────────────────────────────── */
+	--control-gap-xs: var(--dimension--primitive--spacing-1);    /* 4 */
+	--control-gap-sm: var(--dimension--primitive--spacing-1);    /* 4 */
+	--control-gap-md: var(--dimension--primitive--spacing-1-5);  /* 6 */
+	--control-gap-lg: var(--dimension--primitive--spacing-2);
+
+	/* ─── Switch (track width, thumb) ──────────────────────────────────────────── */
+	--control-switch-w-xs: var(--dimension--primitive--sizing-6);
+	--control-switch-w-sm: var(--dimension--primitive--sizing-7);
+	--control-switch-w-md: var(--dimension--primitive--sizing-9);
+	--control-switch-w-lg: var(--dimension--primitive--sizing-11);
+	--control-switch-thumb-xs: var(--dimension--primitive--icon-xs);
+	--control-switch-thumb-sm: var(--dimension--primitive--sizing-3);
+	--control-switch-thumb-md: var(--dimension--primitive--sizing-4);
+	--control-switch-thumb-lg: var(--dimension--primitive--sizing-5);    /* 8 */
+}

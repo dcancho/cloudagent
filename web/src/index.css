@@ -1,0 +1,118 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font--primitive--sans);
+  color: var(--color--semantic--text-default);
+  background: var(--color--semantic--surface-base);
+}
+
+.app {
+  height: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.app__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-3) var(--dimension--primitive--spacing-4);
+  border-bottom: var(--border-subtle);
+}
+
+.app__title {
+  margin: 0;
+  margin-right: auto;
+  font-size: var(--typography--heading-sm--font-size);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+}
+
+.app__log {
+  overflow-y: auto;
+  padding: var(--dimension--primitive--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-2);
+}
+
+.app__row {
+  display: flex;
+  max-width: 78%;
+}
+
+.app__row--user {
+  align-self: flex-end;
+}
+
+.app__row--user .lucent-message-bubble__body {
+  white-space: pre-wrap;
+}
+
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-2);
+  min-width: 0;
+}
+
+.markdown > *,
+.markdown li > p {
+  margin: 0;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: var(--dimension--primitive--spacing-5);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-size: var(--typography--heading-sm--font-size);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+}
+
+.markdown a {
+  color: var(--color--semantic--accent-default);
+}
+
+.markdown__inline-code {
+  font-family: var(--font--primitive--mono);
+  font-size: 0.92em;
+  padding: 0 var(--dimension--primitive--spacing-1);
+  border-radius: var(--radius-xs);
+  background: var(--color--semantic--surface-base);
+}
+
+.markdown table {
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  border: var(--border-subtle);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-2);
+  text-align: left;
+}
+
+.markdown .lucent-code-block__body {
+  overflow-x: auto;
+}
+
+.app__composer {
+  padding: var(--dimension--primitive--spacing-3) var(--dimension--primitive--spacing-4) var(--dimension--primitive--spacing-4);
+}

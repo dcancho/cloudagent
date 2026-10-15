@@ -1,0 +1,53 @@
+/* =============================================================================
+ * Progress — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-progress   (.lucent-progress--indeterminate)
+ *     .lucent-progress__bar   ← the accent fill (width = value% when determinate)
+ *
+ * A linear progress bar. Determinate = a known fraction (the bar's width). Indeterminate =
+ * a sliding sliver for unknown-duration work (use a `spinner` if there's no bar to show).
+ * ============================================================================= */
+
+.lucent-progress {
+  display: block;
+  width: 100%;
+  height: var(--dimension--primitive--spacing-1-5);   /* 6 */
+  border-radius: var(--radius-full);
+  background: var(--color--semantic--border-default);  /* track */
+  overflow: hidden;
+}
+
+.lucent-progress__bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color--semantic--accent-default);
+  transition: width 240ms ease;
+}
+
+/* ─── Indeterminate — a sliver sliding across the track ─────────────────────── */
+
+.lucent-progress--indeterminate .lucent-progress__bar {
+  width: 40%;
+  transition: none;
+  animation: lucent-progress-slide 1.3s ease-in-out infinite;
+}
+
+@keyframes lucent-progress-slide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(275%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lucent-progress--indeterminate .lucent-progress__bar {
+    width: 100%;
+    transform: none;
+    animation: lucent-progress-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes lucent-progress-pulse {
+  50% { opacity: 0.5; }
+}

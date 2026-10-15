@@ -1,0 +1,56 @@
+/* =============================================================================
+ * Badge — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-badge   (.lucent-badge--count|label|dot × .lucent-badge--accent|error|success|neutral)
+ *     text          ← count / label content (none for the dot kind)
+ *
+ * A small status indicator: an unread count, a short label ("AI", "NEW"), or a bare
+ * presence dot. Solid-filled on the status/accent axis — distinct from `status-tag`
+ * (a subtle pill for a record's state) and `tone` action intent (CONVENTIONS §6).
+ * ============================================================================= */
+
+.lucent-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--dimension--primitive--sizing-4);      /* 16 */
+  min-width: var(--dimension--primitive--sizing-4);
+  padding: 0 var(--dimension--primitive--spacing-1-5);
+  border-radius: var(--radius-full);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-3xs);   /* 10 */
+  font-weight: var(--dimension--primitive--fw-medium);
+  line-height: var(--dimension--primitive--lh-tight);
+  white-space: nowrap;
+}
+
+/* ─── Kind ─────────────────────────────────────────────────────────────────── */
+
+/* Numeric count — tight padding, tabular figures so widths don't jitter as it ticks. */
+.lucent-badge--count {
+  padding: 0 var(--dimension--primitive--spacing-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Short text label ("AI", "NEW", "BETA") — a hair roomier and larger than a count. */
+.lucent-badge--label {
+  padding: 0 var(--dimension--primitive--spacing-1-5);
+  font-size: var(--dimension--primitive--fs-2xs);
+}
+
+/* Bare presence dot — no content; a fixed 8px circle. */
+.lucent-badge--dot {
+  width: var(--dimension--primitive--spacing-2);      /* 8 */
+  height: var(--dimension--primitive--spacing-2);
+  min-width: var(--dimension--primitive--spacing-2);
+  padding: 0;
+}
+
+/* ─── Variant (colour) ─────────────────────────────────────────────────────── */
+
+.lucent-badge--accent  { background: var(--color--semantic--accent-default); color: var(--color--semantic--text-onaccent); }
+.lucent-badge--error   { background: var(--color--semantic--error);          color: var(--color--semantic--text-inverse); }
+.lucent-badge--success { background: var(--color--semantic--success);        color: var(--color--semantic--text-inverse); }
+.lucent-badge--neutral { background: var(--color--semantic--surface-base);   color: var(--color--semantic--text-muted); }

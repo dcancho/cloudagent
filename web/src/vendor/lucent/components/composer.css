@@ -1,0 +1,61 @@
+/* =============================================================================
+ * Composer — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-composer  (--xs|sm|md|lg) (--disabled)
+ *     textarea.lucent-composer__field
+ *     .lucent-composer__actions
+ *       .lucent-icon-button   ← send (arrow_upward) / loading / stop (■ while streaming)
+ *
+ * The message input for chat & messaging. Composes a borderless textarea with a send button
+ * that morphs: send → loading (sending) → stop ■ (while the agent streams). Enter sends,
+ * Shift+Enter is a newline.
+ * ============================================================================= */
+
+.lucent-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-2);
+  border-radius: var(--radius-md);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-default);
+  transition: border-color 0.15s ease;
+
+  --_text: var(--control-text-md);
+}
+
+.lucent-composer--xs { --_text: var(--control-text-xs); }
+.lucent-composer--sm { --_text: var(--control-text-sm); }
+.lucent-composer--lg { --_text: var(--control-text-lg); }
+
+.lucent-composer:focus-within { border-color: var(--color--semantic--border-strong); }
+
+.lucent-composer--disabled { opacity: 0.5; pointer-events: none; }
+
+.lucent-composer__field {
+  flex: 1 0 0;
+  min-width: 0;
+  width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  resize: none;
+  padding: var(--dimension--primitive--spacing-1);
+  max-height: var(--dimension--primitive--sizing-48);   /* 192 — then scrolls */
+  overflow-y: auto;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-normal);
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-composer__field::placeholder { color: var(--color--semantic--text-muted); }
+
+.lucent-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+  flex: none;
+}

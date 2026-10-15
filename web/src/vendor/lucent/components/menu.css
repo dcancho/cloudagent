@@ -1,0 +1,54 @@
+/* =============================================================================
+ * Menu — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-menu  (role=menu)  > .lucent-menu-item / .lucent-menu-divider
+ *
+ * The popover panel. Appearance + entrance animation are shared; positioning differs:
+ * Angular portals the menu into a CDK overlay, Razor renders it inside a
+ * .lucent-menu__anchor and positions it as a child (with a backdrop for outside-click).
+ * Ported from packages/angular/src/menu/menu.scss.
+ * ============================================================================= */
+
+.lucent-menu {
+  /* On the BASE class: lucent-menu-trigger portals this panel to <body>, so the anchored
+     `__anchor > .lucent-menu` rule below cannot reach it. See tokens/layers.css. */
+  z-index: var(--layer-popover);
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: var(--dimension--primitive--spacing-1) 0;
+  border-radius: var(--radius-md);
+  background: var(--color--semantic--surface-default);
+  border: var(--border-strong);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  animation: lucent-menu-in 120ms ease;
+}
+
+@keyframes lucent-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Razor anchor positioning (no JS) ────────────────────────────────────────
+   The Angular kit portals the menu into an overlay, so these child-scoped rules
+   never touch it. */
+.lucent-menu__anchor { position: relative; display: inline-block; }
+
+.lucent-menu__anchor > .lucent-menu {
+  position: absolute;
+  top: 100%;
+  z-index: var(--layer-popover);
+  margin-top: 4px;
+}
+.lucent-menu--bottom-end { right: 0; }
+.lucent-menu--bottom-start { left: 0; }
+
+.lucent-menu__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-popover);
+}

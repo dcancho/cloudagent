@@ -1,0 +1,70 @@
+/* =============================================================================
+ * Skeleton — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-skeleton   (.lucent-skeleton--line|circle|block)
+ *
+ * A shimmering placeholder that holds a piece of layout while its real content loads —
+ * a text line, an avatar circle, or a media/card block. Decorative (aria-hidden); the
+ * "loading" state is announced by the container (aria-busy), not each shard.
+ * ============================================================================= */
+
+.lucent-skeleton {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  /* A visible light-gray fill — surface-base alone is ~white, so tint it with text colour. */
+  background: color-mix(in oklab, var(--color--semantic--text-subtle) 15%, var(--color--semantic--surface-base));
+  border-radius: var(--radius-sm);
+}
+
+/* Highlight sweep. */
+.lucent-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color--semantic--surface-default) 70%, transparent),
+    transparent
+  );
+  animation: lucent-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes lucent-skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lucent-skeleton::after { animation: none; }
+  .lucent-skeleton { animation: lucent-skeleton-pulse 1.6s ease-in-out infinite; }
+}
+
+@keyframes lucent-skeleton-pulse {
+  50% { opacity: 0.55; }
+}
+
+/* ─── Shapes ───────────────────────────────────────────────────────────────── */
+
+/* Text line — full width, a line's height. Consumers can set an inline width. */
+.lucent-skeleton--line {
+  width: 100%;
+  height: var(--dimension--primitive--spacing-3);   /* 12 */
+  border-radius: var(--radius-xs);
+}
+
+/* Avatar / icon placeholder — a circle. Consumers can override the size inline. */
+.lucent-skeleton--circle {
+  width: var(--dimension--primitive--sizing-10);     /* 40 */
+  height: var(--dimension--primitive--sizing-10);
+  border-radius: var(--radius-full);
+}
+
+/* Media / card placeholder — a block. Consumers set the height inline. */
+.lucent-skeleton--block {
+  width: 100%;
+  height: var(--dimension--primitive--sizing-20);    /* 80 */
+  border-radius: var(--radius-md);
+}

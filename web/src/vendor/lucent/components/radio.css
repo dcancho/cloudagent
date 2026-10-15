@@ -1,0 +1,110 @@
+/* =============================================================================
+ * Radio (+ radio group) — framework-neutral component styles.
+ *
+ * Structure every kit emits (mirrors checkbox):
+ *   .lucent-radio-group   (role=radiogroup)   ← stacks radios
+ *   .lucent-radio  (.lucent-radio--{xs|sm|md|lg})
+ *     .lucent-radio__input?   ← native radio (Razor only; visually hidden)
+ *     .lucent-radio__circle   ← ring; ::after is the filled dot
+ *     .lucent-radio__label?
+ *
+ * Dual state mechanism (one CSS layer, both kits):
+ *   - Angular/React/WC toggle `.is-checked` / `.is-disabled` / `.is-focused` via JS.
+ *   - Razor wraps a native radio: `:has(.lucent-radio__input:checked)` fills the dot (no JS,
+ *     posts in a form, native arrow-key grouping by `name`).
+ * ============================================================================= */
+
+.lucent-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-2);
+}
+
+.lucent-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--_gap);
+  cursor: pointer;
+  user-select: none;
+
+  /* Density (default md). Ring/dot are explicit px (a circle doesn't map onto the height
+     scale); label + gap follow the shared control tokens. */
+  --_box: 20px;
+  --_dot: 8px;
+  --_text: var(--control-text-md);
+  --_gap: var(--control-gap-md);
+}
+
+.lucent-radio--xs { --_box: 16px; --_dot: 6px;  --_text: var(--control-text-xs); --_gap: var(--control-gap-xs); }
+.lucent-radio--sm { --_box: 18px; --_dot: 7px;  --_text: var(--control-text-sm); --_gap: var(--control-gap-sm); }
+.lucent-radio--lg { --_box: 24px; --_dot: 10px; --_text: var(--control-text-lg); --_gap: var(--control-gap-lg); }
+
+.lucent-radio.is-disabled,
+.lucent-radio:has(.lucent-radio__input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lucent-radio:has(.lucent-radio__input:focus-visible) {
+  outline: var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-full);
+}
+
+/* Visually-hidden native radio (Razor path). */
+.lucent-radio__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.lucent-radio__circle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--_box);
+  height: var(--_box);
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color--semantic--border-default);
+  background: var(--color--semantic--surface-default);
+  transition: border-color 0.15s ease;
+}
+
+.lucent-radio__circle::after {
+  content: "";
+  width: var(--_dot);
+  height: var(--_dot);
+  border-radius: var(--radius-full);
+  background: var(--color--semantic--accent-default);
+  transform: scale(0);
+  transition: transform 0.15s ease;
+}
+
+/* Checked — JS kits via `.is-checked`, Razor via `:has(:checked)`. */
+.lucent-radio.is-checked .lucent-radio__circle,
+.lucent-radio:has(.lucent-radio__input:checked) .lucent-radio__circle { border-color: var(--color--semantic--accent-default); }
+
+.lucent-radio.is-checked .lucent-radio__circle::after,
+.lucent-radio:has(.lucent-radio__input:checked) .lucent-radio__circle::after { transform: scale(1); }
+
+.lucent-radio.is-focused .lucent-radio__circle {
+  border-color: var(--color--semantic--border-strong);
+}
+
+.lucent-radio__label {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--control-line);
+  color: var(--color--semantic--text-strong);
+  white-space: nowrap;
+}

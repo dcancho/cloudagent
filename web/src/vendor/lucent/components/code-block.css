@@ -1,0 +1,53 @@
+/* =============================================================================
+ * Code block — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-code-block
+ *     .lucent-code-block__header
+ *       .lucent-code-block__lang       ← language label
+ *       .lucent-icon-button (copy)     ← .lucent-code-block__copy
+ *     pre.lucent-code-block__body > code
+ *
+ * A fenced code block with a language label and a copy button — for code the agent returns or a
+ * user pastes. Monospace, horizontally scrollable, preserves whitespace.
+ * ============================================================================= */
+
+.lucent-code-block {
+  display: block;
+  border-radius: var(--radius-sm);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-base);
+  overflow: hidden;
+}
+
+.lucent-code-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-3);
+  border-bottom: var(--border-subtle);
+}
+
+.lucent-code-block__lang {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-3xs);
+  font-weight: var(--dimension--primitive--fw-medium);
+  letter-spacing: var(--dimension--primitive--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color--semantic--text-muted);
+}
+
+.lucent-code-block__body {
+  margin: 0;
+  padding: var(--dimension--primitive--spacing-3);
+  overflow-x: auto;
+}
+
+.lucent-code-block__body code {
+  font-family: var(--font--primitive--mono);
+  font-size: var(--dimension--primitive--fs-sm);
+  line-height: var(--dimension--primitive--lh-normal);
+  color: var(--color--semantic--text-default);
+  white-space: pre;
+}

@@ -1,0 +1,141 @@
+/* =============================================================================
+ * Lucent core — tokens plus the components every product needs regardless of what
+ * it is for.
+ *
+ * Core is defined by a test, not by a taste: a core component needs no concept from
+ * outside the design system to be meaningful. A button is defined by its form. A
+ * scheduler presupposes events, a composer presupposes messages — those live in packs
+ * (styles/packs/), and are imported only by products that speak those domains.
+ *
+ * Custom-property resolution is order-independent, but theme overrides and the utility
+ * classes are not — so the import order is deliberate:
+ *   primitives → semantic roles (+ control alias) → theme → components.
+ * ============================================================================= */
+
+/* Tier 1 — primitive scales (raw values). */
+@import "tokens/primitives.css";
+
+/* Tier 2 — semantic roles + the control-density alias layer. */
+@import "tokens/layers.css";
+@import "tokens/semantic-colors.css";
+@import "tokens/event-categories.css";
+@import "tokens/surfaces.css";
+@import "tokens/borders.css";
+@import "tokens/shadows.css";
+@import "tokens/typography.css";
+@import "tokens/controls.css";
+
+/* Theme overrides — must follow the base semantic layer. */
+@import "tokens/themes.css";
+
+/* Components — each keyed to the lucent- class-name contract. */
+@import "components/icon.css";
+@import "components/tag.css";
+@import "components/status-tag.css";
+@import "components/badge.css";
+@import "components/divider.css";
+@import "components/spinner.css";
+@import "components/skeleton.css";
+@import "components/progress.css";
+@import "components/inline-notice.css";
+@import "components/tooltip.css";
+@import "components/avatar.css";
+@import "components/inline-input.css";
+@import "components/option.css";
+@import "components/select.css";
+@import "components/list-item.css";
+@import "components/list.css";
+@import "components/table.css";
+@import "components/tab.css";
+@import "components/tab-list.css";
+@import "components/card.css";
+@import "components/menu.css";
+@import "components/menu-item.css";
+@import "components/menu-divider.css";
+@import "components/accordion.css";
+@import "components/modal.css";
+@import "components/snackbar.css";
+@import "components/toast.css";
+@import "components/button.css";
+@import "components/icon-button.css";
+@import "components/chip.css";
+@import "components/toggle.css";
+@import "components/checkbox.css";
+@import "components/radio.css";
+@import "components/segmented-control.css";
+@import "components/nav-icon.css";
+@import "components/nav-item.css";
+@import "components/nav-group.css";
+@import "components/nav-divider.css";
+@import "components/nav-rail.css";
+@import "components/activity-bar.css";
+@import "components/breadcrumbs.css";
+@import "components/text-input.css";
+@import "components/textarea.css";
+
+/* =============================================================================
+ * The `hidden` attribute, restored. MUST stay last.
+ *
+ * Every Lucent component sets `display` on its own class, and an author rule always
+ * beats the user-agent's `[hidden] { display: none }`. So `el.hidden = true` silently
+ * did nothing on any Lucent element — including the kit's OWN code, e.g. the unread
+ * badge in conversation-row, which correctly sets `badge.hidden = unread <= 0` and was
+ * rendering "0" anyway. accordion.css had patched this for one element; this is the
+ * general case.
+ *
+ * `!important` is deliberate: it must beat multi-class component selectors too, and
+ * `hidden` is an assertion that the element is not rendered — nothing should outrank it.
+ * ============================================================================= */
+[hidden] {
+  display: none !important;
+}
+
+/* =============================================================================
+ * Scrollbars, themed. `scrollbar-color` is an inherited property, so one declaration at
+ * the root reaches every scroller — including the ones inside components (time-picker
+ * columns, select dropdown, list, modal body) that previously showed the browser's
+ * default grey thumb regardless of the palette around them.
+ * ============================================================================= */
+/* The two paths are MUTUALLY EXCLUSIVE, not complementary. Verified in Chromium: setting
+ * `scrollbar-width`/`scrollbar-color` on an element switches it to the standard path and
+ * every ::-webkit-scrollbar rule for it is ignored. Both were shipped together at first and
+ * the pseudo block was simply dead.
+ *
+ * So they are split by engine. WebKit/Blink gets the pseudo-elements, which are the only
+ * way to round and inset the thumb; everyone else (Firefox) gets the standard properties,
+ * which cannot do shape but do the colour. Same tokens either way. */
+@supports selector(::-webkit-scrollbar) {
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: var(--color--semantic--scrollbar-track);
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color--semantic--scrollbar-thumb);
+    border-radius: var(--radius-full);
+    /* Transparent border + padding-box clip insets the thumb, so it reads as a slim pill
+       instead of a bar wedged against the content. */
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color--semantic--scrollbar-thumb-hover);
+    background-clip: padding-box;
+  }
+  /* Stepper arrows are chrome from another era, and they break the pill. */
+  *::-webkit-scrollbar-button {
+    display: none;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  :root {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color--semantic--scrollbar-thumb) var(--color--semantic--scrollbar-track);
+  }
+}

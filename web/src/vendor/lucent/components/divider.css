@@ -1,0 +1,37 @@
+/* =============================================================================
+ * Divider — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-divider  (.lucent-divider--plain | .lucent-divider--labeled)
+ *     (label text — labeled variant only)
+ *
+ * The unified separator. `plain` is a hairline rule (the canonical replacement for the old
+ * nav-divider / menu-divider). `labeled` is a rule with centered text ("Today", "OLDER") —
+ * useful for date breaks in a message stream or section labels in a menu/nav.
+ * ============================================================================= */
+
+.lucent-divider {
+  width: 100%;
+}
+
+.lucent-divider--plain {
+  border-top: var(--border-subtle);
+}
+
+.lucent-divider--labeled {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-3);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-xs);
+  font-weight: var(--dimension--primitive--fw-medium);
+  letter-spacing: var(--dimension--primitive--tracking-wide);
+  color: var(--color--semantic--text-muted);
+}
+
+.lucent-divider--labeled::before,
+.lucent-divider--labeled::after {
+  content: "";
+  flex: 1 0 0;
+  border-top: var(--border-subtle);
+}

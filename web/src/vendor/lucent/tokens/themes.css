@@ -1,0 +1,164 @@
+/* =============================================================================
+ * Dark theme — re-points the SEMANTIC layer at different primitive steps.
+ * Primitives stay theme-agnostic; only semantic tokens change, so every component
+ * follows automatically.
+ *
+ * Applied to an explicit [data-theme="dark"] on <html>, and as the system default
+ * via prefers-color-scheme (unless the user explicitly chose [data-theme="light"]).
+ *
+ * NOTE: this was a single `@mixin dark` in SCSS. Plain CSS cannot share one
+ * declaration block across a normal selector and an @media rule, so the dark block
+ * is intentionally written twice. Keep the two copies in sync.
+ * ============================================================================= */
+
+/* Explicit user choice. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Text (invert the slate ramp: strong = lightest) */
+  --color--semantic--text-strong:   var(--color--primitive--slate-100);
+  --color--semantic--text-default:  var(--color--primitive--slate-90);
+  --color--semantic--text-muted:    var(--color--primitive--slate-70);
+  --color--semantic--text-subtle:   var(--color--primitive--slate-60);
+  --color--semantic--text-inverse:  var(--color--primitive--slate-10);
+  --color--semantic--text-onaccent: var(--color--primitive--pine-10);
+
+  /* Accent (keep brand mid; lighten emphasis, darken the tint) */
+  --color--semantic--accent-default: var(--color--primitive--pine-60);
+  --color--semantic--accent-strong:  var(--color--primitive--pine-70);
+  --color--semantic--accent-subtle:  var(--color--primitive--pine-20);
+  --color--semantic--accent-text:    oklch(from var(--color--primitive--pine-70) l calc(c * 1.8) h);
+  --color--semantic--scrollbar-thumb: var(--color--primitive--slate-30);
+  --color--semantic--scrollbar-thumb-hover: var(--color--primitive--slate-50);
+
+  /* Feedback (keep saturated colors; darken the subtle backgrounds) */
+  --color--semantic--success:        var(--color--primitive--success-60);
+  --color--semantic--success-subtle: var(--color--primitive--success-20);
+  --color--semantic--warning:        var(--color--primitive--warning-60);
+  --color--semantic--warning-subtle: var(--color--primitive--warning-20);
+  --color--semantic--error:          var(--color--primitive--error-60);
+  --color--semantic--error-subtle:   var(--color--primitive--error-20);
+  --color--semantic--info:           var(--color--primitive--info-60);
+  --color--semantic--info-subtle:    var(--color--primitive--info-20);
+
+  /* Readable partners for the subtle fills — inverted for dark (see semantic-colors.css). */
+  --color--semantic--success-on-subtle: var(--color--primitive--success-95);
+  --color--semantic--warning-on-subtle: var(--color--primitive--warning-95);
+  --color--semantic--error-on-subtle:   var(--color--primitive--error-95);
+  --color--semantic--info-on-subtle:    var(--color--primitive--info-95);
+
+  /* Overlay */
+  --color--semantic--scrim: oklch(from var(--color--primitive--black) l c h / var(--opacity--primitive--60));
+
+  /* Surfaces (dark neutrals; raised/overlay step lighter than base) */
+  --color--semantic--surface-base:    var(--color--primitive--neutral-10);
+  --color--semantic--surface-default: var(--color--primitive--neutral-20);
+  --color--semantic--surface-raised:  var(--color--primitive--neutral-20);
+  --color--semantic--surface-overlay: var(--color--primitive--neutral-30);
+  --color--semantic--surface-tint:    var(--color--primitive--sage-10);
+
+  --color--semantic--surface-glass:        oklch(from var(--color--primitive--neutral-20) l c h / var(--opacity--primitive--50));
+  --color--semantic--surface-glass-strong: oklch(from var(--color--primitive--neutral-30) l c h / var(--opacity--primitive--70));
+  --color--semantic--surface-glass-subtle: oklch(from var(--color--primitive--neutral-20) l c h / var(--opacity--primitive--10));
+
+  /* Borders (faint light hairlines on dark) */
+  --color--semantic--border-subtle:  oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--10));
+  --color--semantic--border-default: oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--20));
+  --color--semantic--border-strong:  oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--30));
+  --color--semantic--border-focus:   var(--color--primitive--pine-60);
+  --color--semantic--border-glass:   oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--15));
+
+  /* Shadows (deeper on dark) */
+  --gradient-breath:
+    radial-gradient(circle at 20% 20%, var(--color--primitive--sage-20) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, var(--color--primitive--info-20) 0%, transparent 60%),
+    linear-gradient(var(--color--primitive--neutral-10), var(--color--primitive--neutral-10));
+  --gradient-breath-soft:
+    radial-gradient(circle at 15% 10%, oklch(from var(--color--primitive--sage-20) l c h / 0.6) 0%, transparent 55%),
+    radial-gradient(circle at 85% 85%, oklch(from var(--color--primitive--info-20) l c h / 0.5) 0%, transparent 55%),
+    linear-gradient(var(--color--primitive--neutral-10), var(--color--primitive--neutral-10));
+
+  --shadow-xs: 0 1px 2px 0   oklch(from var(--color--primitive--black) l c h / 0.30);
+  --shadow-sm: 0 2px 4px 0   oklch(from var(--color--primitive--black) l c h / 0.36);
+  --shadow-md: 0 4px 8px 0   oklch(from var(--color--primitive--black) l c h / 0.44);
+  --shadow-lg: 0 8px 24px 0  oklch(from var(--color--primitive--black) l c h / 0.50);
+  --shadow-xl: 0 16px 48px 0 oklch(from var(--color--primitive--black) l c h / 0.56);
+}
+
+/* System default — applies when the user hasn't explicitly opted into light.
+ * (Same declarations as above; see NOTE.) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color--semantic--text-strong:   var(--color--primitive--slate-100);
+    --color--semantic--text-default:  var(--color--primitive--slate-90);
+    --color--semantic--text-muted:    var(--color--primitive--slate-70);
+    --color--semantic--text-subtle:   var(--color--primitive--slate-60);
+    --color--semantic--text-inverse:  var(--color--primitive--slate-10);
+    --color--semantic--text-onaccent: var(--color--primitive--pine-10);
+
+    --color--semantic--accent-default: var(--color--primitive--pine-60);
+    --color--semantic--accent-strong:  var(--color--primitive--pine-70);
+    --color--semantic--accent-subtle:  var(--color--primitive--pine-20);
+    --color--semantic--accent-text:    oklch(from var(--color--primitive--pine-70) l calc(c * 1.8) h);
+    --color--semantic--scrollbar-thumb: var(--color--primitive--slate-30);
+    --color--semantic--scrollbar-thumb-hover: var(--color--primitive--slate-50);
+
+    --color--semantic--success:        var(--color--primitive--success-60);
+    --color--semantic--success-subtle: var(--color--primitive--success-20);
+    --color--semantic--warning:        var(--color--primitive--warning-60);
+    --color--semantic--warning-subtle: var(--color--primitive--warning-20);
+    --color--semantic--error:          var(--color--primitive--error-60);
+    --color--semantic--error-subtle:   var(--color--primitive--error-20);
+    --color--semantic--info:           var(--color--primitive--info-60);
+    --color--semantic--info-subtle:    var(--color--primitive--info-20);
+
+  /* Readable partners for the subtle fills — inverted for dark (see semantic-colors.css). */
+  --color--semantic--success-on-subtle: var(--color--primitive--success-95);
+  --color--semantic--warning-on-subtle: var(--color--primitive--warning-95);
+  --color--semantic--error-on-subtle:   var(--color--primitive--error-95);
+  --color--semantic--info-on-subtle:    var(--color--primitive--info-95);
+
+    --color--semantic--scrim: oklch(from var(--color--primitive--black) l c h / var(--opacity--primitive--60));
+
+    --color--semantic--surface-base:    var(--color--primitive--neutral-10);
+    --color--semantic--surface-default: var(--color--primitive--neutral-20);
+    --color--semantic--surface-raised:  var(--color--primitive--neutral-20);
+    --color--semantic--surface-overlay: var(--color--primitive--neutral-30);
+    --color--semantic--surface-tint:    var(--color--primitive--sage-10);
+
+    --color--semantic--surface-glass:        oklch(from var(--color--primitive--neutral-20) l c h / var(--opacity--primitive--50));
+    --color--semantic--surface-glass-strong: oklch(from var(--color--primitive--neutral-30) l c h / var(--opacity--primitive--70));
+    --color--semantic--surface-glass-subtle: oklch(from var(--color--primitive--neutral-20) l c h / var(--opacity--primitive--10));
+
+    --color--semantic--border-subtle:  oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--10));
+    --color--semantic--border-default: oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--20));
+    --color--semantic--border-strong:  oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--30));
+    --color--semantic--border-focus:   var(--color--primitive--pine-60);
+    --color--semantic--border-glass:   oklch(from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--15));
+
+    --gradient-breath:
+
+      radial-gradient(circle at 20% 20%, var(--color--primitive--sage-20) 0%, transparent 60%),
+
+      radial-gradient(circle at 80% 80%, var(--color--primitive--info-20) 0%, transparent 60%),
+
+      linear-gradient(var(--color--primitive--neutral-10), var(--color--primitive--neutral-10));
+
+    --gradient-breath-soft:
+
+      radial-gradient(circle at 15% 10%, oklch(from var(--color--primitive--sage-20) l c h / 0.6) 0%, transparent 55%),
+
+      radial-gradient(circle at 85% 85%, oklch(from var(--color--primitive--info-20) l c h / 0.5) 0%, transparent 55%),
+
+      linear-gradient(var(--color--primitive--neutral-10), var(--color--primitive--neutral-10));
+
+
+    --shadow-xs: 0 1px 2px 0   oklch(from var(--color--primitive--black) l c h / 0.30);
+    --shadow-sm: 0 2px 4px 0   oklch(from var(--color--primitive--black) l c h / 0.36);
+    --shadow-md: 0 4px 8px 0   oklch(from var(--color--primitive--black) l c h / 0.44);
+    --shadow-lg: 0 8px 24px 0  oklch(from var(--color--primitive--black) l c h / 0.50);
+    --shadow-xl: 0 16px 48px 0 oklch(from var(--color--primitive--black) l c h / 0.56);
+  }
+}

@@ -1,0 +1,68 @@
+/* =============================================================================
+ * Table — framework-neutral component styles.
+ *
+ * Applied to native table markup (so a11y, keyboard, and semantics come for free):
+ *   <table class="lucent-table">
+ *     <thead><tr><th>…</th></tr></thead>
+ *     <tbody><tr><td>…</td></tr></tbody>
+ *   </table>
+ *   .lucent-table__pagination   ← optional footer bar (compose icon-buttons + a range label)
+ *
+ * Cells hold arbitrary content — avatar, status-tag, icon-button, etc. Column alignment via
+ * `.lucent-table__cell--right|center` on the th/td.
+ * ============================================================================= */
+
+.lucent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-table thead th {
+  text-align: left;
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  font-size: var(--dimension--primitive--fs-xs);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-muted);
+  border-bottom: 1px solid var(--color--semantic--border-default);
+  white-space: nowrap;
+}
+
+.lucent-table tbody td {
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  border-bottom: var(--border-subtle);
+  vertical-align: middle;
+}
+
+.lucent-table tbody tr:last-child td { border-bottom: none; }
+
+.lucent-table tbody tr:hover { background: var(--color--semantic--surface-base); }
+
+.lucent-table tbody tr.is-selected {
+  background: oklch(from var(--color--semantic--surface-base) calc(l - 0.04) c h);
+}
+
+/* Column alignment helpers (on th/td). */
+.lucent-table__cell--right  { text-align: right; }
+.lucent-table__cell--center { text-align: center; }
+
+/* Optional pagination / footer bar (compose the controls inside). */
+.lucent-table__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dimension--primitive--spacing-3);
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  border-top: var(--border-subtle);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-xs);
+  color: var(--color--semantic--text-muted);
+}
+
+.lucent-table__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+}

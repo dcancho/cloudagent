@@ -1,0 +1,58 @@
+/* =============================================================================
+ * Reference tag — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-reference-tag  (.lucent-reference-tag--mention|component|token|resource)
+ *     .lucent-icon.lucent-reference-tag__icon   |   .lucent-reference-tag__swatch (token)
+ *     .lucent-reference-tag__label
+ *
+ * A small inline chip that references an entity inside prose — an @mention, a component, a
+ * design token (with a colour swatch + mono name), or a resource (PR, doc). Type-aware leading.
+ * Flows inline with text (wrap-friendly), used in chat/discussion message bodies.
+ * ============================================================================= */
+
+.lucent-reference-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+  height: var(--dimension--primitive--sizing-5);   /* 20 */
+  padding: 0 var(--dimension--primitive--spacing-1-5);
+  border-radius: var(--radius-xs);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-base);
+  color: var(--color--semantic--text-default);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-xs);
+  font-weight: var(--dimension--primitive--fw-medium);
+  line-height: var(--dimension--primitive--lh-tight);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.lucent-reference-tag__icon {
+  flex: none;
+  color: var(--color--semantic--text-muted);
+}
+
+.lucent-reference-tag__swatch {
+  flex: none;
+  width: var(--dimension--primitive--sizing-3);    /* 12 */
+  height: var(--dimension--primitive--sizing-3);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color--semantic--border-subtle);
+}
+
+.lucent-reference-tag__label { min-width: 0; }
+
+/* ─── Kinds ────────────────────────────────────────────────────────────────── */
+
+/* Mention — accent-tinted (@person / agent). */
+.lucent-reference-tag--mention {
+  background: color-mix(in oklab, var(--color--semantic--accent-subtle) 45%, var(--color--semantic--surface-default));
+  border-color: color-mix(in oklab, var(--color--semantic--accent-default) 25%, transparent);
+  color: var(--color--semantic--accent-strong);
+}
+.lucent-reference-tag--mention .lucent-reference-tag__icon { color: var(--color--semantic--accent-strong); }
+
+/* Token — mono name beside the colour swatch. */
+.lucent-reference-tag--token .lucent-reference-tag__label { font-family: var(--font--primitive--mono); }

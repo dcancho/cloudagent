@@ -1,0 +1,38 @@
+/* =============================================================================
+ * Option — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-option  (.is-selected / .is-active / .is-disabled)
+ *     .lucent-option__label
+ *
+ * A row in a listbox (the dropdown of LucentSelect). `is-selected` = chosen,
+ * `is-active` = keyboard highlight (CONVENTIONS §6). Reference hover/selected pattern.
+ * Ported from packages/angular/src/option/option.scss.
+ * ============================================================================= */
+
+.lucent-option {
+  display: flex;
+  align-items: center;
+  height: var(--dimension--primitive--sizing-6);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-2);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.lucent-option:hover:not(.is-disabled) { background: var(--color--semantic--surface-base); }
+.lucent-option.is-active { background: var(--color--semantic--surface-base); }
+.lucent-option.is-selected { background: oklch(from var(--color--semantic--surface-base) calc(l - 0.04) c h); }
+.lucent-option.is-disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+.lucent-option__label {
+  flex: 1 0 0;
+  min-width: 0;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--caption--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

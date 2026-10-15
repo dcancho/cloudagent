@@ -1,0 +1,94 @@
+/* =============================================================================
+ * Nav item — framework-neutral component styles.
+ *
+ * Structure kits emit:
+ *   a.lucent-nav-item  (.is-active / .is-disabled)   ← the anchor IS the contract element
+ *     .lucent-icon                                   ← lg glyph
+ *     .lucent-nav-item__text
+ *       .lucent-nav-item__label
+ *       .lucent-nav-item__subtitle                   ← optional
+ *
+ * A navigation row. It renders as a real <a href> (Lucent's navigation-is-a-link contract):
+ * the AT "link" role, a real URL, middle-click / open-in-new-tab, and aria-current on the
+ * active one. Supersedes .lucent-nav-icon, which is the icon-only case of this component.
+ *
+ * Compact vs labelled is NOT a property of the item — it is driven by the rail's
+ * .is-expanded class (see nav-rail.css), so an item adapts to its container. Outside a rail
+ * an item is labelled by default.
+ * ============================================================================= */
+
+/* Kits whose component element wraps the anchor (Angular's <lucent-nav-item>) mark that
+   element with this class so it disappears from layout and the anchor becomes the rail's
+   flex child — keeping the contract classes on the interactive element itself. */
+.lucent-nav-item-host {
+  display: contents;
+}
+
+.lucent-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-2);
+  border-radius: var(--radius-sm);
+  /* Navigation is scaffolding, not content: at rest an item is MUTED, so the page it
+     frames stays the loudest thing on screen. Emphasis is spent on the active row only. */
+  color: var(--color--semantic--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  background: transparent;
+  border: none;
+  width: 100%;
+}
+
+.lucent-nav-item:hover:not(.is-disabled) {
+  background: var(--color--semantic--surface-glass-strong);
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-nav-item.is-active {
+  background: var(--color--semantic--accent-subtle);
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-nav-item.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* The text column truncates rather than widening the rail. */
+.lucent-nav-item__text {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lucent-nav-item__label {
+  font-family: var(--font--primitive--sans);
+  /* Regular at rest; the active row steps up to medium (below). Weight carries the state
+     together with the tint, so the rail reads even where the accent wash is subtle. */
+  font-weight: var(--dimension--primitive--fw-regular);
+  font-size: var(--dimension--primitive--fs-sm);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lucent-nav-item.is-active .lucent-nav-item__label {
+  font-weight: var(--dimension--primitive--fw-medium);
+}
+
+.lucent-nav-item__subtitle {
+  font-family: var(--font--primitive--sans);
+  font-weight: var(--dimension--primitive--fw-regular);
+  font-size: var(--dimension--primitive--fs-xs);
+  line-height: 1.6;
+  color: var(--color--semantic--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

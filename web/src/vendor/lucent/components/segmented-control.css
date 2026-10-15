@@ -1,0 +1,86 @@
+/* =============================================================================
+ * Segmented control — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-segmented-control  (.lucent-segmented-control--xs|sm|md|lg)   [role=group]
+ *     .lucent-segmented-control__segment  (.is-selected)  ← equal-width pill button
+ *
+ * A compact inline single-select for a view/mode among 2–4 peers (Day/Week/Month,
+ * List/Grid). The selected segment lifts to a white pill; the rest are quiet on the track.
+ * Boundary vs. tab-list: tabs switch content panels; a segmented control switches a mode.
+ * ============================================================================= */
+
+.lucent-segmented-control {
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--dimension--primitive--spacing-0-5);
+  box-sizing: border-box;
+  height: var(--_h);
+  padding: var(--dimension--primitive--spacing-0-5);
+  /* Matches the segments it wraps: md made the track read as a rounded card rather than a rail. */
+  border-radius: var(--radius-sm);
+  /* A RECESSED SURFACE, not a border colour.
+   *
+   * This was --color--semantic--border-default, a value calibrated for 1px hairlines. As a
+   * filled track it rendered rgb(175,192,209) — a dark slab — and left the unselected label
+   * at 4.94:1, scraping past AA by 0.44, with the selected pill only 1.83:1 against it
+   * (WCAG 1.4.11 asks 3.0 for a non-text indicator). Border tokens are for lines. */
+  background: var(--color--semantic--surface-base);
+  border: 1px solid var(--color--semantic--border-subtle);
+
+  /* Density (default md). */
+  --_h: var(--control-height-md);
+  --_text: var(--control-text-md);
+  --_px: var(--control-pad-x-md);
+  --_gap: var(--control-gap-md);
+}
+
+.lucent-segmented-control--xs { --_h: var(--control-height-xs); --_text: var(--control-text-xs); --_px: var(--control-pad-x-xs); --_gap: var(--control-gap-xs); }
+.lucent-segmented-control--sm { --_h: var(--control-height-sm); --_text: var(--control-text-sm); --_px: var(--control-pad-x-sm); --_gap: var(--control-gap-sm); }
+.lucent-segmented-control--lg { --_h: var(--control-height-lg); --_text: var(--control-text-lg); --_px: var(--control-pad-x-lg); --_gap: var(--control-gap-lg); }
+
+.lucent-segmented-control__segment {
+  flex: 1 0 0;               /* equal-width segments */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--_gap);
+  height: 100%;
+  padding: 0 var(--_px);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color--semantic--text-muted);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-medium);
+  line-height: var(--control-line);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.lucent-segmented-control__segment:hover:not(.is-selected):not(:disabled) {
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-segmented-control__segment.is-selected {
+  background: var(--color--semantic--surface-default);
+  /* border-STRONG: on a light track the pill's fill is close to the track's, so the OUTLINE
+   * carries the selected state and must clear WCAG 1.4.11's 3.0 for a non-text indicator.
+   * Measured on this track — subtle 1.69, default 1.71, strong 3.59. Only strong passes,
+   * and it holds even under a theme that flattens --shadow-* away. */
+  border-color: var(--color--semantic--border-strong);
+  box-shadow: var(--shadow-sm);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-segmented-control__segment:focus-visible {
+  outline: var(--border-focus);
+  outline-offset: -2px;
+}
+
+.lucent-segmented-control__segment:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
