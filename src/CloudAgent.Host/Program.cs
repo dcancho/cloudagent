@@ -30,7 +30,16 @@ using CloudAgent.Host.Configuration;
 // serves the whole catalog; background jobs run on a cheap model via AGENT_SMALL_MODEL).
 var config = HostConfig.FromEnvironment();
 var providers = new ProviderFactory(config.Llm);
-ILlmProvider provider = providers.CreateLlm();
+var rawProvider = providers.CreateLlm();
+var isEcho = rawProvider is EchoLlmProvider;
+var meter = new MeteredLlmProvider(rawProvider);
+meter.Completed += (m, r) =>
+{
+    var total = meter.Usage.First(u => u.Model == m);
+    Console.WriteLine($"  🔢 {m}: {r.InputTokens ?? 0} in, {r.OutputTokens ?? 0} out " +
+                      $"(total {total.Calls} calls, {total.InputTokens} in, {total.OutputTokens} out)");
+};
+ILlmProvider provider = meter;
 var model = config.Llm.Model;
 
 // The agent's world: a rooted area it may act within (env AGENT_WORKSPACE, else ./workspace).
@@ -91,13 +100,13 @@ var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "projec
 // helped, judged post-turn. Judging (and state snapshotting) need a real model, so both are
 // off under the echo provider to keep the ledger clean.
 var utilityLedger = new FileUtilityLedger(Path.Combine(workspace.Root, ".agent", "memory", "utility.jsonl"));
-var utilityJudge = provider is EchoLlmProvider ? null : new UtilityJudge(provider, smallModel);
-var snapshotter = provider is EchoLlmProvider ? null : new StateSnapshotter(provider, smallModel);
+var utilityJudge = isEcho ? null : new UtilityJudge(provider, smallModel);
+var snapshotter = isEcho ? null : new StateSnapshotter(provider, smallModel);
 
 // Read-side pipeline: rewrite the query before searching, rerank the wide hybrid pass down
 // to the few genuinely useful memories. Both on the small model; off under echo.
-var queryRewriter = provider is EchoLlmProvider ? null : new QueryRewriter(provider, smallModel);
-var reranker = provider is EchoLlmProvider ? null : new MemoryReranker(provider, smallModel);
+var queryRewriter = isEcho ? null : new QueryRewriter(provider, smallModel);
+var reranker = isEcho ? null : new MemoryReranker(provider, smallModel);
 
 // Sleep-time consolidation: tamper-evident ledger of every decision, a staging area for
 // distilled knowledge (applied only through the approval tools), and the written policy
@@ -185,7 +194,7 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
     var utility = new UtilityTracker(utilityLedger, utilityJudge, agentId);
     var retriever = new MemoryRetriever(mem, queryRewriter, reranker);
 
-    if (provider is not EchoLlmProvider)
+    if (!isEcho)
         sleepJobs.Add(new SleepJob(
             provider, mem, utilityLedger, consolidationLedger, pendingConsolidations,
             agentId, consolidationPolicy, smallModel));
@@ -289,7 +298,7 @@ router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation op
 // Sleep timer: every interval, run each registered agent's consolidation pass. Mechanical
 // strata moves auto-apply; distillation only stages proposals for review.
 var sleepMinutes = config.SleepIntervalMinutes;
-if (provider is not EchoLlmProvider && sleepMinutes > 0)
+if (!isEcho && sleepMinutes > 0)
 {
     _ = Task.Run(async () =>
     {
@@ -340,7 +349,7 @@ Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")},
 Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
 Console.WriteLine($"Models:    main '{model}', background '{smallModel}'");
-Console.WriteLine($"Sleep:     {(provider is EchoLlmProvider || sleepMinutes <= 0 ? "off" : $"every {sleepMinutes} min")}; " +
+Console.WriteLine($"Sleep:     {(isEcho || sleepMinutes <= 0 ? "off" : $"every {sleepMinutes} min")}; " +
     $"pending proposals: {pendingConsolidations.List().Count}; ledger chain {(consolidationLedger.Verify() ? "OK" : "BROKEN")}");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
