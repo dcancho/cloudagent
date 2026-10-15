@@ -33,10 +33,10 @@ var providers = new ProviderFactory(config.Llm);
 var rawProvider = providers.CreateLlm();
 var isEcho = rawProvider is EchoLlmProvider;
 var meter = new MeteredLlmProvider(rawProvider);
-meter.Completed += (m, r) =>
+meter.Completed += (m, r, elapsed) =>
 {
     var total = meter.Usage.First(u => u.Model == m);
-    Console.WriteLine($"  🔢 {m}: {r.InputTokens ?? 0} in, {r.OutputTokens ?? 0} out " +
+    Console.WriteLine($"  🔢 {m}: {r.InputTokens ?? 0} in, {r.OutputTokens ?? 0} out, {elapsed.TotalMilliseconds:0} ms " +
                       $"(total {total.Calls} calls, {total.InputTokens} in, {total.OutputTokens} out)");
 };
 ILlmProvider provider = meter;
@@ -204,8 +204,15 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
 
 void AttachLogging(AgentLoop loop, string label)
 {
+    long? turnStarted = null;
+    loop.InputReceived += _ => turnStarted = System.Diagnostics.Stopwatch.GetTimestamp();
     loop.ResponseReceived += (_, r) =>
     {
+        if (turnStarted is { } started && !string.IsNullOrWhiteSpace(r.Text))
+        {
+            Console.WriteLine($"  ⏱ [{label}] reply after {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms");
+            turnStarted = null;
+        }
         if (r.CacheReadTokens is > 0 || r.CacheWriteTokens is > 0)
             Console.WriteLine(
                 $"  💰 [{label}] prompt tokens — {r.CacheReadTokens ?? 0} cached, " +

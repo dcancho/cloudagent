@@ -22,18 +22,20 @@ public sealed class MeteredLlmProvider(ILlmProvider inner) : ILlmProvider
 
     public string Name => inner.Name;
 
-    /// <summary>Raised after each completion with its model and response.</summary>
-    public event Action<string, LlmResponse>? Completed;
+    /// <summary>Raised after each completion with its model, response, and wall-clock duration.</summary>
+    public event Action<string, LlmResponse, TimeSpan>? Completed;
 
     public async Task<LlmResponse> CompleteAsync(LlmRequest request, CancellationToken cancellationToken = default)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var response = await inner.CompleteAsync(request, cancellationToken).ConfigureAwait(false);
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
         var model = request.Model ?? "(default)";
         var counter = _counters.GetOrAdd(model, _ => new Counter());
         Interlocked.Increment(ref counter.Calls);
         Interlocked.Add(ref counter.Input, response.InputTokens ?? 0);
         Interlocked.Add(ref counter.Output, response.OutputTokens ?? 0);
-        Completed?.Invoke(model, response);
+        Completed?.Invoke(model, response, elapsed);
         return response;
     }
 
