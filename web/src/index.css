@@ -56,8 +56,61 @@ body {
   align-self: flex-end;
 }
 
-.app__row .lucent-message-bubble__body {
+.app__row--user .lucent-message-bubble__body {
   white-space: pre-wrap;
+}
+
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-2);
+  min-width: 0;
+}
+
+.markdown > *,
+.markdown li > p {
+  margin: 0;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: var(--dimension--primitive--spacing-5);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-size: var(--typography--heading-sm--font-size);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+}
+
+.markdown a {
+  color: var(--color--semantic--accent-default);
+}
+
+.markdown__inline-code {
+  font-family: var(--font--primitive--mono);
+  font-size: 0.92em;
+  padding: 0 var(--dimension--primitive--spacing-1);
+  border-radius: var(--radius-xs);
+  background: var(--color--semantic--surface-base);
+}
+
+.markdown table {
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  border: var(--border-subtle);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-2);
+  text-align: left;
+}
+
+.markdown .lucent-code-block__body {
+  overflow-x: auto;
 }
 
 .app__composer {
