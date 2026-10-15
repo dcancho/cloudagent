@@ -29,6 +29,16 @@ using CloudAgent.Host.Configuration;
 // Claude CLI → Foundry → Anthropic → echo. Foundry is the production choice (one endpoint
 // serves the whole catalog; background jobs run on a cheap model via AGENT_SMALL_MODEL).
 var config = HostConfig.FromEnvironment();
+
+// The host's log goes to the console and to a daily file in the workspace.
+var logDirectory = Path.Combine(config.WorkspaceRoot, ".agent", "logs");
+Directory.CreateDirectory(logDirectory);
+var logFile = new StreamWriter(
+    Path.Combine(logDirectory, $"host-{DateTime.Now:yyyy-MM-dd}.log"), append: true, System.Text.Encoding.UTF8);
+logFile.WriteLine($"---- host started {DateTimeOffset.Now:O}");
+Console.SetOut(new TeeTextWriter(Console.Out, logFile));
+Console.SetError(new TeeTextWriter(Console.Error, logFile));
+
 var providers = new ProviderFactory(config.Llm);
 var rawProvider = providers.CreateLlm();
 var isEcho = rawProvider is EchoLlmProvider;
@@ -177,7 +187,7 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
     {
         [MemoryScope.Personal] = personalMemoryPath,
         [MemoryScope.Project] = projectMemoryPath,
-        [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{agentId}.db"),
+        [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{TranscriptRecorder.ToFileName(agentId)}.db"),
     });
 
     // Ambient metadata stamped on every write: who was writing, where, in which conversation.
@@ -244,6 +254,9 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
+// Every agent's loop is recorded event by event, one JSONL file per agent.
+var transcriptDirectory = Path.Combine(workspace.Root, ".agent", "transcripts");
+
 // Context routing: a decision model chooses per turn how much memory to recall and which tool
 // categories to offer. Off by default; every uncertain or failed decision runs the full pipeline.
 var routingOptions = new RoutingOptions
@@ -292,6 +305,7 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     var attention = BuildAttention(childOptions.SystemPrompt, retriever, $"child {child.Role}");
     var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, attention, utility, BuildRouter(mem));
     AttachLogging(loop, $"child {child.Role}");
+    new TranscriptRecorder(transcriptDirectory, child.Id).Attach(loop);
     return loop;
 };
 
@@ -322,6 +336,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
     var attention = BuildAttention(options.SystemPrompt, retriever, handle.Id);
     var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, attention, utility, BuildRouter(mem));
     AttachLogging(loop, handle.Id);
+    new TranscriptRecorder(transcriptDirectory, handle.Id).Attach(loop);
     return new AgentConversation(queue, loop);
 }
 
@@ -407,6 +422,7 @@ Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
+Console.WriteLine($"Records:   transcripts in {transcriptDirectory}, host log in {logDirectory}");
 Console.WriteLine($"Routing:   {decisionModel?.Name ?? "off (full pipeline every turn)"}");
 Console.WriteLine($"Turns:     {(config.TurnTakingEnabled ? $"bursts (wait {turnTaking.DefaultWait.TotalSeconds:0.#}s until measured; cli immediate)" : "one message per turn")}");
 
