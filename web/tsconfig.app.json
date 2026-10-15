@@ -10,9 +10,6 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "paths": {
-      "@design-foundry/lucent": ["../repos/design-foundry/lucent/packages/react/dist/index.d.ts"]
-    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
