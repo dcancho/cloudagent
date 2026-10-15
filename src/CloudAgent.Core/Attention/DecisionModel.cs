@@ -14,9 +14,20 @@ namespace CloudAgent.Core.Attention;
 /// <param name="Id">Stable identifier, used to read the answer back.</param>
 /// <param name="Text">The question as the decision model reads it.</param>
 /// <param name="Options">The only answers allowed.</param>
-public sealed record DecisionQuestion(string Id, string Text, IReadOnlyList<string> Options)
+/// <param name="Criteria">What each option means, when the option name alone is not enough.</param>
+public sealed record DecisionQuestion(
+    string Id,
+    string Text,
+    IReadOnlyList<string> Options,
+    IReadOnlyDictionary<string, string>? Criteria = null)
 {
     public static DecisionQuestion YesNo(string id, string text) => new(id, text, ["yes", "no"]);
+
+    /// <summary>Whether this is a yes or no question.</summary>
+    public bool IsYesNo => Options is ["yes", "no"];
+
+    public string Describe(string option) =>
+        Criteria is not null && Criteria.TryGetValue(option, out var description) ? description : option;
 }
 
 /// <summary>A probability for each option of one question; the probabilities sum to one.</summary>
@@ -53,7 +64,12 @@ public sealed class GenerativeDecisionModel(ILlmProvider provider, string? model
         prompt.AppendLine("Situation:").AppendLine(situation).AppendLine();
         prompt.AppendLine("Questions:");
         foreach (var q in questions)
-            prompt.AppendLine($"- {q.Id}: {q.Text} Options: {string.Join(", ", q.Options)}");
+        {
+            var options = q.Criteria is null
+                ? string.Join(", ", q.Options)
+                : string.Join("; ", q.Options.Select(o => $"{o} ({q.Describe(o)})"));
+            prompt.AppendLine($"- {q.Id}: {q.Text} Options: {options}");
+        }
 
         var request = new LlmRequest
         {

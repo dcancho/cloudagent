@@ -174,10 +174,14 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
         var questions = new List<DecisionQuestion>
         {
             new(MemoryQuestion,
-                "How much of the agent's long-term memory does the latest message need? none: it stands on its own " +
-                "(a greeting, a general question). light: it may touch something known about the person or project. " +
-                "full: it refers back to earlier work, people, decisions, or preferences.",
-                ["none", "light", "full"]),
+                "How much of the agent's long-term memory does the latest message need?",
+                ["none", "light", "full"],
+                new Dictionary<string, string>
+                {
+                    ["none"] = "It stands on its own, such as a greeting or a general question",
+                    ["light"] = "It may touch something already known about the person or the project",
+                    ["full"] = "It refers back to earlier work, people, decisions, or preferences",
+                }),
         };
 
         foreach (var category in categories.Order())

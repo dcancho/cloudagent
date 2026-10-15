@@ -272,6 +272,8 @@ var routingOptions = new RoutingOptions
 };
 IDecisionModel? decisionModel = config.ContextRouting switch
 {
+    "decision" when config.DecisionsEndpoint is not null && !string.IsNullOrWhiteSpace(config.DecisionsModel) =>
+        new FoundryDecisionModel(config.DecisionsEndpoint, config.DecisionsModel, config.Llm.FoundryApiKey),
     "generative" when !isEcho => new GenerativeDecisionModel(provider, smallModel),
     _ => null,
 };
