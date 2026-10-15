@@ -24,9 +24,15 @@ namespace CloudAgent.Surfaces;
 ///
 /// Protocol: a plain text frame is a message. A client that sends <c>{"type":"hello","protocol":2}</c>
 /// switches to typed JSON frames (<c>message</c> and <c>typing</c>) in both directions; clients that
-/// never say hello keep receiving plain text.
+/// never say hello keep receiving plain text. A hello may carry <c>"conversation"</c> to continue an
+/// earlier conversation; the server answers with <c>welcome</c> (the conversation id to keep) and, when
+/// there is one, <c>history</c> (the messages so far).
 /// </summary>
-public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndicator
+/// <param name="port">Port to listen on, on localhost.</param>
+/// <param name="history">The messages so far in a conversation, by conversation id.</param>
+public sealed class WebchatSurface(
+    int port = 5080,
+    Func<string, IReadOnlyList<(string Role, string Text)>>? history = null) : ITypingSource, ITypingIndicator
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(4);
 
@@ -59,9 +65,8 @@ public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndi
             }
 
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
-            var conversationId = Guid.NewGuid().ToString("N")[..8];
             var client = new Client(socket);
-            _clients[conversationId] = client;
+            string? conversationId = null;
 
             try
             {
@@ -70,6 +75,18 @@ public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndi
                     var frame = await ReceiveFrameAsync(socket, cancellationToken);
                     if (frame is null)
                         break;
+
+                    // The first frame binds the connection to a conversation: the one a hello names, or a new one.
+                    if (conversationId is null)
+                    {
+                        var (id, consumed) = Bind(client, frame);
+                        conversationId = id;
+                        _clients[conversationId] = client;
+                        if (client.Typed)
+                            await WelcomeAsync(client, conversationId, cancellationToken);
+                        if (consumed)
+                            continue;
+                    }
 
                     var text = HandleFrame(client, conversationId, frame);
                     if (!string.IsNullOrWhiteSpace(text))
@@ -84,7 +101,9 @@ public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndi
             catch (WebSocketException) { }
             finally
             {
-                _clients.TryRemove(conversationId, out _);
+                // A newer connection to the same conversation may have taken its place; leave that one.
+                if (conversationId is not null)
+                    _clients.TryRemove(new KeyValuePair<string, Client>(conversationId, client));
             }
         });
 
@@ -124,6 +143,51 @@ public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndi
 
         return client.SendAsync(new JsonObject { ["type"] = "typing" }.ToJsonString(), cancellationToken);
     }
+
+    /// <summary>
+    /// The conversation a connection belongs to, and whether its first frame was only a hello. A hello
+    /// may name an existing conversation to continue it; anything else starts a new one.
+    /// </summary>
+    private static (string Id, bool Consumed) Bind(Client client, string frame)
+    {
+        if (frame.StartsWith('{'))
+        {
+            try
+            {
+                if (JsonNode.Parse(frame) is JsonObject json && json["type"]?.GetValue<string>() == "hello")
+                {
+                    client.Typed = true;
+                    var requested = json["conversation"]?.GetValue<string>();
+                    return (requested is not null && IsValidId(requested) ? requested : NewId(), true);
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+            {
+            }
+        }
+
+        return (NewId(), false);
+    }
+
+    private async Task WelcomeAsync(Client client, string conversationId, CancellationToken cancellationToken)
+    {
+        await client.SendAsync(
+            new JsonObject { ["type"] = "welcome", ["conversation"] = conversationId }.ToJsonString(), cancellationToken);
+
+        var past = history?.Invoke(conversationId) ?? [];
+        if (past.Count == 0)
+            return;
+
+        var messages = new JsonArray(past
+            .Select(m => (JsonNode)new JsonObject { ["role"] = m.Role, ["text"] = m.Text })
+            .ToArray());
+        await client.SendAsync(new JsonObject { ["type"] = "history", ["messages"] = messages }.ToJsonString(), cancellationToken);
+    }
+
+    private static string NewId() => Guid.NewGuid().ToString("N")[..12];
+
+    private static bool IsValidId(string id) =>
+        id.Length is >= 8 and <= 32 && id.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9');
 
     /// <summary>Returns message text to deliver, or null when the frame was a control frame.</summary>
     private string? HandleFrame(Client client, string conversationId, string frame)
@@ -216,7 +280,7 @@ public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndi
           </style>
         </head>
         <body>
-          <h2>CloudAgent</h2>
+          <h2>CloudAgent <button onclick="localStorage.removeItem('cloudagent.conversation'); location.reload()">New conversation</button></h2>
           <div id="log"></div>
           <div id="typing"></div>
           <div id="row">
@@ -248,10 +312,16 @@ public sealed class WebchatSurface(int port = 5080) : ITypingSource, ITypingIndi
               typing.textContent = '';
             }
 
-            ws.onopen = () => ws.send(JSON.stringify({ type: 'hello', protocol: 2 }));
+            ws.onopen = () => ws.send(JSON.stringify({
+              type: 'hello', protocol: 2, conversation: localStorage.getItem('cloudagent.conversation') || undefined }));
             ws.onmessage = e => {
               let frame;
               try { frame = JSON.parse(e.data); } catch { frame = null; }
+              if (frame && frame.type === 'welcome') { localStorage.setItem('cloudagent.conversation', frame.conversation); return; }
+              if (frame && frame.type === 'history') {
+                frame.messages.forEach(m => add(m.role === 'user' ? 'you' : 'agent', m.text));
+                return;
+              }
               if (frame && frame.type === 'typing') { showTyping(); return; }
               hideTyping();
               add('agent', frame && frame.type === 'message' ? frame.text : e.data);

@@ -261,6 +261,9 @@ Console.CancelKeyPress += (_, e) =>
 // Every agent's loop is recorded event by event, one JSONL file per agent.
 var transcriptDirectory = Path.Combine(workspace.Root, ".agent", "transcripts");
 
+// Each conversation's working context is saved after every turn, so it continues after a restart.
+var contexts = new ContextStore(Path.Combine(workspace.Root, ".agent", "conversations"));
+
 // Context routing: a decision model chooses per turn how much memory to recall and which tool
 // categories to offer. Off by default; every uncertain or failed decision runs the full pipeline.
 var routingOptions = new RoutingOptions
@@ -345,7 +348,21 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new StopAgentTool(bus));
 
     var attention = BuildAttention(options.SystemPrompt, retriever, handle.Id);
-    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, attention, utility, BuildRouter(mem));
+    var context = contexts.Load(handle.Id);
+    if (context is not null)
+        Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
+    var loop = new AgentLoop(provider, options, input, context ?? new AgentContext(), agentTools, comp, attention, utility, BuildRouter(mem));
+    loop.TurnEnded += _ =>
+    {
+        try
+        {
+            contexts.Save(handle.Id, loop.Context);
+        }
+        catch (IOException ex)
+        {
+            Console.Error.WriteLine($"  ✖ [{handle.Id}] could not save the conversation: {ex.Message}");
+        }
+    };
     AttachLogging(loop, handle.Id);
     new TranscriptRecorder(transcriptDirectory, handle.Id).Attach(loop);
     return new AgentConversation(queue, loop);
@@ -362,7 +379,9 @@ if (!string.IsNullOrWhiteSpace(config.DiscordBotToken))
 
 if (config.WebchatEnabled)
 {
-    var webchat = new WebchatSurface(config.WebchatPort);
+    var webchat = new WebchatSurface(
+        config.WebchatPort,
+        conversationId => TranscriptRecorder.ReadConversation(transcriptDirectory, $"webchat:{conversationId}"));
     surfaces.Add(webchat);
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
