@@ -22,8 +22,10 @@ npm run dev
 The app runs at `http://localhost:5173` and connects to `ws://localhost:5080/ws`; set
 `VITE_AGENT_WS` to use another address.
 
-It keeps the current conversation id in local storage, so a reload continues the same
-conversation and shows its history. The button in the header starts a new one.
+The sidebar lists every web chat conversation, most recent first, titled by its first message.
+Picking one reconnects to it and shows its history. The current conversation id is kept in local
+storage, so a reload continues where you were. On narrow screens the sidebar opens from the menu
+button.
 
 ## Notes on Lucent
 

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Composer, Icon, IconButton, MessageBubble, StatusTag, TypingIndicator } from './lucent'
+import { Composer, ConversationRow, Icon, IconButton, MessageBubble, StatusTag, TypingIndicator } from './lucent'
 import { Markdown } from './Markdown'
 
 type Msg = { role: 'user' | 'assistant'; text: string }
+
+type Conversation = { id: string; title: string; updatedAt: string }
 
 type Frame =
   | { type: 'message'; text: string }
   | { type: 'typing' }
   | { type: 'welcome'; conversation: string }
   | { type: 'history'; messages: Msg[] }
+  | { type: 'conversations'; items: Conversation[] }
 
 const WS_URL = (import.meta.env.VITE_AGENT_WS as string | undefined) ?? 'ws://localhost:5080/ws'
 const CONVERSATION_KEY = 'cloudagent.conversation'
@@ -44,6 +47,14 @@ function parseFrame(data: string): Frame {
   return { type: 'message', text: data }
 }
 
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
+
+function shortTime(iso: string): string {
+  const date = new Date(iso)
+  return date.toDateString() === new Date().toDateString() ? timeFormat.format(date) : dateFormat.format(date)
+}
+
 function App() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
@@ -54,10 +65,14 @@ function App() {
   const typingTimer = useRef<number | undefined>(undefined)
   const lastTypingPing = useRef(0)
   const [session, setSession] = useState(0)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [current, setCurrent] = useState<string | undefined>(storedConversation)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     const ws = new WebSocket(WS_URL)
     wsRef.current = ws
+    const requestList = () => ws.send(JSON.stringify({ type: 'list' }))
     ws.onopen = () => {
       setConnected(true)
       ws.send(JSON.stringify({ type: 'hello', protocol: 2, conversation: storedConversation() }))
@@ -67,6 +82,12 @@ function App() {
       const frame = parseFrame(String(e.data))
       if (frame.type === 'welcome') {
         storeConversation(frame.conversation)
+        setCurrent(frame.conversation)
+        requestList()
+        return
+      }
+      if (frame.type === 'conversations') {
+        setConversations(frame.items)
         return
       }
       if (frame.type === 'history') {
@@ -84,6 +105,7 @@ function App() {
         window.clearTimeout(typingTimer.current)
         setAgentTyping(false)
         setMessages((m) => [...m, { role: 'assistant', text }])
+        requestList()
       }
     }
     return () => {
@@ -92,8 +114,11 @@ function App() {
     }
   }, [session])
 
-  function newConversation() {
-    storeConversation(null)
+  function openConversation(id: string | null) {
+    setSidebarOpen(false)
+    if (id !== null && id === current) return
+    storeConversation(id)
+    setCurrent(id ?? undefined)
     setMessages([])
     setAgentTyping(false)
     setSession((s) => s + 1)
@@ -123,38 +148,65 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header className="app__bar">
-        <Icon name="smart_toy" />
-        <h1 className="app__title">CloudAgent</h1>
-        <StatusTag status={connected ? 'success' : 'neutral'}>{connected ? 'Connected' : 'Offline'}</StatusTag>
-        <IconButton icon="add_comment" label="New conversation" onClick={newConversation} />
-      </header>
+    <div className={`app${sidebarOpen ? ' app--sidebar-open' : ''}`}>
+      <nav className="app__sidebar" aria-label="Conversations">
+        <div className="app__sidebar-bar">
+          <h2 className="app__sidebar-title">Conversations</h2>
+          <IconButton icon="add_comment" label="New conversation" onClick={() => openConversation(null)} />
+        </div>
+        <div className="app__conversations">
+          {conversations.map((c) => (
+            <ConversationRow
+              key={c.id}
+              title={c.title}
+              time={shortTime(c.updatedAt)}
+              active={c.id === current}
+              onClick={() => openConversation(c.id)}
+            />
+          ))}
+        </div>
+      </nav>
+      <div className="app__scrim" onClick={() => setSidebarOpen(false)} />
 
-      <div className="app__log" ref={logRef}>
-        {messages.map((m, i) => (
-          <div key={i} className={`app__row app__row--${m.role}`}>
-            <MessageBubble role={m.role} continuation={messages[i + 1]?.role === m.role}>
-              {m.role === 'assistant' ? <Markdown text={m.text} /> : m.text}
-            </MessageBubble>
-          </div>
-        ))}
-        {agentTyping && (
-          <div className="app__row app__row--assistant">
-            <TypingIndicator variant="generating" label="" />
-          </div>
-        )}
-      </div>
+      <main className="app__main">
+        <header className="app__bar">
+          <IconButton
+            className="app__menu"
+            icon="menu"
+            label="Conversations"
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((open) => !open)}
+          />
+          <Icon name="smart_toy" />
+          <h1 className="app__title">CloudAgent</h1>
+          <StatusTag status={connected ? 'success' : 'neutral'}>{connected ? 'Connected' : 'Offline'}</StatusTag>
+        </header>
 
-      <div className="app__composer">
-        <Composer
-          value={draft}
-          onChange={changeDraft}
-          onSend={send}
-          canSend={connected}
-          placeholder="Message CloudAgent"
-        />
-      </div>
+        <div className="app__log" ref={logRef}>
+          {messages.map((m, i) => (
+            <div key={i} className={`app__row app__row--${m.role}`}>
+              <MessageBubble role={m.role} continuation={messages[i + 1]?.role === m.role}>
+                {m.role === 'assistant' ? <Markdown text={m.text} /> : m.text}
+              </MessageBubble>
+            </div>
+          ))}
+          {agentTyping && (
+            <div className="app__row app__row--assistant">
+              <TypingIndicator variant="generating" label="" />
+            </div>
+          )}
+        </div>
+
+        <div className="app__composer">
+          <Composer
+            value={draft}
+            onChange={changeDraft}
+            onSend={send}
+            canSend={connected}
+            placeholder="Message CloudAgent"
+          />
+        </div>
+      </main>
     </div>
   )
 }
