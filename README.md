@@ -106,6 +106,7 @@ Everything the agent does is kept under the workspace's `.agent` folder, which i
 | `transcripts/<agent>.jsonl` | One line per event of each agent: messages, model replies with tool calls and token counts, tool results, routing, recall, judging, errors |
 | `logs/host-<date>.log` | The host's console output |
 | `routing.jsonl` | Each routing decision and its outcome, including the router's misses |
+| `conversations/<agent>.json` | Each conversation's working context, saved after every turn so it continues after a restart |
 | `memory/` | The memory databases |
 
 ## The loop
