@@ -1,0 +1,99 @@
+:root {
+	/* =========================================================
+	 * Text
+	 * ========================================================= */
+
+	--color--semantic--text-strong: var(--color--primitive--slate-10);
+	--color--semantic--text-default: var(--color--primitive--slate-20);
+	--color--semantic--text-muted: var(--color--primitive--slate-40);
+	--color--semantic--text-subtle: var(--color--primitive--slate-50);
+
+	--color--semantic--text-inverse: var(--color--primitive--slate-95);
+	--color--semantic--text-onaccent: var(--color--primitive--pine-95);
+
+	/* =========================================================
+	 * Accent
+	 * ========================================================= */
+
+	--color--semantic--accent-default:
+		var(--color--primitive--pine-50);
+
+	--color--semantic--accent-strong:
+		var(--color--primitive--pine-30);
+
+	--color--semantic--accent-subtle:
+		var(--color--primitive--pine-80);
+
+	/* =========================================================
+	 * Feedback
+	 * ========================================================= */
+
+	--color--semantic--success:
+		var(--color--primitive--success-50);
+
+	--color--semantic--success-subtle:
+		var(--color--primitive--success-90);
+
+	--color--semantic--warning:
+		var(--color--primitive--warning-50);
+
+	--color--semantic--warning-subtle:
+		var(--color--primitive--warning-90);
+
+	--color--semantic--error:
+		var(--color--primitive--error-50);
+
+	--color--semantic--error-subtle:
+		var(--color--primitive--error-90);
+
+	--color--semantic--info:
+		var(--color--primitive--info-50);
+
+	--color--semantic--info-subtle:
+		var(--color--primitive--info-90);
+
+	/* =========================================================
+	 * Feedback — text ON a subtle fill
+	 *
+	 * Every ramp shares one luminance per step, so ramp/30 on ramp/90 is the same
+	 * contrast (6.9:1) for every status colour.
+	 * ========================================================= */
+
+	--color--semantic--success-on-subtle: var(--color--primitive--success-30);
+	--color--semantic--warning-on-subtle: var(--color--primitive--warning-30);
+	--color--semantic--error-on-subtle:   var(--color--primitive--error-30);
+	--color--semantic--info-on-subtle:    var(--color--primitive--info-30);
+
+	/* =========================================================
+	 * Action text and disabled
+	 *
+	 * Derived, not new ramps. accent-text is a pine step with its chroma raised
+	 * (x1.8): pine-40 here, pine-70 in dark (themes.css). disabled-fg reads the
+	 * theme's own text-subtle and surface-default.
+	 * ========================================================= */
+
+	--color--semantic--accent-text:
+		oklch(from var(--color--primitive--pine-40) l calc(c * 1.8) h);
+
+	--color--semantic--disabled-fg:
+		color-mix(in oklab, var(--color--semantic--text-subtle) 55%, var(--color--semantic--surface-default));
+
+	/* =========================================================
+	 * Interaction state layers
+	 *
+	 * The overlay a transparent control takes on hover, press and selection.
+	 * Defaults are an ink tint; a surface (glass, inverse) re-declares them for
+	 * its subtree.
+	 * ========================================================= */
+
+	--state-hover:    color-mix(in oklab, var(--color--semantic--text-strong) 6%, transparent);
+	--state-press:    color-mix(in oklab, var(--color--semantic--text-strong) 12%, transparent);
+	--state-selected: color-mix(in oklab, var(--color--semantic--text-strong) 8%, transparent);
+
+	/* =========================================================
+	 * Overlay
+	 * ========================================================= */
+
+	--color--semantic--scrim:
+		oklch(from var(--color--primitive--black) l c h / var(--opacity--primitive--50));
+}

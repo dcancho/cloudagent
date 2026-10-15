@@ -1,0 +1,68 @@
+/* =============================================================================
+ * Accordion — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-accordion  (.is-expanded | .is-disabled)
+ *     .lucent-accordion__header   (button)
+ *       .lucent-accordion__title
+ *       .lucent-icon.lucent-accordion__chevron
+ *     .lucent-accordion__content  ([hidden] when collapsed)
+ *
+ * A single disclosure: a header that toggles a content region. Stack several to form a
+ * classic accordion (grouping/one-open-at-a-time is composition at the usage site).
+ * ============================================================================= */
+
+.lucent-accordion {
+  display: block;
+  border-bottom: var(--border-subtle);
+}
+
+.lucent-accordion__header {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  width: 100%;
+  padding: var(--dimension--primitive--spacing-3) 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  font-weight: var(--dimension--primitive--fw-medium);
+  line-height: var(--control-line);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-accordion__title {
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+.lucent-accordion__chevron {
+  flex: none;
+  color: var(--color--semantic--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.lucent-accordion.is-expanded .lucent-accordion__chevron {
+  transform: rotate(180deg);
+}
+
+.lucent-accordion__content {
+  padding: 0 0 var(--dimension--primitive--spacing-3);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-accordion__content[hidden] { display: none; }
+
+.lucent-accordion.is-disabled {
+  opacity: 0.4;
+}
+.lucent-accordion.is-disabled .lucent-accordion__header {
+  cursor: not-allowed;
+}

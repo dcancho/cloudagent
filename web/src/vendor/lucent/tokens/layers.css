@@ -1,0 +1,28 @@
+/* =============================================================================
+ * Layers — the stacking contract.
+ *
+ * Every floating component in Lucent escapes its DOM position and mounts on <body>
+ * (menu, select dropdown, date/time picker, tooltip) or is fixed to the viewport (modal
+ * scrim, transient messages). They therefore all compete in the ROOT stacking context,
+ * and hand-picked z-index values decide the outcome. This file is that decision, in one
+ * place, instead of six.
+ *
+ * The order is not "how important" — it is WHAT CAN OPEN WHAT:
+ *
+ *   sticky   — in-page chrome that outranks scrolled content, nothing more.
+ *   modal    — the scrim and its panel.
+ *   popover  — menus, select dropdowns, pickers. ABOVE the modal, deliberately: a popover
+ *              is always opened FROM the topmost interactive layer, so a select inside a
+ *              dialog must render over that dialog. Ranking popovers below the modal is
+ *              what breaks every form dialog that contains a select.
+ *   tooltip  — describes whatever is on top, so it sits above the popover it annotates.
+ *   toast    — transient messages must never be buried; they outrank everything.
+ * ============================================================================= */
+
+:root {
+  --layer-sticky: 10;
+  --layer-modal: 100;
+  --layer-popover: 150;
+  --layer-tooltip: 180;
+  --layer-toast: 200;
+}

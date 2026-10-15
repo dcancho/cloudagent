@@ -1,0 +1,72 @@
+/* =============================================================================
+ * Prompt suggestion — framework-neutral component styles.
+ *
+ * Structure every kit emits (a button OR a role=button host):
+ *   .lucent-prompt-suggestion  (--card|chip)
+ *     .lucent-icon.lucent-prompt-suggestion__icon?
+ *     .lucent-prompt-suggestion__content
+ *       .lucent-prompt-suggestion__title
+ *       .lucent-prompt-suggestion__desc?   (card only)
+ *
+ * A clickable starter for an empty chat — "Summarise this doc", "Write a test". `card` is
+ * roomy (icon + title + optional description); `chip` is a compact pill.
+ * ============================================================================= */
+
+.lucent-prompt-suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  text-align: left;
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-md);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-default);
+  color: var(--color--semantic--text-default);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-snug);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.lucent-prompt-suggestion:hover {
+  border-color: var(--color--semantic--border-strong);
+  background: var(--color--semantic--surface-base);
+}
+
+.lucent-prompt-suggestion:focus-visible {
+  outline: var(--border-focus);
+  outline-offset: 2px;
+}
+
+.lucent-prompt-suggestion__icon {
+  flex: none;
+  color: var(--color--semantic--accent-default);
+}
+
+.lucent-prompt-suggestion__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-0-5);
+  min-width: 0;
+}
+
+.lucent-prompt-suggestion__title {
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-prompt-suggestion__desc {
+  font-size: var(--dimension--primitive--fs-xs);
+  color: var(--color--semantic--text-muted);
+}
+
+/* ─── Chip variant — compact, single-line pill ─────────────────────────────── */
+
+.lucent-prompt-suggestion--chip {
+  border-radius: var(--radius-full);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-3);
+}
+.lucent-prompt-suggestion--chip .lucent-prompt-suggestion__desc { display: none; }
+.lucent-prompt-suggestion--chip .lucent-prompt-suggestion__title { font-weight: var(--dimension--primitive--fw-regular); color: var(--color--semantic--text-default); }

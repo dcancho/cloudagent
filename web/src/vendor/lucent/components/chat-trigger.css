@@ -1,0 +1,37 @@
+/* =============================================================================
+ * Chat trigger (FAB) — framework-neutral component styles.
+ *
+ * Structure every kit emits (a button OR a role=button host):
+ *   .lucent-chat-trigger
+ *     .lucent-icon
+ *     .lucent-badge.lucent-chat-trigger__badge?   ← unread count
+ *
+ * The floating action button that opens the chat — an accent circle with a lifted shadow and an
+ * optional unread badge. (A sidebar entry-point reuses `nav-icon`; only this FAB is bespoke.)
+ * ============================================================================= */
+
+.lucent-chat-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dimension--primitive--sizing-12);   /* 48 */
+  height: var(--dimension--primitive--sizing-12);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color--semantic--accent-default);
+  color: var(--color--semantic--text-onaccent);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.lucent-chat-trigger:hover { box-shadow: var(--shadow-xl); }
+.lucent-chat-trigger:active { transform: scale(0.96); }
+.lucent-chat-trigger:focus-visible { outline: var(--border-focus); outline-offset: 2px; }
+
+.lucent-chat-trigger__badge {
+  position: absolute;
+  top: calc(-1 * var(--dimension--primitive--spacing-0-5));
+  right: calc(-1 * var(--dimension--primitive--spacing-0-5));
+}

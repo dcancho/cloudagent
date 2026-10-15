@@ -1,0 +1,49 @@
+/* =============================================================================
+ * Event-category tokens — the semantic palette the scheduler parts/views use to
+ * color events by kind. Added as first-class semantic tokens (the system had none;
+ * the schedulers previously reached straight into primitive ramps).
+ *
+ * Category → ramp:  work=pine · meeting=slate · personal=warning · deadline=error
+ * Light:  surface = ramp/90 (tint)      text = ramp/20 (saturated)
+ * Dark:   surface = ramp/20 (deep tint) text = ramp/80 (light)
+ *
+ * Dark block is written twice (explicit choice + system default) — same reason as
+ * themes.css. Keep the two copies in sync.
+ * ============================================================================= */
+
+:root {
+  --color--semantic--event-work-surface:     var(--color--primitive--pine-90);
+  --color--semantic--event-work-text:        var(--color--primitive--pine-20);
+  --color--semantic--event-meeting-surface:  var(--color--primitive--slate-90);
+  --color--semantic--event-meeting-text:     var(--color--primitive--slate-20);
+  --color--semantic--event-personal-surface: var(--color--primitive--warning-90);
+  --color--semantic--event-personal-text:    var(--color--primitive--warning-20);
+  --color--semantic--event-deadline-surface: var(--color--primitive--error-90);
+  --color--semantic--event-deadline-text:    var(--color--primitive--error-20);
+}
+
+/* Explicit user choice. */
+:root[data-theme='dark'] {
+  --color--semantic--event-work-surface:     var(--color--primitive--pine-20);
+  --color--semantic--event-work-text:        var(--color--primitive--pine-80);
+  --color--semantic--event-meeting-surface:  var(--color--primitive--slate-20);
+  --color--semantic--event-meeting-text:     var(--color--primitive--slate-80);
+  --color--semantic--event-personal-surface: var(--color--primitive--warning-20);
+  --color--semantic--event-personal-text:    var(--color--primitive--warning-80);
+  --color--semantic--event-deadline-surface: var(--color--primitive--error-20);
+  --color--semantic--event-deadline-text:    var(--color--primitive--error-80);
+}
+
+/* System default — applies when the user hasn't explicitly opted into light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color--semantic--event-work-surface:     var(--color--primitive--pine-20);
+    --color--semantic--event-work-text:        var(--color--primitive--pine-80);
+    --color--semantic--event-meeting-surface:  var(--color--primitive--slate-20);
+    --color--semantic--event-meeting-text:     var(--color--primitive--slate-80);
+    --color--semantic--event-personal-surface: var(--color--primitive--warning-20);
+    --color--semantic--event-personal-text:    var(--color--primitive--warning-80);
+    --color--semantic--event-deadline-surface: var(--color--primitive--error-20);
+    --color--semantic--event-deadline-text:    var(--color--primitive--error-80);
+  }
+}

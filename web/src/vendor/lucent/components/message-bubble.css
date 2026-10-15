@@ -1,0 +1,77 @@
+/* =============================================================================
+ * Message bubble — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-message-bubble  (--user|assistant|system|other) (--standalone|continuation)
+ *     .lucent-message-bubble__meta?   (author + time)
+ *       .lucent-message-bubble__author  .lucent-message-bubble__time
+ *     .lucent-message-bubble__body   ← the message (projected; rich)
+ *
+ * One bubble serves AI chat and human messaging. `user` is accent-tinted with a tail;
+ * `assistant`/`other` are surface bubbles; `system` is a quiet centered note. `continuation`
+ * drops the tail for consecutive messages from the same sender. Row alignment (left/right) is
+ * done by the container at the usage site.
+ * ============================================================================= */
+
+.lucent-message-bubble {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-1);
+  max-width: 100%;
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-md);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-raised);
+  color: var(--color--semantic--text-default);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-normal);
+}
+
+.lucent-message-bubble__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--dimension--primitive--spacing-2);
+}
+
+.lucent-message-bubble__author {
+  font-size: var(--dimension--primitive--fs-xs);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-message-bubble__time {
+  font-size: var(--dimension--primitive--fs-3xs);
+  color: var(--color--semantic--text-subtle);
+}
+
+.lucent-message-bubble__body { min-width: 0; }
+
+/* ─── Roles ────────────────────────────────────────────────────────────────── */
+
+.lucent-message-bubble--user {
+  background: color-mix(in oklab, var(--color--semantic--accent-subtle) 60%, var(--color--semantic--surface-default));
+  border-color: transparent;
+}
+
+/* System — a quiet centered status note, not a bubble. */
+.lucent-message-bubble--system {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color--semantic--text-muted);
+  font-size: var(--dimension--primitive--fs-xs);
+  text-align: center;
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-2);
+}
+
+/* ─── Tail (standalone only; continuation is uniformly rounded) ─────────────── */
+
+.lucent-message-bubble--user.lucent-message-bubble--standalone {
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.lucent-message-bubble--assistant.lucent-message-bubble--standalone,
+.lucent-message-bubble--other.lucent-message-bubble--standalone {
+  border-bottom-left-radius: var(--radius-sm);
+}

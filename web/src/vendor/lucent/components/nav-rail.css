@@ -1,0 +1,46 @@
+/* =============================================================================
+ * Nav rail — framework-neutral component styles.
+ *
+ * Vertical glass container that stacks nav icons + dividers. Content projects in.
+ * Ported verbatim from packages/angular/src/nav-rail/nav-rail.scss.
+ * ============================================================================= */
+
+.lucent-nav-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-3);
+  padding: var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-md);
+  background: var(--color--semantic--surface-glass-strong);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* -----------------------------------------------------------------------------
+ * Compact vs expanded.
+ *
+ * The rail owns this state and its children adapt through the class contract — items and
+ * groups are never told which mode they are in, so consumers don't thread a flag through
+ * every row, and a kit gets both modes the moment it emits the same classes.
+ *
+ * Compact is the default. Labels/headings stay in the DOM and are hidden visually; the
+ * accessible name lives on the item's aria-label, so collapsing never costs AT the name.
+ * -------------------------------------------------------------------------- */
+
+.lucent-nav-rail.is-expanded {
+  align-items: stretch;
+  width: var(--lucent-nav-rail-width, 244px);
+}
+
+.lucent-nav-rail:not(.is-expanded) .lucent-nav-item {
+  width: auto;
+  justify-content: center;
+}
+
+.lucent-nav-rail:not(.is-expanded) .lucent-nav-item__text,
+.lucent-nav-rail:not(.is-expanded) .lucent-nav-group__title {
+  display: none;
+}

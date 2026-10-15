@@ -1,0 +1,389 @@
+:root {
+  /* ─── Display ──────────────────────────────────────────────────────────────── */
+  --typography--display--font-size: var(--dimension--primitive--fs-4xl);
+  --typography--display--line-height: var(--dimension--primitive--lh-tight);
+  --typography--display--font-weight: var(--dimension--primitive--fw-bold);
+  --typography--display--font-family: var(--font--primitive--sans);
+
+  --typography--display-mono--font-size: var(--dimension--primitive--fs-4xl);
+  --typography--display-mono--line-height: var(--dimension--primitive--lh-tight);
+  --typography--display-mono--font-weight: var(--dimension--primitive--fw-bold);
+  --typography--display-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Title LG ─────────────────────────────────────────────────────────────── */
+  --typography--title-lg--font-size: var(--dimension--primitive--fs-3xl);
+  --typography--title-lg--line-height: var(--dimension--primitive--lh-tight);
+  --typography--title-lg--font-weight: var(--dimension--primitive--fw-bold);
+  --typography--title-lg--font-family: var(--font--primitive--sans);
+
+  --typography--title-lg-mono--font-size: var(--dimension--primitive--fs-3xl);
+  --typography--title-lg-mono--line-height: var(--dimension--primitive--lh-tight);
+  --typography--title-lg-mono--font-weight: var(--dimension--primitive--fw-semibold);
+  --typography--title-lg-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Title MD ─────────────────────────────────────────────────────────────── */
+  --typography--title-md--font-size: var(--dimension--primitive--fs-2xl);
+  --typography--title-md--line-height: var(--dimension--primitive--lh-snug);
+  --typography--title-md--font-weight: var(--dimension--primitive--fw-semibold);
+  --typography--title-md--font-family: var(--font--primitive--sans);
+
+  --typography--title-md-mono--font-size: var(--dimension--primitive--fs-2xl);
+  --typography--title-md-mono--line-height: var(--dimension--primitive--lh-snug);
+  --typography--title-md-mono--font-weight: var(--dimension--primitive--fw-semibold);
+  --typography--title-md-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Title SM ─────────────────────────────────────────────────────────────── */
+  --typography--title-sm--font-size: var(--dimension--primitive--fs-xl);
+  --typography--title-sm--line-height: var(--dimension--primitive--lh-snug);
+  --typography--title-sm--font-weight: var(--dimension--primitive--fw-semibold);
+  --typography--title-sm--font-family: var(--font--primitive--sans);
+
+  --typography--title-sm-mono--font-size: var(--dimension--primitive--fs-xl);
+  --typography--title-sm-mono--line-height: var(--dimension--primitive--lh-snug);
+  --typography--title-sm-mono--font-weight: var(--dimension--primitive--fw-semibold);
+  --typography--title-sm-mono--font-family: var(--font--primitive--mono);
+  /* ─── Heading LG ───────────────────────────────────────────────────────────── */
+  --typography--heading-lg--font-size: var(--dimension--primitive--fs-xl);
+  --typography--heading-lg--line-height: var(--dimension--primitive--lh-snug);
+  --typography--heading-lg--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--heading-lg--font-family: var(--font--primitive--sans);
+
+  --typography--heading-lg-mono--font-size: var(--dimension--primitive--fs-xl);
+  --typography--heading-lg-mono--line-height: var(--dimension--primitive--lh-snug);
+  --typography--heading-lg-mono--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--heading-lg-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Heading MD ───────────────────────────────────────────────────────────── */
+  --typography--heading-md--font-size: var(--dimension--primitive--fs-lg);
+  --typography--heading-md--line-height: var(--dimension--primitive--lh-normal);
+  --typography--heading-md--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--heading-md--font-family: var(--font--primitive--sans);
+
+  --typography--heading-md-mono--font-size: var(--dimension--primitive--fs-lg);
+  --typography--heading-md-mono--line-height: var(--dimension--primitive--lh-normal);
+  --typography--heading-md-mono--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--heading-md-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Heading SM ───────────────────────────────────────────────────────────── */
+  --typography--heading-sm--font-size: var(--dimension--primitive--fs-md);
+  --typography--heading-sm--line-height: var(--dimension--primitive--lh-normal);
+  --typography--heading-sm--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--heading-sm--font-family: var(--font--primitive--sans);
+
+  --typography--heading-sm-mono--font-size: var(--dimension--primitive--fs-md);
+  --typography--heading-sm-mono--line-height: var(--dimension--primitive--lh-normal);
+  --typography--heading-sm-mono--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--heading-sm-mono--font-family: var(--font--primitive--mono);
+  /* ─── Body LG ──────────────────────────────────────────────────────────────── */
+  --typography--body-lg--font-size: var(--dimension--primitive--fs-lg);
+  --typography--body-lg--line-height: var(--dimension--primitive--lh-normal);
+  --typography--body-lg--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--body-lg--font-family: var(--font--primitive--sans);
+
+  --typography--body-lg-mono--font-size: var(--dimension--primitive--fs-lg);
+  --typography--body-lg-mono--line-height: var(--dimension--primitive--lh-normal);
+  --typography--body-lg-mono--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--body-lg-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Body MD ──────────────────────────────────────────────────────────────── */
+  --typography--body-md--font-size: var(--dimension--primitive--fs-md);
+  --typography--body-md--line-height: var(--dimension--primitive--lh-normal);
+  --typography--body-md--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--body-md--font-family: var(--font--primitive--sans);
+
+  --typography--body-md-mono--font-size: var(--dimension--primitive--fs-md);
+  --typography--body-md-mono--line-height: var(--dimension--primitive--lh-normal);
+  --typography--body-md-mono--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--body-md-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Body SM ──────────────────────────────────────────────────────────────── */
+  --typography--body-sm--font-size: var(--dimension--primitive--fs-sm);
+  --typography--body-sm--line-height: var(--dimension--primitive--lh-normal);
+  --typography--body-sm--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--body-sm--font-family: var(--font--primitive--sans);
+
+  --typography--body-sm-mono--font-size: var(--dimension--primitive--fs-sm);
+  --typography--body-sm-mono--line-height: var(--dimension--primitive--lh-normal);
+  --typography--body-sm-mono--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--body-sm-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Label (UI text) ────────────────────────────────────────────────────────── */
+  /* Single-line text for controls/labels: tight line-height, medium weight, slight */
+  /* tracking at small sizes. Distinct from body/caption (reading text). Mono is kept */
+  /* for code/value labels (hex, dimensions). */
+  --typography--label-lg--font-size: var(--dimension--primitive--fs-sm);   /* 14 */
+  --typography--label-lg--line-height: var(--dimension--primitive--lh-snug);
+  --typography--label-lg--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--label-lg--font-family: var(--font--primitive--sans);
+  --typography--label-lg--letter-spacing: var(--dimension--primitive--tracking-normal);
+
+  --typography--label-md--font-size: var(--dimension--primitive--fs-xs);   /* 12 */
+  --typography--label-md--line-height: var(--dimension--primitive--lh-snug);
+  --typography--label-md--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--label-md--font-family: var(--font--primitive--sans);
+  --typography--label-md--letter-spacing: var(--dimension--primitive--tracking-wide);
+
+  --typography--label-sm--font-size: var(--dimension--primitive--fs-2xs);        /* 11 */
+  --typography--label-sm--line-height: var(--dimension--primitive--lh-snug);
+  --typography--label-sm--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--label-sm--font-family: var(--font--primitive--sans);
+  --typography--label-sm--letter-spacing: var(--dimension--primitive--tracking-wide);
+
+  --typography--label-lg-mono--font-size: var(--dimension--primitive--fs-sm);
+  --typography--label-lg-mono--line-height: var(--dimension--primitive--lh-snug);
+  --typography--label-lg-mono--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--label-lg-mono--font-family: var(--font--primitive--mono);
+  --typography--label-lg-mono--letter-spacing: var(--dimension--primitive--tracking-normal);
+
+  --typography--label-md-mono--font-size: var(--dimension--primitive--fs-xs);
+  --typography--label-md-mono--line-height: var(--dimension--primitive--lh-snug);
+  --typography--label-md-mono--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--label-md-mono--font-family: var(--font--primitive--mono);
+  --typography--label-md-mono--letter-spacing: var(--dimension--primitive--tracking-normal);
+
+  --typography--label-sm-mono--font-size: var(--dimension--primitive--fs-2xs);
+  --typography--label-sm-mono--line-height: var(--dimension--primitive--lh-snug);
+  --typography--label-sm-mono--font-weight: var(--dimension--primitive--fw-medium);
+  --typography--label-sm-mono--font-family: var(--font--primitive--mono);
+  --typography--label-sm-mono--letter-spacing: var(--dimension--primitive--tracking-normal);
+
+  /* ─── Caption ──────────────────────────────────────────────────────────────── */
+  --typography--caption--font-size: var(--dimension--primitive--fs-xs);
+  --typography--caption--line-height: var(--dimension--primitive--lh-relaxed);
+  --typography--caption--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--caption--font-family: var(--font--primitive--sans);
+
+  --typography--caption-mono--font-size: var(--dimension--primitive--fs-xs);
+  --typography--caption-mono--line-height: var(--dimension--primitive--lh-relaxed);
+  --typography--caption-mono--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--caption-mono--font-family: var(--font--primitive--mono);
+
+  /* ─── Micro ────────────────────────────────────────────────────────────────── */
+  --typography--micro--font-size: var(--dimension--primitive--fs-3xs);
+  --typography--micro--line-height: var(--dimension--primitive--lh-relaxed);
+  --typography--micro--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--micro--font-family: var(--font--primitive--sans);
+
+  --typography--micro-mono--font-size: var(--dimension--primitive--fs-3xs);
+  --typography--micro-mono--line-height: var(--dimension--primitive--lh-relaxed);
+  --typography--micro-mono--font-weight: var(--dimension--primitive--fw-regular);
+  --typography--micro-mono--font-family: var(--font--primitive--mono);
+}
+
+/* ─── Utility Classes ────────────────────────────────────────────────────────── */
+
+.typography-display {
+  font-size: var(--typography--display--font-size);
+  line-height: var(--typography--display--line-height);
+  font-weight: var(--typography--display--font-weight);
+  font-family: var(--typography--display--font-family);
+}
+
+.typography-display-mono {
+  font-size: var(--typography--display-mono--font-size);
+  line-height: var(--typography--display-mono--line-height);
+  font-weight: var(--typography--display-mono--font-weight);
+  font-family: var(--typography--display-mono--font-family);
+}
+
+.typography-title-lg {
+  font-size: var(--typography--title-lg--font-size);
+  line-height: var(--typography--title-lg--line-height);
+  font-weight: var(--typography--title-lg--font-weight);
+  font-family: var(--typography--title-lg--font-family);
+}
+
+.typography-title-lg-mono {
+  font-size: var(--typography--title-lg-mono--font-size);
+  line-height: var(--typography--title-lg-mono--line-height);
+  font-weight: var(--typography--title-lg-mono--font-weight);
+  font-family: var(--typography--title-lg-mono--font-family);
+}
+
+.typography-title-md {
+  font-size: var(--typography--title-md--font-size);
+  line-height: var(--typography--title-md--line-height);
+  font-weight: var(--typography--title-md--font-weight);
+  font-family: var(--typography--title-md--font-family);
+}
+
+.typography-title-md-mono {
+  font-size: var(--typography--title-md-mono--font-size);
+  line-height: var(--typography--title-md-mono--line-height);
+  font-weight: var(--typography--title-md-mono--font-weight);
+  font-family: var(--typography--title-md-mono--font-family);
+}
+
+.typography-title-sm {
+  font-size: var(--typography--title-sm--font-size);
+  line-height: var(--typography--title-sm--line-height);
+  font-weight: var(--typography--title-sm--font-weight);
+  font-family: var(--typography--title-sm--font-family);
+}
+
+.typography-title-sm-mono {
+  font-size: var(--typography--title-sm-mono--font-size);
+  line-height: var(--typography--title-sm-mono--line-height);
+  font-weight: var(--typography--title-sm-mono--font-weight);
+  font-family: var(--typography--title-sm-mono--font-family);
+}
+
+.typography-heading-lg {
+  font-size: var(--typography--heading-lg--font-size);
+  line-height: var(--typography--heading-lg--line-height);
+  font-weight: var(--typography--heading-lg--font-weight);
+  font-family: var(--typography--heading-lg--font-family);
+}
+
+.typography-heading-lg-mono {
+  font-size: var(--typography--heading-lg-mono--font-size);
+  line-height: var(--typography--heading-lg-mono--line-height);
+  font-weight: var(--typography--heading-lg-mono--font-weight);
+  font-family: var(--typography--heading-lg-mono--font-family);
+}
+
+.typography-heading-md {
+  font-size: var(--typography--heading-md--font-size);
+  line-height: var(--typography--heading-md--line-height);
+  font-weight: var(--typography--heading-md--font-weight);
+  font-family: var(--typography--heading-md--font-family);
+}
+
+.typography-heading-md-mono {
+  font-size: var(--typography--heading-md-mono--font-size);
+  line-height: var(--typography--heading-md-mono--line-height);
+  font-weight: var(--typography--heading-md-mono--font-weight);
+  font-family: var(--typography--heading-md-mono--font-family);
+}
+
+.typography-heading-sm {
+  font-size: var(--typography--heading-sm--font-size);
+  line-height: var(--typography--heading-sm--line-height);
+  font-weight: var(--typography--heading-sm--font-weight);
+  font-family: var(--typography--heading-sm--font-family);
+}
+
+.typography-heading-sm-mono {
+  font-size: var(--typography--heading-sm-mono--font-size);
+  line-height: var(--typography--heading-sm-mono--line-height);
+  font-weight: var(--typography--heading-sm-mono--font-weight);
+  font-family: var(--typography--heading-sm-mono--font-family);
+}
+
+.typography-body-lg {
+  font-size: var(--typography--body-lg--font-size);
+  line-height: var(--typography--body-lg--line-height);
+  font-weight: var(--typography--body-lg--font-weight);
+  font-family: var(--typography--body-lg--font-family);
+}
+
+.typography-body-lg-mono {
+  font-size: var(--typography--body-lg-mono--font-size);
+  line-height: var(--typography--body-lg-mono--line-height);
+  font-weight: var(--typography--body-lg-mono--font-weight);
+  font-family: var(--typography--body-lg-mono--font-family);
+}
+
+.typography-body-md {
+  font-size: var(--typography--body-md--font-size);
+  line-height: var(--typography--body-md--line-height);
+  font-weight: var(--typography--body-md--font-weight);
+  font-family: var(--typography--body-md--font-family);
+}
+
+.typography-body-md-mono {
+  font-size: var(--typography--body-md-mono--font-size);
+  line-height: var(--typography--body-md-mono--line-height);
+  font-weight: var(--typography--body-md-mono--font-weight);
+  font-family: var(--typography--body-md-mono--font-family);
+}
+
+.typography-body-sm {
+  font-size: var(--typography--body-sm--font-size);
+  line-height: var(--typography--body-sm--line-height);
+  font-weight: var(--typography--body-sm--font-weight);
+  font-family: var(--typography--body-sm--font-family);
+}
+
+.typography-body-sm-mono {
+  font-size: var(--typography--body-sm-mono--font-size);
+  line-height: var(--typography--body-sm-mono--line-height);
+  font-weight: var(--typography--body-sm-mono--font-weight);
+  font-family: var(--typography--body-sm-mono--font-family);
+}
+
+.typography-label-lg {
+  font-size: var(--typography--label-lg--font-size);
+  line-height: var(--typography--label-lg--line-height);
+  font-weight: var(--typography--label-lg--font-weight);
+  font-family: var(--typography--label-lg--font-family);
+  letter-spacing: var(--typography--label-lg--letter-spacing);
+}
+
+.typography-label-md {
+  font-size: var(--typography--label-md--font-size);
+  line-height: var(--typography--label-md--line-height);
+  font-weight: var(--typography--label-md--font-weight);
+  font-family: var(--typography--label-md--font-family);
+  letter-spacing: var(--typography--label-md--letter-spacing);
+}
+
+.typography-label-sm {
+  font-size: var(--typography--label-sm--font-size);
+  line-height: var(--typography--label-sm--line-height);
+  font-weight: var(--typography--label-sm--font-weight);
+  font-family: var(--typography--label-sm--font-family);
+  letter-spacing: var(--typography--label-sm--letter-spacing);
+}
+
+.typography-label-lg-mono {
+  font-size: var(--typography--label-lg-mono--font-size);
+  line-height: var(--typography--label-lg-mono--line-height);
+  font-weight: var(--typography--label-lg-mono--font-weight);
+  font-family: var(--typography--label-lg-mono--font-family);
+  letter-spacing: var(--typography--label-lg-mono--letter-spacing);
+}
+
+.typography-label-md-mono {
+  font-size: var(--typography--label-md-mono--font-size);
+  line-height: var(--typography--label-md-mono--line-height);
+  font-weight: var(--typography--label-md-mono--font-weight);
+  font-family: var(--typography--label-md-mono--font-family);
+  letter-spacing: var(--typography--label-md-mono--letter-spacing);
+}
+
+.typography-label-sm-mono {
+  font-size: var(--typography--label-sm-mono--font-size);
+  line-height: var(--typography--label-sm-mono--line-height);
+  font-weight: var(--typography--label-sm-mono--font-weight);
+  font-family: var(--typography--label-sm-mono--font-family);
+  letter-spacing: var(--typography--label-sm-mono--letter-spacing);
+}
+
+.typography-caption {
+  font-size: var(--typography--caption--font-size);
+  line-height: var(--typography--caption--line-height);
+  font-weight: var(--typography--caption--font-weight);
+  font-family: var(--typography--caption--font-family);
+}
+
+.typography-caption-mono {
+  font-size: var(--typography--caption-mono--font-size);
+  line-height: var(--typography--caption-mono--line-height);
+  font-weight: var(--typography--caption-mono--font-weight);
+  font-family: var(--typography--caption-mono--font-family);
+}
+
+.typography-micro {
+  font-size: var(--typography--micro--font-size);
+  line-height: var(--typography--micro--line-height);
+  font-weight: var(--typography--micro--font-weight);
+  font-family: var(--typography--micro--font-family);
+}
+
+.typography-micro-mono {
+  font-size: var(--typography--micro-mono--font-size);
+  line-height: var(--typography--micro-mono--line-height);
+  font-weight: var(--typography--micro-mono--font-weight);
+  font-family: var(--typography--micro-mono--font-family);
+}

@@ -1,0 +1,57 @@
+/* =============================================================================
+ * Tab — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-tab  (.lucent-tab--{lg|md|sm|xs} .lucent-tab--active / --disabled)
+ *     .lucent-icon?
+ *     .lucent-tab__label
+ *
+ * One tab inside a .lucent-tab-list. Active tab raises onto a glass pill. Ported from
+ * packages/angular/src/tab/tab.scss; `background: none; border: none` lets the Razor kit
+ * render it as a real <button> while keeping the class contract.
+ * ============================================================================= */
+
+.lucent-tab {
+  --_h: var(--control-height-md);
+  --_text: var(--control-text-md);
+  --_radius: var(--control-radius-md);
+  --_gap: var(--control-gap-md);
+  --_px: var(--control-pad-x-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--_h);
+  gap: var(--_gap);
+  padding: 0 var(--_px);
+  border-radius: var(--_radius);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+}
+
+.lucent-tab--xs { --_h: var(--control-height-xs); --_text: var(--control-text-xs); --_radius: var(--control-radius-xs); --_gap: var(--control-gap-xs); --_px: var(--control-pad-x-xs); }
+.lucent-tab--sm { --_h: var(--control-height-sm); --_text: var(--control-text-sm); --_radius: var(--control-radius-sm); --_gap: var(--control-gap-sm); --_px: var(--control-pad-x-sm); }
+.lucent-tab--lg { --_h: var(--control-height-lg); --_text: var(--control-text-lg); --_radius: var(--control-radius-lg); --_gap: var(--control-gap-lg); --_px: var(--control-pad-x-lg); }
+
+.lucent-tab--active {
+  background: var(--color--semantic--surface-glass-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.lucent-tab--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lucent-tab__label {
+  font-family: var(--font--primitive--sans);
+  font-weight: var(--dimension--primitive--fw-light);
+  font-size: var(--_text);
+  line-height: var(--control-line);
+  color: var(--color--semantic--text-default);
+  white-space: nowrap;
+}

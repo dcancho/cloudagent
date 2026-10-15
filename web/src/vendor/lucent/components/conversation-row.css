@@ -1,0 +1,77 @@
+/* =============================================================================
+ * Conversation row — framework-neutral component styles.
+ *
+ * Structure every kit emits (a button OR a role=button host):
+ *   .lucent-conversation-row  (.is-active)
+ *     .lucent-conversation-row__leading?   ← avatar / icon (projected)
+ *     .lucent-conversation-row__main
+ *       .lucent-conversation-row__title  .lucent-conversation-row__preview
+ *     .lucent-conversation-row__meta
+ *       .lucent-conversation-row__time?  .lucent-badge (unread)?
+ *
+ * A row in a conversation/inbox list: who + last-message preview + time + unread. Rest / hover /
+ * active (the currently-open thread). Composes avatar + badge.
+ * ============================================================================= */
+
+.lucent-conversation-row {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-3);
+  width: 100%;
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.lucent-conversation-row:hover { background: var(--color--semantic--surface-base); }
+.lucent-conversation-row.is-active { background: oklch(from var(--color--semantic--surface-base) calc(l - 0.04) c h); }
+.lucent-conversation-row:focus-visible { outline: var(--border-focus); outline-offset: -2px; }
+
+.lucent-conversation-row__leading { flex: none; display: inline-flex; }
+
+.lucent-conversation-row__main {
+  flex: 1 0 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-0-5);
+}
+
+.lucent-conversation-row__title {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lucent-conversation-row__preview {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-xs);
+  font-weight: var(--dimension--primitive--fw-light);
+  color: var(--color--semantic--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lucent-conversation-row__meta {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--dimension--primitive--spacing-1);
+}
+
+.lucent-conversation-row__time {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-3xs);
+  color: var(--color--semantic--text-subtle);
+  white-space: nowrap;
+}

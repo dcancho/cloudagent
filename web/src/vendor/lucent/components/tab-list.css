@@ -1,0 +1,17 @@
+/* =============================================================================
+ * Tab list — framework-neutral component styles.
+ *
+ * The glass track holding .lucent-tab pills. Ported verbatim from
+ * packages/angular/src/tab-list/tab-list.scss.
+ * ============================================================================= */
+
+.lucent-tab-list {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--dimension--primitive--spacing-0-5);
+  border-radius: var(--radius-sm);
+  background: var(--color--semantic--surface-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-sm);
+}

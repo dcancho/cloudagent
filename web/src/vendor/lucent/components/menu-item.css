@@ -1,0 +1,48 @@
+/* =============================================================================
+ * Menu item — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-menu-item  (.is-active / .is-danger)
+ *     .lucent-icon.lucent-menu-item__icon?
+ *     .lucent-menu-item__label
+ *
+ * Ported from packages/angular/src/menu-item/menu-item.scss. One fix: the Angular hover used
+ * the UNDEFINED `--color--semantic--surface-subtle`  (a dead hover —
+ * CONVENTIONS §8); this uses the working `--color--semantic--surface-base` instead.
+ * ============================================================================= */
+
+.lucent-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  height: var(--dimension--primitive--sizing-8);
+  padding: 0 var(--dimension--primitive--spacing-3);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.lucent-menu-item:hover:not(.is-active) { background: var(--color--semantic--surface-base); }
+.lucent-menu-item.is-active { background: var(--color--semantic--surface-base); }
+
+.lucent-menu-item.is-danger .lucent-menu-item__icon,
+.lucent-menu-item.is-danger .lucent-menu-item__label { color: var(--color--semantic--error); }
+.lucent-menu-item.is-danger:hover:not(.is-active),
+.lucent-menu-item.is-danger.is-active { background: var(--color--semantic--error-subtle); }
+
+.lucent-menu-item__icon {
+  color: var(--color--semantic--text-muted);
+  flex-shrink: 0;
+}
+
+.lucent-menu-item__label {
+  flex: 1 0 0;
+  min-width: 0;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--caption--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,30 @@
+/* =============================================================================
+ * Status tag — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-status-tag  (.lucent-status-tag--success|neutral|warning|error)
+ *     span   ← label text
+ *
+ * Pill badge on the status (severity) axis — distinct from `tone` action intent
+ * (CONVENTIONS §6). Ported from packages/angular/src/status-tag/status-tag.scss.
+ * ============================================================================= */
+
+.lucent-status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--dimension--primitive--sizing-5);
+  padding: var(--dimension--primitive--spacing-0-5) var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-full);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--micro--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-tight);
+  white-space: nowrap;
+}
+
+/* Foreground is the *-on-subtle partner: *-default on *-subtle fails AA at this size. */
+.lucent-status-tag--success { background: var(--color--semantic--success-subtle); color: var(--color--semantic--success-on-subtle); }
+.lucent-status-tag--neutral { background: var(--color--semantic--surface-base);   color: var(--color--semantic--text-muted); }
+.lucent-status-tag--warning { background: var(--color--semantic--warning-subtle); color: var(--color--semantic--warning-on-subtle); }
+.lucent-status-tag--error   { background: var(--color--semantic--error-subtle);   color: var(--color--semantic--error-on-subtle); }

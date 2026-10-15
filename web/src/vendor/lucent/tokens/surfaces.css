@@ -1,0 +1,141 @@
+:root {
+  /* =========================================================
+   * Surface — Color
+   * ========================================================= */
+
+  --color--semantic--surface-base:    var(--color--primitive--neutral-95);
+  --color--semantic--surface-default: var(--color--primitive--neutral-100);
+  --color--semantic--surface-raised:  var(--color--primitive--neutral-100);
+  --color--semantic--surface-overlay: var(--color--primitive--neutral-100);
+  --color--semantic--surface-tint:    var(--color--primitive--sage-100);
+
+  --color--semantic--surface-glass: oklch(
+    from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--50)
+  );
+
+  --color--semantic--surface-glass-strong: oklch(
+    from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--70)
+  );
+
+  --color--semantic--surface-glass-subtle: oklch(
+    from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--10)
+  );
+
+  /* =========================================================
+   * Surface — Blur
+   *
+   * The frosting radius that pairs with each glass background. Tokenized so a
+   * theme can SOLIDIFY the system (set these to 0 and raise the glass alphas)
+   * without touching a single component rule — the same way --shadow-* lets a
+   * theme flatten elevation. Component surfaces (card, nav rail, menu, modals,
+   * fields) share --blur-glass; the three utility classes keep their own steps.
+   * ========================================================= */
+
+  /* =========================================================
+   * Surface — Scrollbars
+   *
+   * The system had none: every scrollable surface in every consuming app fell back to the
+   * browser's default thumb, a hard grey slab that ignores the theme entirely and reads as
+   * heavy against any soft palette. `scrollbar-color` INHERITS, so declaring it once at the
+   * root themes every scroller, and a skin re-points it like any other token.
+   * ========================================================= */
+
+  --color--semantic--scrollbar-thumb: var(--color--primitive--slate-90);
+  --color--semantic--scrollbar-thumb-hover: var(--color--primitive--slate-70);
+  --color--semantic--scrollbar-track: transparent;
+
+  --blur-glass: 50px;
+
+  --blur-surface-glass: 12px;
+  --blur-surface-glass-strong: 20px;
+  --blur-surface-glass-subtle: 8px;
+
+  /* =========================================================
+   * Surface — Gradient
+   *
+   * The only two gradients in the system. Reserved for showcase backgrounds and
+   * specimen surfaces, never for component fills or app chrome.
+   * ========================================================= */
+
+  --gradient-breath:
+    radial-gradient(circle at 20% 20%, #D1E6E6 0%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(circle at 80% 80%, #C2DBF4 0%, rgba(243, 245, 245, 0) 60%),
+    linear-gradient(#FFFFFF, #FFFFFF);
+
+  --gradient-breath-soft:
+    radial-gradient(circle at 15% 10%, rgba(209, 230, 230, 0.35) 0%, rgba(255, 255, 255, 0) 55%),
+    radial-gradient(circle at 85% 85%, rgba(194, 219, 244, 0.30) 0%, rgba(243, 245, 245, 0) 55%),
+    linear-gradient(#FAFBFB, #FAFBFB);
+}
+
+/* ─── Utility Classes ────────────────────────────────────────────────────────── */
+
+.surface-tint {
+  background-color: var(--color--semantic--surface-tint);
+}
+
+.surface-base {
+  background-color: var(--color--semantic--surface-base);
+}
+
+.surface-default {
+  background-color: var(--color--semantic--surface-default);
+  box-shadow: var(--shadow-xs);
+}
+
+.surface-raised {
+  background-color: var(--color--semantic--surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.surface-overlay {
+  background-color: var(--color--semantic--surface-overlay);
+  box-shadow: var(--shadow-lg);
+}
+
+.surface-glass {
+  background-color: var(--color--semantic--surface-glass);
+  backdrop-filter: blur(var(--blur-surface-glass));
+  -webkit-backdrop-filter: blur(var(--blur-surface-glass));
+}
+
+.surface-glass-strong {
+  background-color: var(--color--semantic--surface-glass-strong);
+  backdrop-filter: blur(var(--blur-surface-glass-strong));
+  -webkit-backdrop-filter: blur(var(--blur-surface-glass-strong));
+}
+
+.surface-glass-subtle {
+  background-color: var(--color--semantic--surface-glass-subtle);
+  backdrop-filter: blur(var(--blur-surface-glass-subtle));
+  -webkit-backdrop-filter: blur(var(--blur-surface-glass-subtle));
+}
+
+.breath {
+  background: var(--gradient-breath);
+}
+
+.breath-soft {
+  background: var(--gradient-breath-soft);
+}
+
+.clickable-card {
+  cursor: pointer;
+  transition: box-shadow 120ms ease;
+
+  &:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  &:active {
+    box-shadow: var(--shadow-xs);
+  }
+}
+
+/* ─── Glass surfaces transmit a frosted state layer to their children ─────────── */
+
+:is(.lucent-card, .lucent-nav-rail, .lucent-activity-bar, .lucent-list, .lucent-tab-list, .lucent-breadcrumbs, .surface-glass, .surface-glass-strong, .surface-glass-subtle) {
+  --state-hover: var(--color--semantic--surface-glass-strong);
+  --state-press: var(--color--semantic--surface-default);
+  --state-selected: var(--color--semantic--surface-glass-strong);
+}

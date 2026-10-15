@@ -1,0 +1,95 @@
+/* =============================================================================
+ * Chip — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-chip  (.lucent-chip--{tag|default|active|action} .lucent-chip--{xs|sm|md|lg})
+ *     .lucent-icon?            ← leading hash for the `tag` type
+ *     .lucent-chip__label
+ *     .lucent-chip__close?     ← trailing close button for the `action` type
+ *
+ * Pill-shaped at every size; density from the shared --control-* tokens.
+ * Ported from packages/angular/src/chip/chip.scss.
+ * ============================================================================= */
+
+.lucent-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--_gap);
+  height: var(--_h);
+  padding: 0 var(--_px);
+  border-radius: var(--radius-full);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--control-line);
+  white-space: nowrap;
+
+  /* Density (default md). */
+  --_h: var(--control-height-md);
+  --_text: var(--control-text-md);
+  --_gap: var(--control-gap-md);
+  --_px: var(--control-pad-x-md);
+}
+
+.lucent-chip--xs { --_h: var(--control-height-xs); --_text: var(--control-text-xs); --_gap: var(--control-gap-xs); --_px: var(--control-pad-x-xs); }
+.lucent-chip--sm { --_h: var(--control-height-sm); --_text: var(--control-text-sm); --_gap: var(--control-gap-sm); --_px: var(--control-pad-x-sm); }
+.lucent-chip--lg { --_h: var(--control-height-lg); --_text: var(--control-text-lg); --_gap: var(--control-gap-lg); --_px: var(--control-pad-x-lg); }
+
+.lucent-chip__label { line-height: inherit; }
+
+.lucent-chip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+}
+.lucent-chip__close:hover { opacity: 1; }
+
+/* ─── Types ────────────────────────────────────────────────────────────────── */
+
+.lucent-chip--tag,
+.lucent-chip--default,
+.lucent-chip--action {
+  background: var(--color--semantic--surface-glass);
+  border: var(--border-subtle);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-chip--active {
+  background: var(--color--semantic--accent-strong);
+  color: var(--color--semantic--text-onaccent);
+}
+
+/* ─── Interactive types ────────────────────────────────────────────────────────
+ * `tag` and `default` are LABELS — static, and correctly cursorless. `action` and
+ * `active` are chosen by the user, so they need the affordances every other control in
+ * the system has: a pointer, a hover response and a focus ring. Without them the chip
+ * reads as decoration and nobody clicks it. Only the close button carried a pointer,
+ * which meant the one interactive part was the one that destroys the chip.
+ * -------------------------------------------------------------------------- */
+.lucent-chip--action,
+.lucent-chip--active {
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.lucent-chip--action:hover {
+  border-color: var(--color--semantic--border-strong);
+  background: var(--color--semantic--surface-default);
+}
+
+.lucent-chip--active:hover {
+  background: var(--color--semantic--accent-default);
+}
+
+.lucent-chip--action:focus-visible,
+.lucent-chip--active:focus-visible {
+  outline: var(--border-focus);
+  outline-offset: 2px;
+}

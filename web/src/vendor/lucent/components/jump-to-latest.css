@@ -1,0 +1,34 @@
+/* =============================================================================
+ * Jump to latest — framework-neutral component styles.
+ *
+ * Structure every kit emits (a button OR a role=button host):
+ *   .lucent-jump-to-latest
+ *     .lucent-jump-to-latest__count?   ← "N new"
+ *     .lucent-icon (arrow_downward)
+ *
+ * A floating pill that appears when the message list is scrolled up — click to jump to the
+ * newest message. Shows a count of unseen messages when there are any.
+ * ============================================================================= */
+
+.lucent-jump-to-latest {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-2-5);
+  border: var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color--semantic--surface-overlay);
+  color: var(--color--semantic--text-default);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-xs);
+  font-weight: var(--dimension--primitive--fw-medium);
+  line-height: var(--dimension--primitive--lh-tight);
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
+}
+
+.lucent-jump-to-latest:hover { box-shadow: var(--shadow-lg); }
+.lucent-jump-to-latest:focus-visible { outline: var(--border-focus); outline-offset: 2px; }
+
+.lucent-jump-to-latest__count { color: var(--color--semantic--accent-strong); }

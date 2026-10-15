@@ -1,0 +1,110 @@
+/* =============================================================================
+ * Checkbox — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-checkbox  (.lucent-checkbox--{xs|sm|md|lg})
+ *     .lucent-checkbox__input?   ← native checkbox (Razor only; visually hidden)
+ *     .lucent-checkbox__box
+ *       .lucent-icon.lucent-checkbox__icon.lucent-checkbox__icon--check   ← check glyph
+ *       .lucent-icon.lucent-checkbox__icon.lucent-checkbox__icon--dash?   ← indeterminate glyph
+ *     .lucent-checkbox__label?
+ *
+ * Dual state mechanism so one CSS layer serves both kits:
+ *   - Angular toggles `.is-checked` / `.is-indeterminate` / `.is-focused` via JS.
+ *   - Razor wraps a native checkbox: `:has(.lucent-checkbox__input:checked)` reveals the
+ *     check (no JS, posts in a form); indeterminate is a server-set `.is-indeterminate`.
+ *
+ * Ported from packages/angular/src/checkbox/checkbox.scss.
+ * ============================================================================= */
+
+.lucent-checkbox {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--_gap);
+  cursor: pointer;
+  user-select: none;
+
+  /* Density (default md). Box/icon are explicit px (a square doesn't map onto the height
+     scale); label + gap follow the shared control tokens. */
+  --_box: 20px;
+  --_icon: 14px;
+  --_text: var(--control-text-md);
+  --_gap: var(--control-gap-md);
+}
+
+.lucent-checkbox--xs { --_box: 16px; --_icon: 10px; --_text: var(--control-text-xs); --_gap: var(--control-gap-xs); }
+.lucent-checkbox--sm { --_box: 18px; --_icon: 12px; --_text: var(--control-text-sm); --_gap: var(--control-gap-sm); }
+.lucent-checkbox--lg { --_box: 24px; --_icon: 16px; --_text: var(--control-text-lg); --_gap: var(--control-gap-lg); }
+
+.lucent-checkbox.is-disabled,
+.lucent-checkbox:has(.lucent-checkbox__input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lucent-checkbox:has(.lucent-checkbox__input:focus-visible) {
+  outline: var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Visually-hidden native checkbox (Razor path). */
+.lucent-checkbox__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.lucent-checkbox__box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--_box);
+  height: var(--_box);
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color--semantic--border-default);
+  background: var(--color--semantic--surface-default);
+  transition: border-color 0.15s ease;
+}
+
+.lucent-checkbox.is-focused .lucent-checkbox__box,
+.lucent-checkbox:has(.lucent-checkbox__input:focus-visible) .lucent-checkbox__box {
+  border-color: var(--color--semantic--border-strong);
+}
+
+/* Glyphs hidden by default; revealed per state below. Stacked (absolute) so the check and
+   the indeterminate dash never fight for layout space inside the box. */
+.lucent-checkbox__icon {
+  position: absolute;
+  inset: 0;
+  color: var(--color--semantic--text-default);
+  opacity: 0;
+}
+
+/* Check — when checked and not indeterminate. */
+.lucent-checkbox.is-checked:not(.is-indeterminate) .lucent-checkbox__icon--check,
+.lucent-checkbox:has(.lucent-checkbox__input:checked):not(.is-indeterminate) .lucent-checkbox__icon--check {
+  opacity: 1;
+}
+
+/* Dash — indeterminate wins over checked. */
+.lucent-checkbox.is-indeterminate .lucent-checkbox__icon--dash { opacity: 1; }
+
+.lucent-checkbox__label {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--control-line);
+  color: var(--color--semantic--text-strong);
+  /* Long labels wrap; the first line stays centred on the box, which is always taller. */
+  padding-top: calc((var(--_box) - var(--_text) * var(--control-line)) / 2);
+}

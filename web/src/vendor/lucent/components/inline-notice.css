@@ -1,0 +1,60 @@
+/* =============================================================================
+ * Inline notice — framework-neutral component styles.
+ *
+ * Structure every kit emits:
+ *   .lucent-inline-notice  (.lucent-inline-notice--info|success|warning|error)
+ *     .lucent-icon.lucent-inline-notice__icon
+ *     .lucent-inline-notice__content
+ *       .lucent-inline-notice__title?
+ *       (message — projected)
+ *     .lucent-inline-notice__dismiss?   ← icon-button
+ *
+ * An in-flow banner for a status message tied to a region (a form section, a chat stream) —
+ * unlike a toast/snackbar (transient, floating). Soft tinted background per severity.
+ * ============================================================================= */
+
+.lucent-inline-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-2-5) var(--dimension--primitive--spacing-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--dimension--primitive--fs-sm);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-normal);
+  color: var(--color--semantic--text-default);
+
+  /* Colour per severity (info default). Soft tint = a little of the severity colour over the surface. */
+  --_c: var(--color--semantic--info);
+  background: color-mix(in oklab, var(--_c) 18%, var(--color--semantic--surface-default));
+  border-color: color-mix(in oklab, var(--_c) 36%, transparent);
+}
+
+.lucent-inline-notice--success { --_c: var(--color--semantic--success); }
+.lucent-inline-notice--warning { --_c: var(--color--semantic--warning); }
+.lucent-inline-notice--error   { --_c: var(--color--semantic--error); }
+
+.lucent-inline-notice__icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--_c);
+}
+
+.lucent-inline-notice__content {
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+.lucent-inline-notice__title {
+  display: block;
+  margin-bottom: var(--dimension--primitive--spacing-0-5);
+  font-weight: var(--dimension--primitive--fw-medium);
+  color: var(--color--semantic--text-strong);
+}
+
+.lucent-inline-notice__dismiss {
+  flex: none;
+  margin: calc(-1 * var(--dimension--primitive--spacing-1)) calc(-1 * var(--dimension--primitive--spacing-1)) 0 0;
+}

@@ -1,0 +1,63 @@
+/* =============================================================================
+ * Tooltip — framework-neutral component styles.
+ *
+ * Bubble appearance is shared (.lucent-tooltip). The two kits position it differently:
+ *   - Angular renders the bubble into a CDK overlay (JS positioning).
+ *   - Razor (static SSR) nests the bubble inside a .lucent-tooltip-host wrapper and
+ *     shows it on :hover / :focus-within — no JS.
+ * The wrapper rules below are scoped to `.lucent-tooltip-host > .lucent-tooltip`, so they
+ * only affect the nested (CSS-driven) bubble and never touch the overlay one.
+ *
+ * Ported from packages/angular/src/tooltip/tooltip.scss (bubble) + the POSITIONS map.
+ * ============================================================================= */
+
+.lucent-tooltip {
+  /* On the BASE class: the bubble is created and appended to <body> on hover, so the
+     `__host > .lucent-tooltip` rule below cannot reach it. See tokens/layers.css. */
+  z-index: var(--layer-tooltip);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 240px;
+  height: var(--dimension--primitive--sizing-4);
+  padding: 0 var(--dimension--primitive--spacing-2);
+  border-radius: var(--radius-full);
+  background: var(--color--semantic--surface-overlay);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  pointer-events: none;
+
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--micro--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-tight);
+  color: var(--color--semantic--text-strong);
+  white-space: nowrap;
+}
+
+/* ─── CSS-driven trigger wrapper (no JS) ──────────────────────────────────────── */
+
+.lucent-tooltip-host {
+  position: relative;
+  display: inline-flex;
+}
+
+.lucent-tooltip-host > .lucent-tooltip {
+  position: absolute;
+  z-index: var(--layer-tooltip);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+
+.lucent-tooltip-host:hover > .lucent-tooltip,
+.lucent-tooltip-host:focus-within > .lucent-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Positions — mirror the Angular POSITIONS map (6px gap from the trigger). */
+.lucent-tooltip--top    { bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; }
+.lucent-tooltip--bottom { top: 100%;    left: 50%; transform: translateX(-50%); margin-top: 6px; }
+.lucent-tooltip--left   { right: 100%;  top: 50%;  transform: translateY(-50%); margin-right: 6px; }
+.lucent-tooltip--right  { left: 100%;   top: 50%;  transform: translateY(-50%); margin-left: 6px; }

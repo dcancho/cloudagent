@@ -1,0 +1,55 @@
+:root {
+  /* =========================================================
+   * Border — Color
+   * ========================================================= */
+
+  --color--semantic--border-subtle: oklch(
+    from var(--color--primitive--slate-80) l c h / var(--opacity--primitive--40)
+  );
+
+  --color--semantic--border-default: var(--color--primitive--slate-80);
+
+  --color--semantic--border-strong: var(--color--primitive--slate-50);
+
+  --color--semantic--border-focus: var(--color--primitive--pine-50);
+
+  --color--semantic--border-glass: oklch(
+    from var(--color--primitive--neutral-100) l c h / var(--opacity--primitive--60)
+  );
+
+  /* =========================================================
+   * Border — Composite tokens
+   * ========================================================= */
+
+  --border-subtle:  1px solid var(--color--semantic--border-subtle);
+  --border-default: 1px solid var(--color--semantic--border-default);
+  --border-strong:  1px solid var(--color--semantic--border-strong);
+  --border-focus:   1px solid var(--color--semantic--border-focus);
+  --border-glass:   1px solid var(--color--semantic--border-glass);
+
+  /* =========================================================
+   * Border — Radius
+   * ========================================================= */
+
+  --radius-xs:   var(--dimension--primitive--radius-xs);
+  --radius-sm:   var(--dimension--primitive--radius-sm);
+  --radius-md:   var(--dimension--primitive--radius-md);
+  --radius-lg:   var(--dimension--primitive--radius-lg);
+  --radius-xl:   var(--dimension--primitive--radius-xl);
+  --radius-full: var(--dimension--primitive--radius-full);
+}
+
+/* ─── Utility Classes ────────────────────────────────────────────────────────── */
+
+.border-subtle  { border: var(--border-subtle); }
+.border-default { border: var(--border-default); }
+.border-strong  { border: var(--border-strong); }
+.border-focus   { border: var(--border-focus); }
+.border-glass   { border: var(--border-glass); }
+
+.rounded-xs   { border-radius: var(--radius-xs); }
+.rounded-sm   { border-radius: var(--radius-sm); }
+.rounded-md   { border-radius: var(--radius-md); }
+.rounded-lg   { border-radius: var(--radius-lg); }
+.rounded-xl   { border-radius: var(--radius-xl); }
+.rounded-full { border-radius: var(--radius-full); }

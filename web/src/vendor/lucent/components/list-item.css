@@ -1,0 +1,92 @@
+/* =============================================================================
+ * List item — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-list-item  (.is-selected / .is-disabled / .is-interactive / .is-danger)
+ *     .lucent-icon.lucent-list-item__icon?   ← leading icon shorthand
+ *     [leading slot]?
+ *     .lucent-list-item__content
+ *       .lucent-list-item__primary
+ *       .lucent-list-item__supporting?
+ *     [trailing slot]?
+ *
+ * The reference row primitive (CONVENTIONS §4–§7): df-option / df-menu-item specialize it.
+ * Ported from packages/angular/src/list-item/list-item.scss.
+ * ============================================================================= */
+
+.lucent-list-item {
+  display: flex;
+  align-items: center;
+  min-height: var(--dimension--primitive--sizing-6);
+  padding: var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
+  gap: var(--dimension--primitive--spacing-2);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background 0.1s ease;
+}
+
+/* Adornments keep their size; only the content column flexes. */
+.lucent-list-item > *:not(.lucent-list-item__content) { flex-shrink: 0; }
+
+.lucent-list-item.is-interactive { cursor: pointer; }
+.lucent-list-item.is-interactive:hover:not(.is-selected):not(.is-disabled) {
+  background: var(--color--semantic--surface-base);
+}
+.lucent-list-item.is-interactive:focus-visible {
+  outline: 2px solid var(--color--semantic--border-focus);
+  outline-offset: -2px;
+}
+
+/* Selected sits one step stronger than hover (df-option's derivation). */
+.lucent-list-item.is-selected {
+  background: oklch(from var(--color--semantic--surface-base) calc(l - 0.04) c h);
+}
+
+.lucent-list-item.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Destructive intent — red primary text + leading icon; background intensifies on hover/selected. */
+.lucent-list-item.is-danger .lucent-list-item__primary,
+.lucent-list-item.is-danger .lucent-list-item__icon { color: var(--color--semantic--error); }
+.lucent-list-item.is-danger.is-interactive:hover:not(.is-disabled),
+.lucent-list-item.is-danger.is-selected { background: var(--color--semantic--error-subtle); }
+
+.lucent-list-item__icon { color: var(--color--semantic--text-muted); }
+
+.lucent-list-item__content {
+  flex: 1 0 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--dimension--primitive--spacing-1);
+}
+
+.lucent-list-item__primary {
+  min-width: 0;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--body-sm--font-size);
+  font-weight: var(--dimension--primitive--fw-regular);
+  line-height: 1.2;
+  color: var(--color--semantic--text-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lucent-list-item__supporting {
+  min-width: 0;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--micro--font-size);
+  font-weight: var(--dimension--primitive--fw-regular);
+  line-height: 1.2;
+  color: var(--color--semantic--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

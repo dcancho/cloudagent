@@ -1,0 +1,44 @@
+/* =============================================================================
+ * Icon — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-icon  (.lucent-icon--xs|sm|md|lg|xl)
+ *     .material-icons.lucent-icon__glyph   ← the ligature glyph
+ *
+ * Renders a single Material Icons glyph by ligature name. The `material-icons`
+ * class comes from the externally-loaded Material Icons font (a consumer/global
+ * dependency), not from this file.
+ *
+ * Ported from packages/angular/src/icon/icon.scss. One deliberate change: size is
+ * a `--lucent-icon--{size}` class setting a local `--_sz`, instead of Angular's
+ * inline font-size/width/height — so it's a pure class contract with no inline styles.
+ * ============================================================================= */
+
+.lucent-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  flex-shrink: 0;
+  user-select: none;
+
+  /* Glyph box size (default md). */
+  --_sz: var(--dimension--primitive--icon-md);
+}
+
+.lucent-icon--xs { --_sz: var(--dimension--primitive--icon-xs); }
+.lucent-icon--sm { --_sz: var(--dimension--primitive--icon-sm); }
+.lucent-icon--md { --_sz: var(--dimension--primitive--icon-md); }
+.lucent-icon--lg { --_sz: var(--dimension--primitive--icon-lg); }
+.lucent-icon--xl { --_sz: var(--dimension--primitive--icon-xl); }
+
+/* Two classes so the Material Icons stylesheet's `.material-icons { font-size: 24px }` can't
+   override the glyph size, whichever stylesheet loads last. */
+.lucent-icon .lucent-icon__glyph {
+  color: inherit;
+  overflow: hidden;
+  font-size: var(--_sz);
+  width: var(--_sz);
+  height: var(--_sz);
+  line-height: var(--_sz);
+}

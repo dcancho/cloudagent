@@ -1,0 +1,111 @@
+/* =============================================================================
+ * Textarea — framework-neutral component styles.
+ *
+ * Structure every kit emits (mirrors text-input, multi-line):
+ *   .lucent-textarea  (.lucent-textarea--xs|sm|md|lg)
+ *     .lucent-textarea__label?
+ *     .lucent-textarea__wrapper  (--focus | --filled | --error | --disabled | --readonly)
+ *       textarea
+ *     .lucent-textarea__message  (--error)
+ *
+ * Same border-state contract as text-input (Default border-subtle → filled border-default →
+ * focus border-strong → error error-subtle). Wrapper is top-aligned with vertical padding and
+ * a min-height; the textarea resizes vertically. `:focus-within` / `:has(textarea:not(
+ * :placeholder-shown))` make focus/filled work with no JS (static SSR).
+ * ============================================================================= */
+
+.lucent-textarea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-0-5);
+  width: 100%;
+  min-width: 0;
+
+  /* Density (default md). */
+  --_text: var(--control-text-md);
+  --_radius: var(--control-radius-md);
+  --_px: var(--control-pad-x-md);
+  --_py: var(--dimension--primitive--spacing-2);
+  --_min-h: calc(var(--control-height-md) * 2);
+}
+
+.lucent-textarea--xs {
+  --_text: var(--control-text-xs); --_radius: var(--control-radius-xs);
+  --_px: var(--control-pad-x-xs); --_py: var(--dimension--primitive--spacing-1);
+  --_min-h: calc(var(--control-height-xs) * 2);
+}
+.lucent-textarea--sm {
+  --_text: var(--control-text-sm); --_radius: var(--control-radius-sm);
+  --_px: var(--control-pad-x-sm); --_py: var(--dimension--primitive--spacing-1-5);
+  --_min-h: calc(var(--control-height-sm) * 2);
+}
+.lucent-textarea--lg {
+  --_text: var(--control-text-lg); --_radius: var(--control-radius-lg);
+  --_px: var(--control-pad-x-lg); --_py: var(--dimension--primitive--spacing-2-5);
+  --_min-h: calc(var(--control-height-lg) * 2);
+}
+
+/* ─── Label ────────────────────────────────────────────────────────────────── */
+
+.lucent-textarea__label { color: var(--color--semantic--text-strong); }
+
+/* ─── Wrapper ──────────────────────────────────────────────────────────────── */
+
+.lucent-textarea__wrapper {
+  display: flex;
+  align-items: stretch;
+  padding: var(--_py) var(--_px);
+  border-radius: var(--_radius);
+  border: var(--border-subtle);
+  background: var(--color--semantic--surface-default);
+  transition: border-color 0.15s ease;
+}
+
+.lucent-textarea__wrapper--filled,
+.lucent-textarea__wrapper:has(textarea:not(:placeholder-shown)) { border: var(--border-default); }
+
+.lucent-textarea__wrapper--readonly { border: var(--border-subtle); }
+
+.lucent-textarea__wrapper--focus,
+.lucent-textarea__wrapper:focus-within { border: var(--border-strong); }
+
+.lucent-textarea__wrapper--error { border: 1px solid var(--color--semantic--error-subtle); }
+
+.lucent-textarea__wrapper--disabled { opacity: 0.4; }
+
+/* ─── Native textarea ──────────────────────────────────────────────────────── */
+
+.lucent-textarea textarea {
+  flex: 1 0 0;
+  min-width: 0;
+  width: 100%;
+  min-height: var(--_min-h);
+  resize: vertical;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--_text);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-normal);
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-textarea textarea::placeholder { color: var(--color--semantic--text-muted); }
+.lucent-textarea textarea:disabled { cursor: not-allowed; }
+.lucent-textarea textarea[readonly] { color: var(--color--semantic--text-subtle); }
+
+.lucent-textarea__wrapper--error textarea { color: var(--color--semantic--error); }
+.lucent-textarea__wrapper--error textarea::placeholder { color: var(--color--semantic--error); }
+
+/* ─── Messages ─────────────────────────────────────────────────────────────── */
+
+.lucent-textarea__message {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--micro--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-muted);
+}
+
+.lucent-textarea__message--error { color: var(--color--semantic--error); }

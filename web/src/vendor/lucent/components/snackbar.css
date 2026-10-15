@@ -1,0 +1,46 @@
+/* =============================================================================
+ * Snackbar — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-snackbar
+ *     .lucent-snackbar__content ( .lucent-icon.lucent-snackbar__icon? + __message )
+ *     .lucent-button?   ← optional trailing action
+ *
+ * A pill-shaped transient message bar. Ported verbatim from
+ * packages/angular/src/snackbar/snackbar.scss.
+ * ============================================================================= */
+
+.lucent-snackbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-8);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-4);
+  background: var(--color--semantic--surface-glass-strong);
+  border: var(--border-subtle);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.lucent-snackbar__content {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  flex-shrink: 0;
+}
+
+.lucent-snackbar__icon {
+  flex-shrink: 0;
+  color: var(--color--semantic--text-default);
+}
+
+.lucent-snackbar__message {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--body-sm--font-size);
+  font-weight: var(--dimension--primitive--fw-light);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-default);
+  white-space: nowrap;
+}

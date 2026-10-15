@@ -1,0 +1,99 @@
+/* =============================================================================
+ * Modal — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-modal__scrim                ← full-screen backdrop, centers the panel
+ *     .lucent-modal  (role=dialog)
+ *       .lucent-modal__header  ( .lucent-modal__heading > __title / __subtitle )  + close
+ *       .lucent-modal__body
+ *       .lucent-modal__footer?
+ *
+ * Angular renders the panel into a centered CDK overlay with `df-modal__scrim` as the backdrop;
+ * Razor renders `.lucent-modal__scrim` as a fixed flex wrapper that centers the panel. The panel
+ * styles are shared. Ported from packages/angular/src/modal/modal.scss (+ the scrim).
+ * ============================================================================= */
+
+.lucent-modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Centred on the VIEWPORT (100vw / 100vh), never on the content pane. A dialog is modal
+   * to the window: the scrim covers the whole window, so the panel belongs to the whole
+   * window too. Side rails and other app chrome do not shift it. */
+  padding: var(--dimension--primitive--spacing-4);
+  background: var(--color--semantic--scrim);
+}
+
+.lucent-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-3);
+  padding: var(--dimension--primitive--spacing-6);
+  box-sizing: border-box;
+  width: 90vw;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow: auto;
+  /* OPAQUE, not glass — the one surface in the system that must be.
+   *
+   * Every other glass container floats over the page, so translucency picks up the page
+   * and reads as depth. A dialog floats over the SCRIM, so translucency picks up the
+   * dimming layer instead: the panel turns muddy grey and the whole modal looks dirty,
+   * exactly where the user's attention was just forced. The scrim already supplies the
+   * separation, so the panel gains nothing from glass and loses its cleanliness.
+   *
+   * surface-overlay exists for precisely this tier (see tokens/surfaces.css). No
+   * backdrop-filter either: there is nothing behind an opaque panel to frost. */
+  background: var(--color--semantic--surface-overlay);
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+}
+
+.lucent-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-2);
+}
+
+.lucent-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dimension--primitive--spacing-2);
+  width: 100%;
+}
+
+.lucent-modal__heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lucent-modal__title {
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--heading-lg--font-size);
+  font-weight: var(--dimension--primitive--fw-regular);
+  line-height: var(--dimension--primitive--lh-snug);
+  color: var(--color--semantic--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lucent-modal__subtitle {
+  margin: 0;
+  font-family: var(--font--primitive--sans);
+  font-size: var(--typography--caption--font-size);
+  line-height: var(--dimension--primitive--lh-relaxed);
+  color: var(--color--semantic--text-muted);
+}
+
+.lucent-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--dimension--primitive--spacing-2);
+}

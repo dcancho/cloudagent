@@ -1,0 +1,23 @@
+/* =============================================================================
+ * Tag — framework-neutral component styles.
+ *
+ * Structure both kits emit:
+ *   .lucent-tag   ← inline mono-text chip; content projects in
+ *
+ * Ported verbatim from packages/angular/src/tag/tag.scss (`:host` → `.lucent-tag`).
+ * ============================================================================= */
+
+.lucent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-2);
+  border-radius: var(--radius-xs);
+  background: var(--color--semantic--surface-base);
+  color: var(--color--semantic--text-muted);
+  font-family: var(--font--primitive--mono);
+  font-size: var(--typography--micro--font-size);
+  font-weight: var(--dimension--primitive--fw-regular);
+  line-height: var(--dimension--primitive--lh-tight);
+  white-space: nowrap;
+}
