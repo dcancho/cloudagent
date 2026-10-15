@@ -20,7 +20,8 @@ it names the type involved.
 Proposals are ideas that are reasoned through but not built. Each states its status at the top.
 
 - [People](proposals/people.md): knowing who said what, and learning how each person works.
-- [Participation](proposals/participation.md): deciding when to wake the agent in a group.
+- [Participation](proposals/participation.md): taking turns, from knowing when someone has finished
+  to deciding whether to speak in a group.
 - [Thinking without speaking](proposals/thinking-without-speaking.md): a turn that does not
   have to end in a message.
 - [Fidelity ladder](proposals/fidelity-ladder.md): perceiving a source as a summary, a query, or
