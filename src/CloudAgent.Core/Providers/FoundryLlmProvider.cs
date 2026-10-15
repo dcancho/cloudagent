@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure;
@@ -20,8 +22,15 @@ namespace CloudAgent.Core.Providers;
 /// </summary>
 public sealed class FoundryLlmProvider : ILlmProvider
 {
+    /// <summary>
+    /// Reasoning tokens count against <c>max_completion_tokens</c>, so a budget sized for a short
+    /// answer would be spent thinking. Small budgets are raised to leave room for both.
+    /// </summary>
+    private const int MinReasoningBudget = 4096;
+
     private readonly ChatCompletionsClient _client;
     private readonly string? _defaultModel;
+    private readonly ConcurrentDictionary<string, ModelQuirks> _quirks = new();
 
     /// <param name="endpoint">
     /// The Foundry models endpoint, e.g. <c>https://&lt;resource&gt;.services.ai.azure.com/models</c>.
@@ -47,12 +56,68 @@ public sealed class FoundryLlmProvider : ILlmProvider
 
     public async Task<LlmResponse> CompleteAsync(LlmRequest request, CancellationToken cancellationToken = default)
     {
-        var options = new ChatCompletionsOptions
+        var model = request.Model ?? _defaultModel ?? string.Empty;
+        var quirks = _quirks.GetOrAdd(model, _ => new ModelQuirks());
+
+        for (var attempt = 0; ; attempt++)
         {
-            Model = request.Model ?? _defaultModel,
-            MaxTokens = request.MaxTokens,
-            Temperature = (float)request.Temperature,
-        };
+            try
+            {
+                Response<ChatCompletions> response = await _client
+                    .CompleteAsync(BuildOptions(request, model, quirks), cancellationToken)
+                    .ConfigureAwait(false);
+                return MapResponse(response.Value);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 400 && attempt < 3 && quirks.LearnFrom(ex.Message))
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reasoning models reject parameters that older chat models accept: they want
+    /// <c>max_completion_tokens</c> instead of <c>max_tokens</c>, may accept only the default
+    /// temperature, and some refuse function tools on this route unless reasoning is turned off.
+    /// The provider learns each rule from the first rejection, per model, and retries.
+    /// </summary>
+    private sealed class ModelQuirks
+    {
+        public volatile bool UseCompletionTokens;
+        public volatile bool OmitTemperature;
+        public volatile bool NoReasoningWithTools;
+
+        public bool LearnFrom(string error)
+        {
+            if (!UseCompletionTokens && error.Contains("max_completion_tokens", StringComparison.Ordinal))
+                return UseCompletionTokens = true;
+            if (!NoReasoningWithTools && error.Contains("reasoning_effort", StringComparison.Ordinal)
+                && error.Contains("tools", StringComparison.OrdinalIgnoreCase))
+                return NoReasoningWithTools = true;
+            if (!OmitTemperature && error.Contains("temperature", StringComparison.OrdinalIgnoreCase))
+                return OmitTemperature = true;
+            return false;
+        }
+    }
+
+    private ChatCompletionsOptions BuildOptions(LlmRequest request, string model, ModelQuirks quirks)
+    {
+        var options = new ChatCompletionsOptions { Model = model.Length > 0 ? model : null };
+
+        if (quirks.UseCompletionTokens)
+        {
+            var budget = Math.Max(request.MaxTokens, MinReasoningBudget);
+            options.AdditionalProperties["max_completion_tokens"] = BinaryData.FromString(budget.ToString(CultureInfo.InvariantCulture));
+        }
+        else
+        {
+            options.MaxTokens = request.MaxTokens;
+        }
+
+        if (!quirks.OmitTemperature)
+            options.Temperature = (float)request.Temperature;
+
+        if (quirks.NoReasoningWithTools && request.Tools.Count > 0)
+            options.AdditionalProperties["reasoning_effort"] = BinaryData.FromString("\"none\"");
 
         // The system message stays stable across turns so Azure's automatic prefix caching keeps
         // hitting it; per-turn volatile context is folded into the latest human turn instead.
@@ -81,10 +146,7 @@ public sealed class FoundryLlmProvider : ILlmProvider
                 }));
         }
 
-        Response<ChatCompletions> response =
-            await _client.CompleteAsync(options, cancellationToken).ConfigureAwait(false);
-
-        return MapResponse(response.Value);
+        return options;
     }
 
     /// <summary>Index of the most recent human turn — where per-turn context is folded in.</summary>

@@ -204,6 +204,7 @@ void AttachLogging(AgentLoop loop, string label)
     };
     loop.ToolInvoked += (call, result) =>
         Console.WriteLine($"  ⚙ [{label}] {call.Name} -> {(result.Success ? "ok" : "error")}");
+    loop.TurnFailed += (i, ex) => Console.Error.WriteLine($"  ✖ [{label}] turn {i} failed: {ex.GetType().Name}: {ex.Message}");
     loop.Compacted += n => Console.WriteLine($"  🧠 [{label}] compacted {n} turn(s)");
     loop.MemoriesRecalled += n => Console.WriteLine($"  🧠 [{label}] recalled {n} memor(ies)");
     loop.Consolidated += n => Console.WriteLine($"  🧠 [{label}] consolidated {n} fact(s)");

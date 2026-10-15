@@ -77,6 +77,9 @@ public sealed class AgentLoop
     /// <summary>Raised after the post-turn utility judgment, with (useful, injected) counts.</summary>
     public event Action<int, int>? UtilityJudged;
 
+    /// <summary>Raised when an iteration failed, with the iteration number and the error. The loop keeps running.</summary>
+    public event Action<int, Exception>? TurnFailed;
+
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
     /// <see cref="AgentOptions.MaxIterations"/> is reached.
@@ -112,31 +115,36 @@ public sealed class AgentLoop
                 continue;
             }
 
-            // 2. Attention: assemble what reaches the model this turn (residents, state, summary,
-            // recalled memories). Attention returns the injected hits; the loop feeds the ledger.
-            _assembled = await _attention
-                .AssembleAsync(_context, LatestUserText(), cancellationToken).ConfigureAwait(false);
-            if (_assembled.InjectedMemories.Count > 0)
-            {
-                await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);
-                MemoriesRecalled?.Invoke(_assembled.InjectedMemories.Count);
-            }
-
-            // 3. Think and act until the model produces a plain answer.
             try
             {
+                // 2. Attention: assemble what reaches the model this turn (residents, state, summary,
+                // recalled memories). Attention returns the injected hits; the loop feeds the ledger.
+                _assembled = await _attention
+                    .AssembleAsync(_context, LatestUserText(), cancellationToken).ConfigureAwait(false);
+                if (_assembled.InjectedMemories.Count > 0)
+                {
+                    await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);
+                    MemoriesRecalled?.Invoke(_assembled.InjectedMemories.Count);
+                }
+
+                // 3. Think and act until the model produces a plain answer.
                 await ThinkAndActAsync(iteration, cancellationToken).ConfigureAwait(false);
+
+                // 3.5. Close the feedback loop: did the injected memories influence the reply?
+                await JudgeUtilityAsync(iteration, cancellationToken).ConfigureAwait(false);
+
+                // 4. Keep working memory under budget; evicted turns become episodic memory.
+                await CompactAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
-
-            // 3.5. Close the feedback loop: did the injected memories influence the reply?
-            await JudgeUtilityAsync(iteration, cancellationToken).ConfigureAwait(false);
-
-            // 4. Keep working memory under budget; evicted turns become episodic memory.
-            await CompactAsync(cancellationToken).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                // A failed turn must not end the agent: report it and wait for the next stimulus.
+                TurnFailed?.Invoke(iteration, ex);
+            }
 
             await DelayAsync(cancellationToken).ConfigureAwait(false);
         }
