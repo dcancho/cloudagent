@@ -60,6 +60,17 @@ var workspaceTools = Toolset.CreateDefault(workspace, search)
     .Register(new SearchIndexTool(embeddings, index))
     .Register(new SummarizeFileTool(workspace, summarizer));
 
+// Web reading at three levels of detail; fetched pages are cached under .agent/web.
+var webReader = new WebReader(
+    new WebFetcher(),
+    new WebPageStore(Path.Combine(workspace.Root, ".agent", "web")),
+    provider,
+    smallModel);
+workspaceTools
+    .Register(new FetchUrlTool(webReader))
+    .Register(new AskPageTool(webReader))
+    .Register(new ReadPageTool(webReader));
+
 // Taskboard: a persistent todo list in the workspace (one board, shared).
 var todos = new TodoStore(Path.Combine(workspace.Root, ".agent", "todos.json"));
 workspaceTools
