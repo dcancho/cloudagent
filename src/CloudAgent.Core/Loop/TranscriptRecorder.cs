@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
+using CloudAgent.Core.Surfaces;
 
 namespace CloudAgent.Core.Loop;
 
@@ -75,6 +76,65 @@ public sealed class TranscriptRecorder
             messages.Add((kind, text));
         }
         return messages;
+    }
+
+    /// <summary>
+    /// The conversations recorded for one surface, most recently changed first. Each is titled by
+    /// the first thing the person said; transcripts where they never said anything are left out.
+    /// </summary>
+    public static IReadOnlyList<ConversationSummary> ListConversations(
+        string directory, string surface, int titleLength = 60)
+    {
+        if (!Directory.Exists(directory))
+            return [];
+
+        var prefix = ToFileName($"{surface}:");
+        var conversations = new List<ConversationSummary>();
+        foreach (var file in new DirectoryInfo(directory).EnumerateFiles($"{prefix}*.jsonl"))
+        {
+            var first = FirstUserText(file.FullName);
+            if (first is null)
+                continue;
+
+            var id = Path.GetFileNameWithoutExtension(file.Name)[prefix.Length..];
+            conversations.Add(new ConversationSummary(id, Title(first, titleLength), file.LastWriteTimeUtc));
+        }
+        return conversations.OrderByDescending(c => c.UpdatedAt).ToList();
+    }
+
+    private static string? FirstUserText(string path)
+    {
+        try
+        {
+            foreach (var line in File.ReadLines(path))
+            {
+                if (!line.Contains("\"kind\":\"user\"", StringComparison.Ordinal))
+                    continue;
+                try
+                {
+                    var text = JsonNode.Parse(line)?["text"]?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(text))
+                        return text;
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                }
+            }
+        }
+        catch (IOException)
+        {
+        }
+        return null;
+    }
+
+    private static string Title(string text, int length)
+    {
+        var flat = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (flat.Length <= length)
+            return flat;
+
+        var cut = flat.LastIndexOf(' ', length);
+        return (cut > length / 2 ? flat[..cut] : flat[..length]).TrimEnd(',', '.', ';', ':') + "...";
     }
 
     public void Attach(AgentLoop loop)

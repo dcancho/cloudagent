@@ -26,13 +26,16 @@ namespace CloudAgent.Surfaces;
 /// switches to typed JSON frames (<c>message</c> and <c>typing</c>) in both directions; clients that
 /// never say hello keep receiving plain text. A hello may carry <c>"conversation"</c> to continue an
 /// earlier conversation; the server answers with <c>welcome</c> (the conversation id to keep) and, when
-/// there is one, <c>history</c> (the messages so far).
+/// there is one, <c>history</c> (the messages so far). A <c>list</c> frame is answered with
+/// <c>conversations</c>: every web chat conversation, most recent first.
 /// </summary>
 /// <param name="port">Port to listen on, on localhost.</param>
 /// <param name="history">The messages so far in a conversation, by conversation id.</param>
+/// <param name="conversations">Every web chat conversation, most recent first.</param>
 public sealed class WebchatSurface(
     int port = 5080,
-    Func<string, IReadOnlyList<(string Role, string Text)>>? history = null) : ITypingSource, ITypingIndicator
+    Func<string, IReadOnlyList<(string Role, string Text)>>? history = null,
+    Func<IReadOnlyList<ConversationSummary>>? conversations = null) : ITypingSource, ITypingIndicator
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(4);
 
@@ -86,6 +89,12 @@ public sealed class WebchatSurface(
                             await WelcomeAsync(client, conversationId, cancellationToken);
                         if (consumed)
                             continue;
+                    }
+
+                    if (client.Typed && TypeOf(frame) == "list")
+                    {
+                        await SendConversationsAsync(client, cancellationToken);
+                        continue;
                     }
 
                     var text = HandleFrame(client, conversationId, frame);
@@ -184,6 +193,33 @@ public sealed class WebchatSurface(
         await client.SendAsync(new JsonObject { ["type"] = "history", ["messages"] = messages }.ToJsonString(), cancellationToken);
     }
 
+    private Task SendConversationsAsync(Client client, CancellationToken cancellationToken)
+    {
+        var items = new JsonArray((conversations?.Invoke() ?? [])
+            .Select(c => (JsonNode)new JsonObject
+            {
+                ["id"] = c.Id,
+                ["title"] = c.Title,
+                ["updatedAt"] = c.UpdatedAt.ToString("O"),
+            })
+            .ToArray());
+        return client.SendAsync(new JsonObject { ["type"] = "conversations", ["items"] = items }.ToJsonString(), cancellationToken);
+    }
+
+    private static string? TypeOf(string frame)
+    {
+        if (!frame.StartsWith('{'))
+            return null;
+        try
+        {
+            return (JsonNode.Parse(frame) as JsonObject)?["type"]?.GetValue<string>();
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     private static string NewId() => Guid.NewGuid().ToString("N")[..12];
 
     private static bool IsValidId(string id) =>
@@ -217,7 +253,9 @@ public sealed class WebchatSurface(
             case "message":
                 return json["text"]?.GetValue<string>();
             default:
-                return frame;
+                // A typed client only sends text as a message frame; anything else is a frame this
+                // server does not know yet, and must not reach the agent as something the person said.
+                return client.Typed ? null : frame;
         }
     }
 

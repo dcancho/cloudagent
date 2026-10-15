@@ -381,7 +381,8 @@ if (config.WebchatEnabled)
 {
     var webchat = new WebchatSurface(
         config.WebchatPort,
-        conversationId => TranscriptRecorder.ReadConversation(transcriptDirectory, $"webchat:{conversationId}"));
+        conversationId => TranscriptRecorder.ReadConversation(transcriptDirectory, $"webchat:{conversationId}"),
+        () => TranscriptRecorder.ListConversations(transcriptDirectory, "webchat"));
     surfaces.Add(webchat);
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
