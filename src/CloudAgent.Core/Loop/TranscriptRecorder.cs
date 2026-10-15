@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -42,6 +43,38 @@ public sealed class TranscriptRecorder
     {
         var invalid = Path.GetInvalidFileNameChars().Append(':').ToHashSet();
         return new string(agentId.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+    }
+
+    /// <summary>
+    /// The conversation as people saw it: what the person sent and what the agent answered, in order,
+    /// read from an agent's transcript. Tool calls and other events are left out.
+    /// </summary>
+    public static IReadOnlyList<(string Role, string Text)> ReadConversation(string directory, string agentId)
+    {
+        var path = Path.Combine(directory, $"{ToFileName(agentId)}.jsonl");
+        if (!File.Exists(path))
+            return [];
+
+        var messages = new List<(string, string)>();
+        foreach (var line in File.ReadLines(path))
+        {
+            JsonObject? entry;
+            try
+            {
+                entry = JsonNode.Parse(line) as JsonObject;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                continue;
+            }
+
+            var kind = entry?["kind"]?.GetValue<string>();
+            var text = entry?["text"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(text) || kind is not ("user" or "assistant"))
+                continue;
+            messages.Add((kind, text));
+        }
+        return messages;
     }
 
     public void Attach(AgentLoop loop)
@@ -129,6 +162,6 @@ public sealed class TranscriptRecorder
     private string Cut(string text) =>
         text.Length <= _maxChars ? text : text[.._maxChars] + $"... [{text.Length - _maxChars} more characters]";
 
-    private static JsonArray Array(System.Collections.Generic.IEnumerable<string> items) =>
+    private static JsonArray Array(IEnumerable<string> items) =>
         new(items.Select(i => (JsonNode)i).ToArray());
 }

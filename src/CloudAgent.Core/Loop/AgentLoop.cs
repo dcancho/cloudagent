@@ -90,6 +90,9 @@ public sealed class AgentLoop
     /// <summary>Raised when an iteration failed, with the iteration number and the error. The loop keeps running.</summary>
     public event Action<int, Exception>? TurnFailed;
 
+    /// <summary>Raised after every iteration, successful or not, once the context is settled.</summary>
+    public event Action<int>? TurnEnded;
+
     /// <summary>Raised when the context router decided how much of the pipeline this turn runs.</summary>
     public event Action<Attention.RoutingDecision>? Routed;
 
@@ -180,6 +183,8 @@ public sealed class AgentLoop
                 // A failed turn must not end the agent: report it and wait for the next stimulus.
                 TurnFailed?.Invoke(iteration, ex);
             }
+
+            TurnEnded?.Invoke(iteration);
 
             await DelayAsync(cancellationToken).ConfigureAwait(false);
         }
