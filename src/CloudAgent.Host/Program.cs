@@ -13,6 +13,7 @@ using CloudAgent.Core.Surfaces;
 using CloudAgent.Surfaces;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Agents;
+using CloudAgent.Core.Tools.Compute;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Memory;
 using CloudAgent.Core.Tools.Todos;
@@ -77,7 +78,8 @@ var summarizer = new Summarizer(provider, smallModel);
 var workspaceTools = Toolset.CreateDefault(workspace, search)
     .Register(new IndexWorkspaceTool(indexer, index, indexPath))
     .Register(new SearchIndexTool(embeddings, index))
-    .Register(new SummarizeFileTool(workspace, summarizer));
+    .Register(new SummarizeFileTool(workspace, summarizer))
+    .Register(new CalculateTool());
 
 // Web reading at three levels of detail; fetched pages are cached under .agent/web.
 var webReader = new WebReader(
@@ -142,7 +144,8 @@ var options = new AgentOptions
     SystemPrompt =
         "You are an autonomous agent running on your own machine with a persistent workspace. " +
         "Operate with the initiative of a capable colleague. You can delegate scoped work to child " +
-        "agents (spawn_agent / delegate_task) and answer their questions. Be concise.",
+        "agents (spawn_agent / delegate_task) and answer their questions. Never work out numbers in your " +
+        "head: compute every figure you report with the calculate tool. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
@@ -153,7 +156,7 @@ var childOptions = new AgentOptions
     SystemPrompt =
         "You are a subagent working on a scoped task from your parent. You have your own memory and " +
         "the shared workspace. Use ask_parent for a decision you can't make; call finish with your " +
-        "result when done. Be concise.",
+        "result when done. Compute every figure you report with the calculate tool. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
