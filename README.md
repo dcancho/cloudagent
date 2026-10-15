@@ -93,6 +93,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
+| `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
 
 ## The loop
 
@@ -132,6 +133,20 @@ propagate down the tree. Children share the workspace but not memory.
 
 Each `(surface, conversation)` pair maps to its own agent session, so many chats run side by
 side. The console, the web chat, Telegram, and Discord are all surfaces.
+
+People rarely write one message per thought, so the agent answers bursts, not messages. It waits
+until the person has probably finished: a wait measured from that person's own rhythm, shortened
+after a complete question, lengthened after a message that trails off, and held open while the
+surface reports them typing. The design is in the
+[participation](docs/design/proposals/participation.md) proposal. The console answers each line
+at once.
+
+| Surface | Reports the person typing | Shows the agent typing |
+| --- | --- | --- |
+| Web chat | Yes | Yes |
+| Discord | Yes | Yes |
+| Telegram | No, the bot API does not deliver it | Yes |
+| Console | No | No |
 
 ## Status
 

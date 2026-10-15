@@ -20,6 +20,7 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="DiscordBotToken">Discord surface token; null skips the surface.</param>
 /// <param name="WebchatEnabled">Whether to start the web-chat surface (<c>WEBCHAT=1</c>).</param>
 /// <param name="WebchatPort">Web-chat port (<c>WEBCHAT_PORT</c>) when enabled.</param>
+/// <param name="TurnTakingEnabled">Group messages into bursts before the agent answers (<c>TURN_TAKING</c>, on unless <c>0</c>).</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -30,7 +31,8 @@ public sealed record HostConfig(
     string? TelegramBotToken,
     string? DiscordBotToken,
     bool WebchatEnabled,
-    int WebchatPort)
+    int WebchatPort,
+    bool TurnTakingEnabled)
 {
     public const int DefaultMemoryBudgetTokens = 8000;
     public const int DefaultSleepIntervalMinutes = 30;
@@ -69,6 +71,7 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN"),
             Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN"),
             webchatEnabled,
-            webchatPort);
+            webchatPort,
+            !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal));
     }
 }

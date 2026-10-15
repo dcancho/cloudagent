@@ -279,7 +279,10 @@ if (config.WebchatEnabled)
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
 
-var router = new ConversationRouter(surfaces, CreateConversation);
+var turnTaking = config.TurnTakingEnabled
+    ? new TurnTakingOptions()
+    : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
+using var router = new ConversationRouter(surfaces, CreateConversation, turnTaking: turnTaking);
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
 // Sleep timer: every interval, run each registered agent's consolidation pass. Mechanical
@@ -342,6 +345,7 @@ Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
+Console.WriteLine($"Turns:     {(config.TurnTakingEnabled ? $"bursts (wait {turnTaking.DefaultWait.TotalSeconds:0.#}s until measured; cli immediate)" : "one message per turn")}");
 
 await router.RunAsync(cts.Token);
 

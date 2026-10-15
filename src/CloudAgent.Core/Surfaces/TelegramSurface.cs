@@ -11,7 +11,7 @@ namespace CloudAgent.Core.Surfaces;
 /// Telegram via the Bot API using long polling (getUpdates) — no public URL, no SDK, just HTTP.
 /// The conversation id is the Telegram chat id.
 /// </summary>
-public sealed class TelegramSurface : ISurface
+public sealed class TelegramSurface : ITypingIndicator
 {
     private readonly HttpClient _http;
     private readonly string _baseUrl;
@@ -92,6 +92,14 @@ public sealed class TelegramSurface : ISurface
             .PostAsJsonAsync($"{_baseUrl}/sendMessage", payload, cancellationToken)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+    }
+
+    public async Task SendTypingAsync(string conversationId, CancellationToken cancellationToken = default)
+    {
+        var payload = new { chat_id = conversationId, action = "typing" };
+        using var response = await _http
+            .PostAsJsonAsync($"{_baseUrl}/sendChatAction", payload, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static (string Id, string? Name) ReadSender(JsonElement message)
