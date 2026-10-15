@@ -62,9 +62,19 @@ body {
   grid-template-rows: auto 1fr auto;
 }
 
-.app__menu,
+.app__sidebar-close,
 .app__scrim {
   display: none;
+}
+
+@media (min-width: 721px) {
+  .app--sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .app--sidebar-collapsed .app__sidebar {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -93,7 +103,7 @@ body {
     background: oklch(0 0 0 / 0.4);
   }
 
-  .app__menu {
+  .app__sidebar-close {
     display: inline-flex;
   }
 }

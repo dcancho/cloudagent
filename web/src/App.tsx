@@ -33,6 +33,26 @@ function storeConversation(id: string | null) {
   }
 }
 
+const NARROW = '(max-width: 720px)'
+const COLLAPSED_KEY = 'cloudagent.sidebarCollapsed'
+
+function storedCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function storeCollapsed(collapsed: boolean) {
+  try {
+    if (collapsed) localStorage.setItem(COLLAPSED_KEY, '1')
+    else localStorage.removeItem(COLLAPSED_KEY)
+  } catch {
+    // Without storage the sidebar simply opens again on reload.
+  }
+}
+
 const TYPING_PING_MS = 2000
 const AGENT_TYPING_MS = 6000
 
@@ -68,6 +88,27 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [current, setCurrent] = useState<string | undefined>(storedConversation)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(storedCollapsed)
+
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const close = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarOpen(false)
+    }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [sidebarOpen])
+
+  function toggleSidebar() {
+    if (window.matchMedia(NARROW).matches) {
+      setSidebarOpen((open) => !open)
+      return
+    }
+    setSidebarCollapsed((collapsed) => {
+      storeCollapsed(!collapsed)
+      return !collapsed
+    })
+  }
 
   useEffect(() => {
     const ws = new WebSocket(WS_URL)
@@ -148,11 +189,19 @@ function App() {
   }
 
   return (
-    <div className={`app${sidebarOpen ? ' app--sidebar-open' : ''}`}>
-      <nav className="app__sidebar" aria-label="Conversations">
+    <div
+      className={`app${sidebarOpen ? ' app--sidebar-open' : ''}${sidebarCollapsed ? ' app--sidebar-collapsed' : ''}`}
+    >
+      <nav className="app__sidebar" id="conversations" aria-label="Conversations">
         <div className="app__sidebar-bar">
           <h2 className="app__sidebar-title">Conversations</h2>
           <IconButton icon="add_comment" label="New conversation" onClick={() => openConversation(null)} />
+          <IconButton
+            className="app__sidebar-close"
+            icon="close"
+            label="Close conversations"
+            onClick={() => setSidebarOpen(false)}
+          />
         </div>
         <div className="app__conversations">
           {conversations.map((c) => (
@@ -174,8 +223,8 @@ function App() {
             className="app__menu"
             icon="menu"
             label="Conversations"
-            aria-expanded={sidebarOpen}
-            onClick={() => setSidebarOpen((open) => !open)}
+            aria-controls="conversations"
+            onClick={toggleSidebar}
           />
           <Icon name="smart_toy" />
           <h1 className="app__title">CloudAgent</h1>
