@@ -23,10 +23,13 @@ public sealed class ContextAssembler(
     private const int CharsPerToken = 4;
 
     public async Task<AssembledContext> AssembleAsync(
-        AgentContext context, string? query, CancellationToken cancellationToken = default)
+        AgentContext context, string? query, MemoryLevel memory = MemoryLevel.Full,
+        CancellationToken cancellationToken = default)
     {
         var residents = await LoadResidentsAsync(cancellationToken).ConfigureAwait(false);
-        var hits = await RecallAsync(query, cancellationToken).ConfigureAwait(false);
+        var hits = memory == MemoryLevel.None
+            ? []
+            : await RecallAsync(query, light: memory == MemoryLevel.Light, cancellationToken).ConfigureAwait(false);
 
         var system = AttentionRendering.System(persona, residents);
         var ephemeral = AttentionRendering.Ephemeral(context.State.Render(), context.RollingSummary, hits);
@@ -46,16 +49,18 @@ public sealed class ContextAssembler(
     }
 
     /// <summary>Recall the turn's memories through the pipeline (rewrite → wide hybrid → rerank →
-    /// budget); empty when there is no retriever or no query.</summary>
-    private async Task<IReadOnlyList<MemoryHit>> RecallAsync(string? query, CancellationToken cancellationToken)
+    /// budget), or its light form (hybrid search on the message as written, half the budget);
+    /// empty when there is no retriever or no query.</summary>
+    private async Task<IReadOnlyList<MemoryHit>> RecallAsync(string? query, bool light, CancellationToken cancellationToken)
     {
         if (retriever is null || string.IsNullOrWhiteSpace(query))
             return [];
 
+        var budgetChars = options.RecallBudgetTokens * CharsPerToken;
         return await retriever
             .RetrieveAsync(
                 query, options.RecallScopes, options.RecallTopK, options.RecallThreshold,
-                budgetChars: options.RecallBudgetTokens * CharsPerToken, cancellationToken)
+                budgetChars: light ? budgetChars / 2 : budgetChars, light, cancellationToken)
             .ConfigureAwait(false);
     }
 }

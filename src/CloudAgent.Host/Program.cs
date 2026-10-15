@@ -220,6 +220,14 @@ void AttachLogging(AgentLoop loop, string label)
     };
     loop.ToolInvoked += (call, result) =>
         Console.WriteLine($"  ⚙ [{label}] {call.Name} -> {(result.Success ? "ok" : "error")}");
+    loop.Routed += d =>
+    {
+        var applied = $"memory {d.Memory}, tools {(d.Categories.Count == 0 ? "core only" : string.Join(", ", d.Categories.Order()))}";
+        var note = d.FellBack ? " (router failed, full pipeline)"
+            : d.Shadow ? $" (shadow; router chose memory {d.ProposedMemory}, tools {string.Join(", ", d.ProposedCategories.Order())})"
+            : "";
+        Console.WriteLine($"  🧭 [{label}] {applied}{note}, decided in {d.Elapsed.TotalMilliseconds:0} ms");
+    };
     loop.TurnFailed += (i, ex) => Console.Error.WriteLine($"  ✖ [{label}] turn {i} failed: {ex.GetType().Name}: {ex.Message}");
     loop.Compacted += n => Console.WriteLine($"  🧠 [{label}] compacted {n} turn(s)");
     loop.MemoriesRecalled += n => Console.WriteLine($"  🧠 [{label}] recalled {n} memor(ies)");
@@ -236,6 +244,41 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
+// Context routing: a decision model chooses per turn how much memory to recall and which tool
+// categories to offer. Off by default; every uncertain or failed decision runs the full pipeline.
+var routingOptions = new RoutingOptions
+{
+    ToolCategories = new Dictionary<string, string>
+    {
+        ["web_search"] = "web", ["fetch_url"] = "web", ["ask_page"] = "web", ["read_page"] = "web",
+        ["read_file"] = "files", ["write_file"] = "files", ["list_directory"] = "files",
+        ["create_directory"] = "files", ["delete_path"] = "files", ["index_workspace"] = "files",
+        ["search_index"] = "files", ["summarize_file"] = "files",
+        ["todo_list"] = "tasks", ["todo_add"] = "tasks", ["todo_complete"] = "tasks",
+        ["todo_remove"] = "tasks", ["todo_clear"] = "tasks",
+        ["spawn_agent"] = "agents", ["delegate_task"] = "agents", ["list_agents"] = "agents",
+        ["reply_to_agent"] = "agents", ["stop_agent"] = "agents",
+        ["list_consolidations"] = "consolidation", ["apply_consolidation"] = "consolidation",
+    },
+    CategoryDescriptions = new Dictionary<string, string>
+    {
+        ["web"] = "searching the web or reading a web page",
+        ["files"] = "reading, writing, listing, or searching files in the agent's workspace",
+        ["tasks"] = "the agent's task list",
+        ["agents"] = "delegating work to other agents or managing them",
+        ["consolidation"] = "reviewing or applying proposed long-term memory changes",
+    },
+    LedgerPath = Path.Combine(workspace.Root, ".agent", "routing.jsonl"),
+};
+IDecisionModel? decisionModel = config.ContextRouting switch
+{
+    "generative" when !isEcho => new GenerativeDecisionModel(provider, smallModel),
+    _ => null,
+};
+
+ContextRouter? BuildRouter(MemoryManager memory) =>
+    decisionModel is null ? null : new ContextRouter(decisionModel, routingOptions, () => memory.Store.Count);
+
 // Multi-agent: a bus + orchestrator so any agent can spawn children that run concurrently.
 var bus = new AgentBus(cts.Token);
 bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Status}");
@@ -245,7 +288,7 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id);
     childTools.Register(new RememberTool(mem));
     var attention = BuildAttention(childOptions.SystemPrompt, retriever, $"child {child.Role}");
-    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, attention, utility);
+    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, attention, utility, BuildRouter(mem));
     AttachLogging(loop, $"child {child.Role}");
     return loop;
 };
@@ -275,7 +318,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new StopAgentTool(bus));
 
     var attention = BuildAttention(options.SystemPrompt, retriever, handle.Id);
-    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, attention, utility);
+    var loop = new AgentLoop(provider, options, input, new AgentContext(), agentTools, comp, attention, utility, BuildRouter(mem));
     AttachLogging(loop, handle.Id);
     return new AgentConversation(queue, loop);
 }
@@ -362,6 +405,7 @@ Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
+Console.WriteLine($"Routing:   {decisionModel?.Name ?? "off (full pipeline every turn)"}");
 Console.WriteLine($"Turns:     {(config.TurnTakingEnabled ? $"bursts (wait {turnTaking.DefaultWait.TotalSeconds:0.#}s until measured; cli immediate)" : "one message per turn")}");
 
 await router.RunAsync(cts.Token);

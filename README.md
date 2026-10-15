@@ -94,6 +94,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
+| `CONTEXT_ROUTING` | `generative` lets the background model choose per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)); decisions go to `.agent/routing.jsonl` | `off` |
 
 ## The loop
 

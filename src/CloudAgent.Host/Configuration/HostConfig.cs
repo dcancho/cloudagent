@@ -21,6 +21,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="WebchatEnabled">Whether to start the web-chat surface (<c>WEBCHAT=1</c>).</param>
 /// <param name="WebchatPort">Web-chat port (<c>WEBCHAT_PORT</c>) when enabled.</param>
 /// <param name="TurnTakingEnabled">Group messages into bursts before the agent answers (<c>TURN_TAKING</c>, on unless <c>0</c>).</param>
+/// <param name="ContextRouting">How each turn's pipeline is chosen (<c>CONTEXT_ROUTING</c>): <c>off</c> runs all of it,
+/// <c>generative</c> asks the background chat model.</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -32,7 +34,8 @@ public sealed record HostConfig(
     string? DiscordBotToken,
     bool WebchatEnabled,
     int WebchatPort,
-    bool TurnTakingEnabled)
+    bool TurnTakingEnabled,
+    string ContextRouting)
 {
     public const int DefaultMemoryBudgetTokens = 8000;
     public const int DefaultSleepIntervalMinutes = 30;
@@ -72,6 +75,7 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN"),
             webchatEnabled,
             webchatPort,
-            !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal));
+            !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal),
+            (Environment.GetEnvironmentVariable("CONTEXT_ROUTING") ?? "off").Trim().ToLowerInvariant());
     }
 }
