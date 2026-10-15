@@ -51,6 +51,33 @@ published as it is today; in shared mode, only explicit publishing is.
 - It makes silent work, such as taking notes about an exchange, a normal outcome instead of a
   workaround.
 
+## Streaming
+
+Streaming is a question about publishing, so it belongs here: what reaches the person while a
+turn is still running.
+
+- **In direct mode,** the text the model writes is published, so it can be streamed as it is
+  generated. A turn that ends in tool calls may stream some text first; that text is published
+  like any other.
+- **In shared mode,** only `say` publishes, so what streams is the argument of a `say` call while
+  the model writes it. That needs the provider to stream tool-call arguments and the conversation
+  to extract the text from partial JSON. It is harder, and it is the reason streaming waits for
+  this proposal rather than being bolted onto today's loop.
+
+Surfaces declare streaming as a capability, like typing:
+
+| Surface | How a growing message is shown |
+| --- | --- |
+| Web chat | New frames: start, delta, end |
+| Discord | Edit the sent message, at a pace that respects rate limits |
+| Telegram | Edit the sent message, likewise |
+| Console | Print as text arrives |
+
+Streaming only shortens the wait for the part of a turn that is generation. Measured on the
+first runs, most of a turn was spent in sequential calls before any answer was written: query
+rewriting, reranking, and the main pass, twice when a tool was used. Those are addressed by
+[context routing](context-routing.md), which comes first.
+
 ## Alternatives considered
 
 - **A sentinel for silence, such as a reserved reply that means "no message".** Fragile: it relies
@@ -61,7 +88,7 @@ published as it is today; in shared mode, only explicit publishing is.
 
 ## Open questions
 
-- Does a long turn stream partial text, and what is published while it runs?
+- Should a streamed message that turns out to be wrong mid-turn be edited, or left and corrected?
 - How do subagents fit? They already report through `report_progress` and `finish`, so they may
   keep their own channel.
 - Should internal text count toward the working-memory budget the same as published text?

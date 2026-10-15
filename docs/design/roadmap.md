@@ -7,6 +7,8 @@ harnesses kept outside the repository. The repository has no test project yet.
 
 - Provider seam with offline, Anthropic, and Foundry implementations.
 - Tool calling with a bounded inner loop; file, web, index, memory, and taskboard tools.
+- Web reading at three levels of detail (summary, query with checked quotes, source), the first
+  implementation of the [fidelity ladder](proposals/fidelity-ladder.md).
 - Semantic indexing of the workspace.
 - Scoped memory in SQLite with hybrid retrieval, reranking, and a recall budget.
 - Working-memory compaction with episodic archival, typed operational state, and structural
@@ -45,6 +47,12 @@ harnesses kept outside the repository. The repository has no test project yet.
 - **Turns that do not end in a message.** See the
   [thinking without speaking](proposals/thinking-without-speaking.md) proposal. Suggested build
   order for these three: thinking without speaking, then participation, then people.
+- **Context routing.** A decision model chooses per turn whether to recall memory and which tool
+  definitions to send, failing open when unsure. See the
+  [context routing](proposals/context-routing.md) proposal. It comes before streaming, because
+  measured turns spend most of their time in sequential calls, not in generation.
+- **Streaming.** Publishing a reply as it is generated, as a surface capability. Covered in the
+  [thinking without speaking](proposals/thinking-without-speaking.md) proposal.
 - **Threshold tuning.** The sleep job's defaults are placeholders awaiting real ledger data.
 - **Consolidation policy review.** The policy is a draft.
 
