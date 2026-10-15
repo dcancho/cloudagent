@@ -23,7 +23,9 @@ Proposals are ideas that are reasoned through but not built. Each states its sta
 - [Participation](proposals/participation.md): taking turns, from knowing when someone has finished
   to deciding whether to speak in a group.
 - [Thinking without speaking](proposals/thinking-without-speaking.md): a turn that does not
-  have to end in a message.
+  have to end in a message, and what streaming publishes.
+- [Context routing](proposals/context-routing.md): a decision model chooses how much of the
+  pipeline each turn needs, and falls back to all of it when unsure.
 - [Fidelity ladder](proposals/fidelity-ladder.md): perceiving a source as a summary, a query, or
   the source itself, and climbing only as far as needed.
 
