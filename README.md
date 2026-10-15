@@ -104,6 +104,24 @@ input source returning nothing means the agent keeps running on its own initiati
 name, description, declared parameters, and an invoke method. `ISurface` is one channel to the
 world. Each is a small interface with several implementations behind it.
 
+## Tools
+
+Files in the workspace, web search, the semantic index and summaries, a taskboard, memory, and
+subagents. Web pages are read at three levels of detail, following the
+[fidelity ladder](docs/design/proposals/fidelity-ladder.md):
+
+| Tool | Returns |
+| --- | --- |
+| `fetch_url` | A summary focused on the stated purpose, the page's sections, and a `page_id` |
+| `ask_page` | An answer to one question, with verbatim quotes checked against the page |
+| `read_page` | The readable text, by section or in windows |
+
+Pages are fetched over plain HTTP and converted to markdown; raw HTML never reaches the model.
+Pages that only render with JavaScript are reported, not guessed at. The fetcher sends an honest
+user agent, follows robots.txt, paces requests per host, and refuses to connect to loopback,
+private, or link-local addresses. Fetched pages are cached for a day under `.agent/web`, and
+everything from a page is marked as untrusted content.
+
 ## Subagents
 
 Subagents run concurrently. Each is an `AgentLoop` with its own context, its own memory, and a
