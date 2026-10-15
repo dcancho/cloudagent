@@ -31,6 +31,7 @@ public sealed class MemoryRetriever(
     /// Retrieve the memories to inject for a turn. <paramref name="topK"/> and
     /// <paramref name="threshold"/> drive the fallback selection when no reranker decides;
     /// <paramref name="budgetChars"/> caps the total injected content (0 = unlimited).
+    /// <paramref name="light"/> skips the query rewrite and the rerank, the two model calls.
     /// </summary>
     public async Task<IReadOnlyList<MemoryHit>> RetrieveAsync(
         string query,
@@ -38,9 +39,10 @@ public sealed class MemoryRetriever(
         int topK,
         double threshold,
         int budgetChars,
+        bool light = false,
         CancellationToken cancellationToken = default)
     {
-        var searchQuery = rewriter is null
+        var searchQuery = rewriter is null || light
             ? query
             : await rewriter.RewriteAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -50,7 +52,7 @@ public sealed class MemoryRetriever(
         if (candidates.Count == 0)
             return [];
 
-        var selected = await SelectAsync(query, candidates, topK, threshold, cancellationToken)
+        var selected = await SelectAsync(query, candidates, topK, threshold, useReranker: !light, cancellationToken)
             .ConfigureAwait(false);
 
         return ApplyBudget(selected, budgetChars);
@@ -61,9 +63,10 @@ public sealed class MemoryRetriever(
         IReadOnlyList<MemoryHit> candidates,
         int topK,
         double threshold,
+        bool useReranker,
         CancellationToken cancellationToken)
     {
-        if (reranker is not null)
+        if (reranker is not null && useReranker)
         {
             // The reranker judges against the ORIGINAL turn, not the rewritten query — the
             // rewrite optimizes matching, but usefulness is about what the turn needs.

@@ -21,6 +21,11 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="WebchatEnabled">Whether to start the web-chat surface (<c>WEBCHAT=1</c>).</param>
 /// <param name="WebchatPort">Web-chat port (<c>WEBCHAT_PORT</c>) when enabled.</param>
 /// <param name="TurnTakingEnabled">Group messages into bursts before the agent answers (<c>TURN_TAKING</c>, on unless <c>0</c>).</param>
+/// <param name="ContextRouting">How each turn's pipeline is chosen (<c>CONTEXT_ROUTING</c>): <c>off</c> runs all of it,
+/// <c>decision</c> asks the Foundry decision model, <c>generative</c> asks the background chat model. Defaults to
+/// <c>decision</c> when a decision endpoint is configured, otherwise <c>off</c>.</param>
+/// <param name="DecisionsEndpoint">Foundry decision API endpoint (<c>FOUNDRY_DECISIONS_ENDPOINT</c>).</param>
+/// <param name="DecisionsModel">Decision model deployment name (<c>DECISIONS_MODEL</c>).</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -32,7 +37,10 @@ public sealed record HostConfig(
     string? DiscordBotToken,
     bool WebchatEnabled,
     int WebchatPort,
-    bool TurnTakingEnabled)
+    bool TurnTakingEnabled,
+    string ContextRouting,
+    Uri? DecisionsEndpoint,
+    string? DecisionsModel)
 {
     public const int DefaultMemoryBudgetTokens = 8000;
     public const int DefaultSleepIntervalMinutes = 30;
@@ -61,6 +69,12 @@ public sealed record HostConfig(
             ? wp
             : DefaultWebchatPort;
 
+        var decisionsEndpoint = Uri.TryCreate(
+            Environment.GetEnvironmentVariable("FOUNDRY_DECISIONS_ENDPOINT"), UriKind.Absolute, out var de) ? de : null;
+        var decisionsModel = Environment.GetEnvironmentVariable("DECISIONS_MODEL");
+        var routing = Environment.GetEnvironmentVariable("CONTEXT_ROUTING")?.Trim().ToLowerInvariant()
+            ?? (decisionsEndpoint is not null && !string.IsNullOrWhiteSpace(decisionsModel) ? "decision" : "off");
+
         return new HostConfig(
             LlmConfig.FromEnvironment(),
             workspaceRoot,
@@ -72,6 +86,9 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN"),
             webchatEnabled,
             webchatPort,
-            !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal));
+            !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal),
+            routing,
+            decisionsEndpoint,
+            decisionsModel);
     }
 }

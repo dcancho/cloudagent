@@ -17,6 +17,8 @@ public interface IAttentionManager
     /// <summary>Assemble the prompt inputs for one turn.</summary>
     /// <param name="context">Working context — read for operational state and rolling summary.</param>
     /// <param name="query">The recall query, typically the latest user turn; null/blank skips recall.</param>
+    /// <param name="memory">How much of the memory pipeline to run (see <see cref="ContextRouter"/>).</param>
     Task<AssembledContext> AssembleAsync(
-        AgentContext context, string? query, CancellationToken cancellationToken = default);
+        AgentContext context, string? query, MemoryLevel memory = MemoryLevel.Full,
+        CancellationToken cancellationToken = default);
 }

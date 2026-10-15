@@ -25,9 +25,10 @@ public sealed class MetacognitiveAttentionManager(
     Action<MemoryHit>? onSuppressed = null) : IAttentionManager
 {
     public async Task<AssembledContext> AssembleAsync(
-        AgentContext context, string? query, CancellationToken cancellationToken = default)
+        AgentContext context, string? query, MemoryLevel memory = MemoryLevel.Full,
+        CancellationToken cancellationToken = default)
     {
-        var assembled = await inner.AssembleAsync(context, query, cancellationToken).ConfigureAwait(false);
+        var assembled = await inner.AssembleAsync(context, query, memory, cancellationToken).ConfigureAwait(false);
         if (assembled.InjectedMemories.Count == 0)
             return assembled;
 

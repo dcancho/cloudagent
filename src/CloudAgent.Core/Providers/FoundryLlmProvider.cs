@@ -28,6 +28,13 @@ public sealed class FoundryLlmProvider : ILlmProvider
     /// </summary>
     private const int MinReasoningBudget = 4096;
 
+    /// <summary>
+    /// Some OpenAI models emit citation placeholders delimited by private-use characters
+    /// (U+E200 to U+E201) that refer to a search tool of their own platform; they mean nothing here.
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex CitationMarkers =
+        new("[^]*", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private readonly ChatCompletionsClient _client;
     private readonly string? _defaultModel;
     private readonly ConcurrentDictionary<string, ModelQuirks> _quirks = new();
@@ -200,7 +207,7 @@ public sealed class FoundryLlmProvider : ILlmProvider
         };
 
         return new LlmResponse(
-            completion.Content ?? string.Empty,
+            CitationMarkers.Replace(completion.Content ?? string.Empty, string.Empty),
             stopReason,
             completion.Usage?.PromptTokens,
             completion.Usage?.CompletionTokens)

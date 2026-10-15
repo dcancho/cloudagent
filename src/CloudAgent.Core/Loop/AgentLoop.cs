@@ -27,6 +27,14 @@ public sealed class AgentLoop
     private readonly ContextCompactor? _compactor;
     private readonly Attention.IAttentionManager _attention;
     private readonly Memory.UtilityTracker? _utility;
+    private readonly Attention.ContextRouter? _router;
+
+    /// <summary>This turn's routing decision, the tools it used, and how many recalled memories helped.</summary>
+    private Attention.RoutingDecision? _decision;
+    private readonly List<string> _turnTools = [];
+    private int? _turnUseful;
+
+    private const string RequestToolsName = "request_tools";
 
     /// <summary>What attention assembled for the current turn: system prefix, volatile context,
     /// and the injected hits (kept for the feedback loop's recording and post-turn judging).</summary>
@@ -40,7 +48,8 @@ public sealed class AgentLoop
         ToolRegistry? tools = null,
         ContextCompactor? compactor = null,
         Attention.IAttentionManager? attention = null,
-        Memory.UtilityTracker? utility = null)
+        Memory.UtilityTracker? utility = null,
+        Attention.ContextRouter? router = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _options = options ?? new AgentOptions();
@@ -52,6 +61,7 @@ public sealed class AgentLoop
         _attention = attention ?? new Attention.ContextAssembler(
             _options.SystemPrompt, retriever: null, new Attention.AttentionOptions());
         _utility = utility;
+        _router = router;
     }
 
     public AgentContext Context => _context;
@@ -79,6 +89,9 @@ public sealed class AgentLoop
 
     /// <summary>Raised when an iteration failed, with the iteration number and the error. The loop keeps running.</summary>
     public event Action<int, Exception>? TurnFailed;
+
+    /// <summary>Raised when the context router decided how much of the pipeline this turn runs.</summary>
+    public event Action<Attention.RoutingDecision>? Routed;
 
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
@@ -117,10 +130,20 @@ public sealed class AgentLoop
 
             try
             {
+                // 1.5. Routing: decide how much memory to recall and which tools to offer this turn.
+                _turnTools.Clear();
+                _turnUseful = null;
+                _decision = _router is null
+                    ? null
+                    : await _router.RouteAsync(_context, cancellationToken).ConfigureAwait(false);
+                if (_decision is not null)
+                    Routed?.Invoke(_decision);
+
                 // 2. Attention: assemble what reaches the model this turn (residents, state, summary,
                 // recalled memories). Attention returns the injected hits; the loop feeds the ledger.
                 _assembled = await _attention
-                    .AssembleAsync(_context, LatestUserText(), cancellationToken).ConfigureAwait(false);
+                    .AssembleAsync(_context, LatestUserText(), _decision?.Memory ?? Attention.MemoryLevel.Full, cancellationToken)
+                    .ConfigureAwait(false);
                 if (_assembled.InjectedMemories.Count > 0)
                 {
                     await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);
@@ -135,6 +158,8 @@ public sealed class AgentLoop
 
                 // 4. Keep working memory under budget; evicted turns become episodic memory.
                 await CompactAsync(cancellationToken).ConfigureAwait(false);
+
+                RecordRoutingOutcome();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -152,10 +177,12 @@ public sealed class AgentLoop
 
     private async Task ThinkAndActAsync(int iteration, CancellationToken cancellationToken)
     {
-        var toolDefinitions = _tools?.GetDefinitions() ?? [];
+        var allDefinitions = _tools?.GetDefinitions() ?? [];
+        var offered = _decision is null ? null : new HashSet<string>(_decision.Categories);
 
         for (var hop = 0; ; hop++)
         {
+            var toolDefinitions = SelectTools(allDefinitions, offered);
             var request = new LlmRequest
             {
                 System = _assembled!.System,
@@ -187,7 +214,10 @@ public sealed class AgentLoop
             // Run each requested tool and feed its result back as a tool message.
             foreach (var call in response.ToolCalls)
             {
-                var result = await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
+                _turnTools.Add(call.Name);
+                var result = call.Name == RequestToolsName && offered is not null
+                    ? RequestTools(call, offered)
+                    : await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
                 var content = result.Success ? result.Content : $"ERROR: {result.Error}";
                 content = JsonTruncator.Truncate(content, _options.MaxToolResultChars);
                 _context.Add(Message.ToolResult(call.Id, call.Name, content));
@@ -241,7 +271,10 @@ public sealed class AgentLoop
                 .JudgeTurnAsync(_assembled.InjectedMemories, LatestUserText(), reply, iteration, cancellationToken)
                 .ConfigureAwait(false);
             if (useful is int count)
+            {
+                _turnUseful = count;
                 UtilityJudged?.Invoke(count, _assembled.InjectedMemories.Count);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -296,6 +329,87 @@ public sealed class AgentLoop
         catch
         {
             // Compaction is best-effort; a summariser hiccup must not kill the loop.
+        }
+    }
+
+    /// <summary>
+    /// The tools offered this pass: everything without routing; otherwise the tools in offered
+    /// categories, the uncategorized ones, and <c>request_tools</c> while anything is held back.
+    /// </summary>
+    private IReadOnlyList<ToolDefinition> SelectTools(IReadOnlyList<ToolDefinition> all, HashSet<string>? offered)
+    {
+        if (offered is null || _router is null)
+            return all;
+
+        var selected = new List<ToolDefinition>();
+        var withheld = new SortedSet<string>();
+        foreach (var definition in all)
+        {
+            var category = _router.CategoryOf(definition.Name);
+            if (category is null || offered.Contains(category))
+                selected.Add(definition);
+            else
+                withheld.Add(category);
+        }
+
+        if (withheld.Count > 0)
+            selected.Add(RequestToolsDefinition(withheld));
+        return selected;
+    }
+
+    private static ToolDefinition RequestToolsDefinition(IEnumerable<string> withheld) => new(
+        RequestToolsName,
+        $"Make more tools available for the rest of this turn. Categories not offered now: {string.Join(", ", withheld)}.",
+        new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["categories"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "Comma-separated category names.",
+                },
+            },
+            ["required"] = new System.Text.Json.Nodes.JsonArray("categories"),
+        });
+
+    private ToolResult RequestTools(ToolCall call, HashSet<string> offered)
+    {
+        string requested;
+        try
+        {
+            requested = ToolInput.FromJson(string.IsNullOrWhiteSpace(call.Arguments) ? "{}" : call.Arguments)
+                .GetString("categories");
+        }
+        catch (Exception ex)
+        {
+            return ToolResult.Fail(ex.Message);
+        }
+
+        var added = requested
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(c => _router!.Categories.Contains(c) && offered.Add(c))
+            .ToList();
+        return ToolResult.Ok(added.Count == 0
+            ? "Those categories were already available or do not exist."
+            : $"Now available: {string.Join(", ", added)}.");
+    }
+
+    private void RecordRoutingOutcome()
+    {
+        if (_router is null || _decision is null)
+            return;
+
+        try
+        {
+            _router.RecordOutcome(
+                _decision, _turnTools.Where(t => t != RequestToolsName).ToList(),
+                _assembled?.InjectedMemories.Count ?? 0, _turnUseful);
+        }
+        catch
+        {
+            // the routing record is best-effort; it must not affect the turn
         }
     }
 
