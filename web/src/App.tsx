@@ -1,12 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
-import { Composer, Icon, MessageBubble, StatusTag, TypingIndicator } from './lucent'
+import { Composer, Icon, IconButton, MessageBubble, StatusTag, TypingIndicator } from './lucent'
 import { Markdown } from './Markdown'
 
 type Msg = { role: 'user' | 'assistant'; text: string }
 
-type Frame = { type: 'message'; text: string } | { type: 'typing' } | { type: string; text?: string }
+type Frame =
+  | { type: 'message'; text: string }
+  | { type: 'typing' }
+  | { type: 'welcome'; conversation: string }
+  | { type: 'history'; messages: Msg[] }
 
 const WS_URL = (import.meta.env.VITE_AGENT_WS as string | undefined) ?? 'ws://localhost:5080/ws'
+const CONVERSATION_KEY = 'cloudagent.conversation'
+
+function storedConversation(): string | undefined {
+  try {
+    return localStorage.getItem(CONVERSATION_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function storeConversation(id: string | null) {
+  try {
+    if (id) localStorage.setItem(CONVERSATION_KEY, id)
+    else localStorage.removeItem(CONVERSATION_KEY)
+  } catch {
+    // Without storage the conversation simply does not survive a reload.
+  }
+}
 
 const TYPING_PING_MS = 2000
 const AGENT_TYPING_MS = 6000
@@ -31,24 +53,33 @@ function App() {
   const logRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<number | undefined>(undefined)
   const lastTypingPing = useRef(0)
+  const [session, setSession] = useState(0)
 
   useEffect(() => {
     const ws = new WebSocket(WS_URL)
     wsRef.current = ws
     ws.onopen = () => {
       setConnected(true)
-      ws.send(JSON.stringify({ type: 'hello', protocol: 2 }))
+      ws.send(JSON.stringify({ type: 'hello', protocol: 2, conversation: storedConversation() }))
     }
     ws.onclose = () => setConnected(false)
     ws.onmessage = (e) => {
       const frame = parseFrame(String(e.data))
+      if (frame.type === 'welcome') {
+        storeConversation(frame.conversation)
+        return
+      }
+      if (frame.type === 'history') {
+        setMessages(frame.messages)
+        return
+      }
       if (frame.type === 'typing') {
         setAgentTyping(true)
         window.clearTimeout(typingTimer.current)
         typingTimer.current = window.setTimeout(() => setAgentTyping(false), AGENT_TYPING_MS)
         return
       }
-      if (frame.type === 'message' && typeof frame.text === 'string') {
+      if (frame.type === 'message') {
         const text = frame.text
         window.clearTimeout(typingTimer.current)
         setAgentTyping(false)
@@ -59,7 +90,14 @@ function App() {
       window.clearTimeout(typingTimer.current)
       ws.close()
     }
-  }, [])
+  }, [session])
+
+  function newConversation() {
+    storeConversation(null)
+    setMessages([])
+    setAgentTyping(false)
+    setSession((s) => s + 1)
+  }
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
@@ -90,6 +128,7 @@ function App() {
         <Icon name="smart_toy" />
         <h1 className="app__title">CloudAgent</h1>
         <StatusTag status={connected ? 'success' : 'neutral'}>{connected ? 'Connected' : 'Offline'}</StatusTag>
+        <IconButton icon="add_comment" label="New conversation" onClick={newConversation} />
       </header>
 
       <div className="app__log" ref={logRef}>
