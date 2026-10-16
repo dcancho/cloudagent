@@ -17,7 +17,6 @@ namespace CloudAgent.Core.Loop;
 public sealed class AgentLoop
 {
     /// <summary>Safety bound on tool calls within a single iteration, to avoid runaway loops.</summary>
-    private const int MaxToolHopsPerIteration = 10;
 
     private readonly ILlmProvider _provider;
     private readonly AgentOptions _options;
@@ -202,10 +201,18 @@ public sealed class AgentLoop
         for (var hop = 0; ; hop++)
         {
             var toolDefinitions = SelectTools(allDefinitions, offered);
+            var lastStep = hop >= _options.MaxToolSteps;
+            var ephemeral = _assembled!.EphemeralContext;
+            if (lastStep)
+            {
+                var limit = $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now. " +
+                            "Reply to the person: what you did, what is left, and what you need from them to continue.";
+                ephemeral = string.IsNullOrWhiteSpace(ephemeral) ? limit : $"{ephemeral}\n\n{limit}";
+            }
             var request = new LlmRequest
             {
-                System = _assembled!.System,
-                EphemeralContext = _assembled.EphemeralContext,
+                System = _assembled.System,
+                EphemeralContext = ephemeral,
                 Messages = _context.Messages,
                 Model = _options.Model,
                 MaxTokens = _options.MaxTokens,
@@ -215,6 +222,21 @@ public sealed class AgentLoop
 
             var response = await _provider.CompleteAsync(request, cancellationToken).ConfigureAwait(false);
 
+            // Out of steps, the turn ends in a reply even if the model asked for more tools anyway;
+            // those calls are dropped so the history never holds a call without a result.
+            if (lastStep && response.HasToolCalls)
+            {
+                response = new LlmResponse(
+                    string.IsNullOrWhiteSpace(response.Text)
+                        ? $"I used all {_options.MaxToolSteps} tool steps I have for one turn before finishing. Tell me to continue and I will pick up from here."
+                        : response.Text,
+                    response.StopReason, response.InputTokens, response.OutputTokens)
+                {
+                    CacheReadTokens = response.CacheReadTokens,
+                    CacheWriteTokens = response.CacheWriteTokens,
+                };
+            }
+
             // Record the assistant turn (text plus any tool calls it requested).
             _context.Add(Message.Assistant(response.Text, response.ToolCalls));
             ResponseReceived?.Invoke(iteration, response);
@@ -222,13 +244,6 @@ public sealed class AgentLoop
             // No tools requested (or none available) — the turn is done.
             if (!response.HasToolCalls || _tools is null)
                 return;
-
-            if (hop >= MaxToolHopsPerIteration)
-            {
-                _context.AddUser(
-                    $"[harness] Tool-call limit ({MaxToolHopsPerIteration}) reached; stopping this turn.");
-                return;
-            }
 
             // Run each requested tool and feed its result back as a tool message.
             foreach (var call in response.ToolCalls)

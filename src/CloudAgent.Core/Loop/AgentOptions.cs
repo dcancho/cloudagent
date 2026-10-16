@@ -41,4 +41,10 @@ public sealed class AgentOptions
     /// marker. 0 disables the cap.
     /// </summary>
     public int MaxToolResultChars { get; init; } = 16_000;
+
+    /// <summary>
+    /// Rounds of tool calls one turn may take. When they run out, the agent answers with what it
+    /// has instead of calling more tools.
+    /// </summary>
+    public int MaxToolSteps { get; init; } = 10;
 }

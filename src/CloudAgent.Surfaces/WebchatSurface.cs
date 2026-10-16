@@ -28,17 +28,21 @@ namespace CloudAgent.Surfaces;
 /// earlier conversation; the server answers with <c>welcome</c> (the conversation id to keep) and, when
 /// there is one, <c>history</c> (the messages so far). A <c>list</c> frame is answered with
 /// <c>conversations</c>: every web chat conversation, most recent first. A <c>delete</c> frame naming a
-/// <c>conversation</c> deletes it and is answered with <c>conversations</c>.
+/// <c>conversation</c> deletes it and is answered with <c>conversations</c>. A hello that starts a new
+/// conversation may name a <c>workspace</c> for it to work in; <c>welcome</c> carries the conversation's
+/// workspace and the ones available, and each listed conversation carries its own.
 /// </summary>
 /// <param name="port">Port to listen on, on localhost.</param>
 /// <param name="history">The messages so far in a conversation, by conversation id.</param>
 /// <param name="conversations">Every web chat conversation, most recent first.</param>
 /// <param name="delete">Deletes a conversation by id.</param>
+/// <param name="workspaces">The workspaces a conversation can work in, and which one each uses.</param>
 public sealed class WebchatSurface(
     int port = 5080,
     Func<string, IReadOnlyList<(string Role, string Text)>>? history = null,
     Func<IReadOnlyList<ConversationSummary>>? conversations = null,
-    Func<string, Task<bool>>? delete = null) : ITypingSource, ITypingIndicator
+    Func<string, Task<bool>>? delete = null,
+    WebchatWorkspaces? workspaces = null) : ITypingSource, ITypingIndicator
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(4);
 
@@ -166,7 +170,7 @@ public sealed class WebchatSurface(
     /// The conversation a connection belongs to, and whether its first frame was only a hello. A hello
     /// may name an existing conversation to continue it; anything else starts a new one.
     /// </summary>
-    private static (string Id, bool Consumed) Bind(Client client, string frame)
+    private (string Id, bool Consumed) Bind(Client client, string frame)
     {
         if (frame.StartsWith('{'))
         {
@@ -176,7 +180,14 @@ public sealed class WebchatSurface(
                 {
                     client.Typed = true;
                     var requested = json["conversation"]?.GetValue<string>();
-                    return (requested is not null && IsValidId(requested) ? requested : NewId(), true);
+                    if (requested is not null && IsValidId(requested))
+                        return (requested, true);
+
+                    var id = NewId();
+                    var workspace = json["workspace"]?.GetValue<string>();
+                    if (workspaces is not null && workspace is not null && workspaces.Names.Contains(workspace))
+                        workspaces.Bind(id, workspace);
+                    return (id, true);
                 }
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
@@ -189,8 +200,13 @@ public sealed class WebchatSurface(
 
     private async Task WelcomeAsync(Client client, string conversationId, CancellationToken cancellationToken)
     {
-        await client.SendAsync(
-            new JsonObject { ["type"] = "welcome", ["conversation"] = conversationId }.ToJsonString(), cancellationToken);
+        var welcome = new JsonObject { ["type"] = "welcome", ["conversation"] = conversationId };
+        if (workspaces is not null)
+        {
+            welcome["workspace"] = workspaces.Of(conversationId);
+            welcome["workspaces"] = new JsonArray(workspaces.Names.Select(n => (JsonNode)n).ToArray());
+        }
+        await client.SendAsync(welcome.ToJsonString(), cancellationToken);
 
         var past = history?.Invoke(conversationId) ?? [];
         if (past.Count == 0)
@@ -210,6 +226,7 @@ public sealed class WebchatSurface(
                 ["id"] = c.Id,
                 ["title"] = c.Title,
                 ["updatedAt"] = c.UpdatedAt.ToString("O"),
+                ["workspace"] = workspaces?.Of(c.Id),
             })
             .ToArray());
         return client.SendAsync(new JsonObject { ["type"] = "conversations", ["items"] = items }.ToJsonString(), cancellationToken);
@@ -412,3 +429,10 @@ public sealed class WebchatSurface(
         </html>
         """;
 }
+
+/// <summary>The workspaces a web chat conversation can work in.</summary>
+/// <param name="Names">The workspaces a new conversation can choose.</param>
+/// <param name="Of">The workspace a conversation works in, by conversation id, or null for the default.</param>
+/// <param name="Bind">Records the workspace a new conversation chose.</param>
+public sealed record WebchatWorkspaces(
+    IReadOnlyList<string> Names, Func<string, string?> Of, Action<string, string> Bind);

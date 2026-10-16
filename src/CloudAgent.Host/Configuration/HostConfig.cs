@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace CloudAgent.Host.Configuration;
 
@@ -26,6 +28,9 @@ namespace CloudAgent.Host.Configuration;
 /// <c>decision</c> when a decision endpoint is configured, otherwise <c>off</c>.</param>
 /// <param name="DecisionsEndpoint">Foundry decision API endpoint (<c>FOUNDRY_DECISIONS_ENDPOINT</c>).</param>
 /// <param name="DecisionsModel">Decision model deployment name (<c>DECISIONS_MODEL</c>).</param>
+/// <param name="CodeRepos">Repositories a coding agent may work on (<c>CODE_REPOS</c>, <c>name=path</c> pairs
+/// separated by <c>;</c>).</param>
+/// <param name="CodeCommands">Programs a coding agent may run in them (<c>CODE_COMMANDS</c>, comma separated).</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -40,8 +45,12 @@ public sealed record HostConfig(
     bool TurnTakingEnabled,
     string ContextRouting,
     Uri? DecisionsEndpoint,
-    string? DecisionsModel)
+    string? DecisionsModel,
+    IReadOnlyList<CodeRepo> CodeRepos,
+    IReadOnlyList<string> CodeCommands)
 {
+    public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
+
     public const int DefaultMemoryBudgetTokens = 8000;
     public const int DefaultSleepIntervalMinutes = 30;
     public const int DefaultWebchatPort = 5080;
@@ -89,6 +98,23 @@ public sealed record HostConfig(
             !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal),
             routing,
             decisionsEndpoint,
-            decisionsModel);
+            decisionsModel,
+            CodeRepo.Parse(Environment.GetEnvironmentVariable("CODE_REPOS")),
+            Environment.GetEnvironmentVariable("CODE_COMMANDS") is { Length: > 0 } commands
+                ? commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                : DefaultCodeCommands);
     }
+}
+
+/// <summary>A repository a coding agent may work on, by the name people choose it with.</summary>
+public sealed record CodeRepo(string Name, string Path)
+{
+    /// <summary>Parse <c>name=path</c> pairs separated by <c>;</c>; malformed pairs are skipped.</summary>
+    public static IReadOnlyList<CodeRepo> Parse(string? value) =>
+        (value ?? "")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(pair => pair.Split('=', 2, StringSplitOptions.TrimEntries))
+            .Where(parts => parts.Length == 2 && parts[0].Length > 0 && parts[1].Length > 0)
+            .Select(parts => new CodeRepo(parts[0], parts[1]))
+            .ToList();
 }
