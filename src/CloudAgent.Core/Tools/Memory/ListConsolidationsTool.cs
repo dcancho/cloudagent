@@ -32,8 +32,11 @@ public sealed class ListConsolidationsTool(PendingConsolidations pending) : IToo
         foreach (var proposal in proposals)
         {
             sb.AppendLine($"Proposal {proposal.Id} ({proposal.At:u}, from {proposal.AgentId}):");
-            foreach (var fact in proposal.Facts)
-                sb.AppendLine($"  - [{fact.Scope}, {fact.Importance:0.00}] {fact.Fact} (evidence: {fact.Evidence})");
+            for (var i = 0; i < proposal.Facts.Count; i++)
+            {
+                var fact = proposal.Facts[i];
+                sb.AppendLine($"  {i + 1}. [{fact.Scope}, {fact.Importance:0.00}] {fact.Fact} (evidence: {fact.Evidence})");
+            }
             if (proposal.EpisodeSummary is not null)
                 sb.AppendLine($"  Summary replacing {proposal.Replaces.Count} episode(s): {proposal.EpisodeSummary}");
         }
