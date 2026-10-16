@@ -47,4 +47,10 @@ public sealed class AgentOptions
     /// has instead of calling more tools.
     /// </summary>
     public int MaxToolSteps { get; init; } = 10;
+
+    /// <summary>
+    /// The token budget this agent spends from, if any. Once it is spent, a turn in progress ends in
+    /// a reply without more tools, and later messages are answered without calling the model.
+    /// </summary>
+    public Providers.TokenBudget? Budget { get; init; }
 }
