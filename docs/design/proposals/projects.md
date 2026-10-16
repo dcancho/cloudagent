@@ -146,10 +146,13 @@ memory unchanged, and a review pass over its facts proposes which ones to promot
 - **Inferring the project from the conversation's content.** Wrong attributions would write team
   rules into the wrong project, where they are hard to notice.
 
+## Decided
+
+- **No level above projects.** Personal and project are the shared levels; an organization level is
+  out of scope.
+
 ## Open questions
 
-- Is a level above projects (an organization) needed, or is personal plus project enough until there
-  are several teams?
 - Can one fact belong to two projects, as a link rather than a copy?
 - Should each project have its own consolidation policy, or only its own instructions?
 - What happens to a project's memory when it is archived or deleted, and to conversations linked to
