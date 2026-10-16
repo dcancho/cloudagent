@@ -130,6 +130,21 @@ public sealed class AgentLoop
                 continue;
             }
 
+            // A spent token budget is answered without calling the model at all.
+            if (_options.Budget is { Exhausted: true } budget)
+            {
+                if (stimulus is not null)
+                {
+                    var text = $"I've used this workspace's token budget ({budget.Used:N0} of {budget.Limit:N0} tokens), " +
+                               "so I'm not doing more work until it is raised.";
+                    _context.Add(Message.Assistant(text, []));
+                    ResponseReceived?.Invoke(iteration, new LlmResponse(text));
+                    TurnEnded?.Invoke(iteration);
+                }
+                await DelayAsync(cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
             try
             {
                 // 1.5. Routing: decide how much memory to recall and which tools to offer this turn.
@@ -201,12 +216,15 @@ public sealed class AgentLoop
         for (var hop = 0; ; hop++)
         {
             var toolDefinitions = SelectTools(allDefinitions, offered);
-            var lastStep = hop >= _options.MaxToolSteps;
+            var outOfBudget = _options.Budget?.Exhausted == true;
+            var lastStep = hop >= _options.MaxToolSteps || outOfBudget;
             var ephemeral = _assembled!.EphemeralContext;
             if (lastStep)
             {
-                var limit = $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now. " +
-                            "Reply to the person: what you did, what is left, and what you need from them to continue.";
+                var reason = outOfBudget
+                    ? "This workspace has used its token budget, so you cannot call tools now and will not get another turn until it is raised."
+                    : $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now.";
+                var limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
                 ephemeral = string.IsNullOrWhiteSpace(ephemeral) ? limit : $"{ephemeral}\n\n{limit}";
             }
             var request = new LlmRequest
@@ -220,7 +238,15 @@ public sealed class AgentLoop
                 Tools = toolDefinitions,
             };
 
-            var response = await _provider.CompleteAsync(request, cancellationToken).ConfigureAwait(false);
+            LlmResponse response;
+            try
+            {
+                response = await _provider.CompleteAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Providers.TokenBudgetExceededException)
+            {
+                response = new LlmResponse("I've used this workspace's token budget before finishing, so I'm stopping here.");
+            }
 
             // Out of steps, the turn ends in a reply even if the model asked for more tools anyway;
             // those calls are dropped so the history never holds a call without a result.
@@ -228,7 +254,9 @@ public sealed class AgentLoop
             {
                 response = new LlmResponse(
                     string.IsNullOrWhiteSpace(response.Text)
-                        ? $"I used all {_options.MaxToolSteps} tool steps I have for one turn before finishing. Tell me to continue and I will pick up from here."
+                        ? outOfBudget
+                            ? "I've used this workspace's token budget before finishing, so I'm stopping here."
+                            : $"I used all {_options.MaxToolSteps} tool steps I have for one turn before finishing. Tell me to continue and I will pick up from here."
                         : response.Text,
                     response.StopReason, response.InputTokens, response.OutputTokens)
                 {

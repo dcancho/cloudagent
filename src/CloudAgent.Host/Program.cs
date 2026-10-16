@@ -50,7 +50,11 @@ meter.Completed += (m, r, elapsed) =>
     Console.WriteLine($"  🔢 {m}: {r.InputTokens ?? 0} in, {r.OutputTokens ?? 0} out, {elapsed.TotalMilliseconds:0} ms " +
                       $"(total {total.Calls} calls, {total.InputTokens} in, {total.OutputTokens} out)");
 };
-ILlmProvider provider = meter;
+// A token budget, when set, wraps every model call: the agents' turns and every background job.
+var budget = config.TokenBudget is { } limit
+    ? new TokenBudget(limit, Path.Combine(config.WorkspaceRoot, ".agent", "usage.json"))
+    : null;
+ILlmProvider provider = budget is null ? meter : new BudgetedLlmProvider(meter, budget);
 var model = config.Llm.Model;
 
 // The agent's world: a rooted area it may act within (env AGENT_WORKSPACE, else ./workspace).
@@ -146,6 +150,7 @@ var options = new AgentOptions
         "head: compute every figure you report with the calculate tool. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
+    Budget = budget,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
 };
 
@@ -157,6 +162,7 @@ var childOptions = new AgentOptions
         "result when done. Compute every figure you report with the calculate tool. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
+    Budget = budget,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
 };
 
@@ -211,6 +217,7 @@ AgentProfile BuildCodeProfile(string name, string root)
         SystemPrompt = basis.SystemPrompt + rules,
         Model = basis.Model,
         IterationDelay = basis.IterationDelay,
+        Budget = basis.Budget,
         WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
         MaxToolSteps = 40,
     };
@@ -524,6 +531,9 @@ if (!isEcho && sleepMinutes > 0)
                 break;
             }
 
+            if (budget is { Exhausted: true })
+                continue;
+
             foreach (var job in sleepJobs.Values)
             {
                 if (cts.Token.IsCancellationRequested)
@@ -560,6 +570,8 @@ Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")},
 Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");
 Console.WriteLine($"Models:    main '{model}', background '{smallModel}'");
+if (budget is not null)
+    Console.WriteLine($"Budget:    {budget.Used:N0} of {budget.Limit:N0} tokens used{(budget.Exhausted ? ", spent" : "")}");
 Console.WriteLine($"Sleep:     {(isEcho || sleepMinutes <= 0 ? "off" : $"every {sleepMinutes} min")}; " +
     $"pending proposals: {pendingConsolidations.List().Count}; ledger chain {(consolidationLedger.Verify() ? "OK" : "BROKEN")}");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
