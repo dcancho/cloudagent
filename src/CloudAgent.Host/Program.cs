@@ -103,9 +103,7 @@ workspaceTools
 
 // Memory paths: Personal is user-global, Project is shared; each agent gets its OWN session
 // store, so children do not share the parent's memory.
-var personalMemoryPath = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-    ".cloudagent", "memory", "personal.db");
+var personalMemoryPath = config.PersonalMemoryPath;
 var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.db");
 
 // Utility feedback loop: a shared append-only ledger of which injected memories actually
@@ -557,7 +555,7 @@ Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
 Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
-Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok");
+Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok; personal {personalMemoryPath}");
 Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {attentionOptions.RecallBudgetTokens} tok");
 Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");

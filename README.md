@@ -90,6 +90,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `AGENT_WORKSPACE` | Directory the agent may act within | `./workspace` |
 | `AGENT_MEMORY_BUDGET_TOKENS` | Working-memory budget before compaction | 8000 |
 | `SLEEP_INTERVAL_MIN` | Minutes between consolidation passes, 0 or less disables | 30 |
+| `PERSONAL_MEMORY_PATH` | The personal memory database, shared across workspaces | `~/.cloudagent/memory/personal.db` |
 | `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
