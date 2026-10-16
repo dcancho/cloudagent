@@ -24,6 +24,14 @@ public enum MemoryLevel
     Full,
 }
 
+/// <summary>How a routed turn ended.</summary>
+public enum TurnOutcome
+{
+    Completed,
+    Failed,
+    Cancelled,
+}
+
 /// <summary>What the router decided for one turn, and what was applied.</summary>
 /// <param name="Memory">The memory level applied this turn.</param>
 /// <param name="Categories">Tool categories offered this turn.</param>
@@ -154,10 +162,13 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
     }
 
     /// <summary>
-    /// Record what happened after a routed turn. In shadow turns this measures the router's mistakes:
-    /// memory it would have skipped that turned out useful, and tools it would have hidden that were used.
+    /// Record what happened after a routed turn, however it ended. In shadow turns this measures the
+    /// router's mistakes: memory it would have skipped that turned out useful, and tools it would have
+    /// hidden that were used.
     /// </summary>
-    public void RecordOutcome(RoutingDecision decision, IReadOnlyCollection<string> toolsUsed, int injected, int? useful)
+    public void RecordOutcome(
+        RoutingDecision decision, IReadOnlyCollection<string> toolsUsed, int injected, int? useful,
+        TurnOutcome outcome = TurnOutcome.Completed)
     {
         if (options.LedgerPath is null)
             return;
@@ -167,6 +178,7 @@ public sealed class ContextRouter(IDecisionModel model, RoutingOptions options, 
         {
             ["at"] = DateTimeOffset.UtcNow.ToString("O"),
             ["model"] = model.Name,
+            ["outcome"] = outcome.ToString(),
             ["shadow"] = decision.Shadow,
             ["fellBack"] = decision.FellBack,
             ["elapsedMs"] = (int)decision.Elapsed.TotalMilliseconds,
