@@ -53,6 +53,12 @@ harnesses kept outside the repository. The repository has no test project yet.
   measured turns spend most of their time in sequential calls, not in generation.
 - **Streaming.** Publishing a reply as it is generated, as a surface capability. Covered in the
   [thinking without speaking](proposals/thinking-without-speaking.md) proposal.
+- **Measuring memory by running with and without it.** The usefulness judge only sees the final
+  reply and cannot separate a memory from what the context already carried, so conventions followed
+  silently look unused and get demoted. A decision model would answer observable questions about
+  each turn's action history, and sampled shadow pairs, the same turn with a memory withheld, would
+  give the verdict and calibrate the cheap reading. See the
+  [memory counterfactuals](proposals/memory-counterfactuals.md) proposal.
 - **Threshold tuning.** The sleep job's defaults are placeholders awaiting real ledger data.
 - **Consolidation policy review.** The policy is a draft.
 
