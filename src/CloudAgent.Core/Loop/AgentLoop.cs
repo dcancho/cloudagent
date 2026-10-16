@@ -136,6 +136,8 @@ public sealed class AgentLoop
                 // 1.5. Routing: decide how much memory to recall and which tools to offer this turn.
                 _turnTools.Clear();
                 _turnUseful = null;
+                _assembled = null;
+                _decision = null;
                 _decision = _router is null
                     ? null
                     : await _router.RouteAsync(_context, cancellationToken).ConfigureAwait(false);
@@ -172,15 +174,17 @@ public sealed class AgentLoop
                 // 4. Keep working memory under budget; evicted turns become episodic memory.
                 await CompactAsync(cancellationToken).ConfigureAwait(false);
 
-                RecordRoutingOutcome();
+                RecordRoutingOutcome(Attention.TurnOutcome.Completed);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                RecordRoutingOutcome(Attention.TurnOutcome.Cancelled);
                 break;
             }
             catch (Exception ex)
             {
                 // A failed turn must not end the agent: report it and wait for the next stimulus.
+                RecordRoutingOutcome(Attention.TurnOutcome.Failed);
                 TurnFailed?.Invoke(iteration, ex);
             }
 
@@ -411,7 +415,7 @@ public sealed class AgentLoop
             : $"Now available: {string.Join(", ", added)}.");
     }
 
-    private void RecordRoutingOutcome()
+    private void RecordRoutingOutcome(Attention.TurnOutcome outcome)
     {
         if (_router is null || _decision is null)
             return;
@@ -420,7 +424,7 @@ public sealed class AgentLoop
         {
             _router.RecordOutcome(
                 _decision, _turnTools.Where(t => t != RequestToolsName).ToList(),
-                _assembled?.InjectedMemories.Count ?? 0, _turnUseful);
+                _assembled?.InjectedMemories.Count ?? 0, _turnUseful, outcome);
         }
         catch
         {
