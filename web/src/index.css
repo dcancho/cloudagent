@@ -249,3 +249,110 @@ body {
 .app__composer {
   padding: var(--dimension--primitive--spacing-3) var(--dimension--primitive--spacing-4) var(--dimension--primitive--spacing-4);
 }
+
+.app__workspaces {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-0-5);
+  margin: 0 var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-2);
+  padding-bottom: var(--dimension--primitive--spacing-2);
+  border-bottom: 1px solid color-mix(in oklab, var(--color--semantic--text-strong) 12%, transparent);
+}
+
+.app__workspace {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-1);
+  min-width: 0;
+  font-size: var(--dimension--primitive--fs-sm);
+  color: var(--color--semantic--text-muted);
+}
+
+.activity {
+  width: 100%;
+  font-size: var(--dimension--primitive--fs-sm);
+  color: var(--color--semantic--text-muted);
+}
+
+.activity summary {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.activity summary::-webkit-details-marker {
+  display: none;
+}
+
+.activity__header {
+  padding: var(--dimension--primitive--spacing-1) 0;
+}
+
+.activity__count {
+  flex: none;
+  color: var(--color--semantic--text-default);
+}
+
+.activity__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font--primitive--mono);
+}
+
+.activity__steps {
+  margin: 0;
+  padding: 0 0 0 var(--dimension--primitive--spacing-5);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dimension--primitive--spacing-1);
+}
+
+.activity__step {
+  display: flex;
+  align-items: center;
+  gap: var(--dimension--primitive--spacing-2);
+  min-width: 0;
+}
+
+.activity__edit {
+  min-width: 0;
+  width: 100%;
+}
+
+.activity__tool {
+  flex: none;
+  font-family: var(--font--primitive--mono);
+  color: var(--color--semantic--text-default);
+}
+
+.activity__ok {
+  color: var(--color--semantic--success);
+}
+
+.activity__failed {
+  color: var(--color--semantic--error);
+}
+
+.activity__diff {
+  margin: var(--dimension--primitive--spacing-1) 0 var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-2);
+  overflow-x: auto;
+  font-family: var(--font--primitive--mono);
+  font-size: var(--dimension--primitive--fs-xs);
+  background: color-mix(in oklab, var(--color--semantic--text-strong) 4%, var(--color--semantic--surface-default));
+  border-radius: var(--control-radius-sm);
+}
+
+.activity__diff-line--removed {
+  color: var(--color--semantic--error);
+}
+
+.activity__diff-line--added {
+  color: var(--color--semantic--success);
+}

@@ -155,7 +155,8 @@ starts and keeps it. On top of the file tools, a coding conversation has:
 | `search_files` | Regular expression search over file contents, skipping build output, dependencies, and `.git` |
 | `run_command` | Runs one allowed program with its arguments, without a shell, with a timeout. Variables whose names contain KEY, TOKEN, SECRET, or PASSWORD are not passed on |
 
-`read_file` reads long files in ranges of lines. A coding turn may take 40 rounds of tool calls
+In the web client, the agent's tool calls show up as it works, and each edit can be expanded into
+its diff. `read_file` reads long files in ranges of lines. A coding turn may take 40 rounds of tool calls
 instead of 10, and ends in a reply when they run out. Each repository's index and project memory
 live under `.agent/repos/<name>` in the agent's workspace, so the repository stays clean. The
 host refuses a repository it is running from; point `CODE_REPOS` at a git worktree of it instead.

@@ -27,6 +27,12 @@ Picking one reconnects to it and shows its history. The current conversation id 
 storage, so a reload continues where you were. On narrow screens the sidebar opens from the menu
 button.
 
+When the agent has repositories configured (`CODE_REPOS`), a new conversation starts either in
+general or in one of them, and keeps that choice; the header and the list show the repository.
+While the agent works, its tool calls appear as one collapsible block of steps per stretch of
+work, and each edit expands into the text it replaced and the text it wrote. Reopening a
+conversation shows its steps again.
+
 ## Notes on Lucent
 
 - The `--font--primitive--sans` token names Outfit, but Lucent does not load it, so

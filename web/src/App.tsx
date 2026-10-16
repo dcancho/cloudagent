@@ -1,17 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Composer, ConversationRow, Icon, IconButton, MessageBubble, StatusTag, TypingIndicator } from './lucent'
+import { ActivitySteps, type Activity } from './Activity'
 import { Markdown } from './Markdown'
 
-type Msg = { role: 'user' | 'assistant'; text: string }
+type Msg = { role: 'user' | 'assistant'; text: string } | Activity
 
-type Conversation = { id: string; title: string; updatedAt: string }
+type Conversation = { id: string; title: string; updatedAt: string; workspace?: string | null }
 
 type Frame =
   | { type: 'message'; text: string }
   | { type: 'typing' }
-  | { type: 'welcome'; conversation: string }
+  | { type: 'welcome'; conversation: string; workspace?: string | null; workspaces?: string[] }
   | { type: 'history'; messages: Msg[] }
   | { type: 'conversations'; items: Conversation[] }
+  | ({ type: 'activity' } & Omit<Activity, 'role'>)
+
+type Block = { kind: 'message'; message: Exclude<Msg, Activity>; next?: Msg } | { kind: 'steps'; steps: Activity[] }
+
+function blocks(messages: Msg[]): Block[] {
+  const result: Block[] = []
+  messages.forEach((m, i) => {
+    if (m.role !== 'activity') {
+      result.push({ kind: 'message', message: m, next: messages[i + 1] })
+      return
+    }
+    const last = result[result.length - 1]
+    if (last?.kind === 'steps') last.steps.push(m)
+    else result.push({ kind: 'steps', steps: [m] })
+  })
+  return result
+}
 
 const WS_URL = (import.meta.env.VITE_AGENT_WS as string | undefined) ?? 'ws://localhost:5080/ws'
 const CONVERSATION_KEY = 'cloudagent.conversation'
@@ -90,6 +108,10 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(storedCollapsed)
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  const [workspaces, setWorkspaces] = useState<string[]>([])
+  const [workspace, setWorkspace] = useState<string | null>(null)
+  const [choosingWorkspace, setChoosingWorkspace] = useState(false)
+  const nextWorkspace = useRef<string | null>(null)
   const leaveAfterDelete = useRef(false)
 
   useEffect(() => {
@@ -118,7 +140,15 @@ function App() {
     const requestList = () => ws.send(JSON.stringify({ type: 'list' }))
     ws.onopen = () => {
       setConnected(true)
-      ws.send(JSON.stringify({ type: 'hello', protocol: 2, conversation: storedConversation() }))
+      ws.send(
+        JSON.stringify({
+          type: 'hello',
+          protocol: 2,
+          conversation: storedConversation(),
+          workspace: nextWorkspace.current ?? undefined,
+        }),
+      )
+      nextWorkspace.current = null
     }
     ws.onclose = () => setConnected(false)
     ws.onmessage = (e) => {
@@ -126,6 +156,8 @@ function App() {
       if (frame.type === 'welcome') {
         storeConversation(frame.conversation)
         setCurrent(frame.conversation)
+        setWorkspace(frame.workspace ?? null)
+        setWorkspaces(frame.workspaces ?? [])
         requestList()
         return
       }
@@ -151,6 +183,11 @@ function App() {
         typingTimer.current = window.setTimeout(() => setAgentTyping(false), AGENT_TYPING_MS)
         return
       }
+      if (frame.type === 'activity') {
+        const { type: _, ...step } = frame
+        setMessages((m) => [...m, { role: 'activity', ...step }])
+        return
+      }
       if (frame.type === 'message') {
         const text = frame.text
         window.clearTimeout(typingTimer.current)
@@ -165,9 +202,16 @@ function App() {
     }
   }, [session])
 
-  function openConversation(id: string | null) {
+  function startConversation() {
+    if (workspaces.length === 0) openConversation(null)
+    else setChoosingWorkspace((choosing) => !choosing)
+  }
+
+  function openConversation(id: string | null, inWorkspace: string | null = null) {
     setSidebarOpen(false)
+    setChoosingWorkspace(false)
     if (id !== null && id === current) return
+    nextWorkspace.current = id === null ? inWorkspace : null
     storeConversation(id)
     setCurrent(id ?? undefined)
     setMessages([])
@@ -214,7 +258,12 @@ function App() {
       <nav className="app__sidebar" id="conversations" aria-label="Conversations">
         <div className="app__sidebar-bar">
           <h2 className="app__sidebar-title">Conversations</h2>
-          <IconButton icon="add_comment" label="New conversation" onClick={() => openConversation(null)} />
+          <IconButton
+            icon="add_comment"
+            label="New conversation"
+            aria-expanded={workspaces.length > 0 ? choosingWorkspace : undefined}
+            onClick={startConversation}
+          />
           <IconButton
             className="app__sidebar-close"
             icon="close"
@@ -222,6 +271,14 @@ function App() {
             onClick={() => setSidebarOpen(false)}
           />
         </div>
+        {choosingWorkspace && (
+          <div className="app__workspaces" role="group" aria-label="New conversation in">
+            <ConversationRow title="General" onClick={() => openConversation(null)} />
+            {workspaces.map((w) => (
+              <ConversationRow key={w} title={w} onClick={() => openConversation(null, w)} />
+            ))}
+          </div>
+        )}
         <div className="app__conversations">
           {conversations.map((c) =>
             confirmingDelete === c.id ? (
@@ -236,6 +293,7 @@ function App() {
               <div key={c.id} className="app__conversation">
                 <ConversationRow
                   title={c.title}
+                  preview={c.workspace ?? undefined}
                   time={shortTime(c.updatedAt)}
                   active={c.id === current}
                   onClick={() => openConversation(c.id)}
@@ -265,17 +323,29 @@ function App() {
           />
           <Icon name="smart_toy" />
           <h1 className="app__title">CloudAgent</h1>
+          {workspace && (
+            <span className="app__workspace">
+              <Icon name="folder" size="sm" />
+              {workspace}
+            </span>
+          )}
           <StatusTag status={connected ? 'success' : 'neutral'}>{connected ? 'Connected' : 'Offline'}</StatusTag>
         </header>
 
         <div className="app__log" ref={logRef}>
-          {messages.map((m, i) => (
-            <div key={i} className={`app__row app__row--${m.role}`}>
-              <MessageBubble role={m.role} continuation={messages[i + 1]?.role === m.role}>
-                {m.role === 'assistant' ? <Markdown text={m.text} /> : m.text}
-              </MessageBubble>
-            </div>
-          ))}
+          {blocks(messages).map((b, i) =>
+            b.kind === 'steps' ? (
+              <div key={i} className="app__row app__row--assistant">
+                <ActivitySteps steps={b.steps} />
+              </div>
+            ) : (
+              <div key={i} className={`app__row app__row--${b.message.role}`}>
+                <MessageBubble role={b.message.role} continuation={b.next?.role === b.message.role}>
+                  {b.message.role === 'assistant' ? <Markdown text={b.message.text} /> : b.message.text}
+                </MessageBubble>
+              </div>
+            ),
+          )}
           {agentTyping && (
             <div className="app__row app__row--assistant">
               <TypingIndicator variant="generating" label="" />

@@ -3,11 +3,12 @@ import { cx } from './cx'
 
 export interface ConversationRowProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'title'> {
   title: string
+  preview?: string
   time?: string
   active?: boolean
 }
 
-export function ConversationRow({ title, time, active, className, type = 'button', ...rest }: ConversationRowProps) {
+export function ConversationRow({ title, preview, time, active, className, type = 'button', ...rest }: ConversationRowProps) {
   return (
     <button
       {...rest}
@@ -17,6 +18,7 @@ export function ConversationRow({ title, time, active, className, type = 'button
     >
       <span className="lucent-conversation-row__main">
         <span className="lucent-conversation-row__title">{title}</span>
+        {preview && <span className="lucent-conversation-row__preview">{preview}</span>}
       </span>
       {time && (
         <span className="lucent-conversation-row__meta">

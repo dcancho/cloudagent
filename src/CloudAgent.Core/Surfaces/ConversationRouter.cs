@@ -136,6 +136,9 @@ public sealed class ConversationRouter : IDisposable
         };
 
         var token = session.Cancellation.Token;
+        if (surface is IActivityIndicator activity)
+            conversation.Acted += a => _ = SendActivitySafelyAsync(activity, conversationId, a, _runToken);
+
         session.Runner = Task.Run(() => conversation.RunAsync(token), token);
         ConversationOpened?.Invoke(surface.Name, conversationId);
         return session;
@@ -150,6 +153,19 @@ public sealed class ConversationRouter : IDisposable
         catch
         {
             // A surface send failure shouldn't take down the conversation.
+        }
+    }
+
+    private static async Task SendActivitySafelyAsync(
+        IActivityIndicator surface, string conversationId, ToolActivity activity, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await surface.SendActivityAsync(conversationId, activity, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Activity is informational; a failure to show it must not affect the turn.
         }
     }
 
