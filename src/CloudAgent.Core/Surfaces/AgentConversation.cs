@@ -29,12 +29,16 @@ public sealed class AgentConversation : IDisposable
             if (!string.IsNullOrWhiteSpace(response.Text))
                 Responded?.Invoke(response.Text);
         };
+        _loop.ToolInvoked += (call, result) => Acted?.Invoke(ToolActivity.From(call, result));
         _loop.TurnFailed += (_, _) =>
             Responded?.Invoke("I couldn't finish that turn because of an error on my side. The details are in the host log.");
     }
 
     /// <summary>Raised with the agent's reply text for this conversation.</summary>
     public event Action<string>? Responded;
+
+    /// <summary>Raised after each tool call the agent makes in this conversation.</summary>
+    public event Action<ToolActivity>? Acted;
 
     /// <summary>Deliver inbound user text to the agent.</summary>
     public Task PostAsync(string text, CancellationToken cancellationToken = default) =>

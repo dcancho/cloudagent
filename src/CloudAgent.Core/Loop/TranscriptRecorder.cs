@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
+using CloudAgent.Core.Abstractions;
 using CloudAgent.Core.Surfaces;
+using CloudAgent.Core.Tools;
 
 namespace CloudAgent.Core.Loop;
 
@@ -47,16 +49,17 @@ public sealed class TranscriptRecorder
     }
 
     /// <summary>
-    /// The conversation as people saw it: what the person sent and what the agent answered, in order,
-    /// read from an agent's transcript. Tool calls and other events are left out.
+    /// The conversation as people saw it, read from an agent's transcript: what the person sent, what
+    /// the agent answered, and what each of its tool calls did, in order. Other events are left out.
     /// </summary>
-    public static IReadOnlyList<(string Role, string Text)> ReadConversation(string directory, string agentId)
+    public static IReadOnlyList<ConversationEntry> ReadConversation(string directory, string agentId)
     {
         var path = Path.Combine(directory, $"{ToFileName(agentId)}.jsonl");
         if (!File.Exists(path))
             return [];
 
-        var messages = new List<(string, string)>();
+        var entries = new List<ConversationEntry>();
+        var calls = new Dictionary<string, ToolCall>();
         foreach (var line in File.ReadLines(path))
         {
             JsonObject? entry;
@@ -68,14 +71,38 @@ public sealed class TranscriptRecorder
             {
                 continue;
             }
+            if (entry is null)
+                continue;
 
-            var kind = entry?["kind"]?.GetValue<string>();
-            var text = entry?["text"]?.GetValue<string>();
+            var kind = entry["kind"]?.GetValue<string>();
+            if (kind == "tool")
+            {
+                var id = entry["id"]?.GetValue<string>();
+                if (id is not null && calls.Remove(id, out var call))
+                {
+                    var result = entry["success"]?.GetValue<bool>() == true
+                        ? ToolResult.Ok(entry["content"]?.GetValue<string>() ?? "")
+                        : ToolResult.Fail(entry["error"]?.GetValue<string>() ?? "failed");
+                    entries.Add(new ConversationEntry("activity", "", ToolActivity.From(call, result)));
+                }
+                continue;
+            }
+            if (kind == "assistant" && entry["toolCalls"] is JsonArray requested)
+            {
+                foreach (var c in requested.OfType<JsonObject>())
+                {
+                    var call = new ToolCall(
+                        c["id"]?.GetValue<string>() ?? "", c["name"]?.GetValue<string>() ?? "", c["arguments"]?.GetValue<string>() ?? "{}");
+                    calls[call.Id] = call;
+                }
+            }
+
+            var text = entry["text"]?.GetValue<string>();
             if (string.IsNullOrWhiteSpace(text) || kind is not ("user" or "assistant"))
                 continue;
-            messages.Add((kind, text));
+            entries.Add(new ConversationEntry(kind, text));
         }
-        return messages;
+        return entries;
     }
 
     /// <summary>
