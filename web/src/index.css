@@ -52,6 +52,54 @@ body {
   padding: 0 var(--dimension--primitive--spacing-2) var(--dimension--primitive--spacing-3);
 }
 
+.app__conversation {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.app__conversation > .lucent-conversation-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.app__conversation-delete {
+  position: absolute;
+  right: var(--dimension--primitive--spacing-1);
+  visibility: hidden;
+}
+
+.app__conversation:hover .app__conversation-delete,
+.app__conversation:focus-within .app__conversation-delete {
+  visibility: visible;
+}
+
+.app__conversation:hover .lucent-conversation-row__meta,
+.app__conversation:focus-within .lucent-conversation-row__meta {
+  visibility: hidden;
+}
+
+@media (hover: none) {
+  .app__conversation-delete {
+    position: static;
+    visibility: visible;
+  }
+}
+
+.app__conversation--confirming {
+  gap: var(--dimension--primitive--spacing-2);
+  padding: var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-1) var(--dimension--primitive--spacing-3);
+}
+
+.app__conversation-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--dimension--primitive--fs-sm);
+}
+
 .app__main {
   min-width: 0;
   min-height: 0;

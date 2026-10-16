@@ -137,7 +137,7 @@ var consolidationPolicy = File.Exists(policyPath)
       "numbers as evidence. Never distill secrets or one-off remarks. Prefer few, " +
       "well-grounded facts over many speculative ones.";
 
-var sleepJobs = new System.Collections.Concurrent.ConcurrentBag<SleepJob>();
+var sleepJobs = new System.Collections.Concurrent.ConcurrentDictionary<string, SleepJob>();
 
 var options = new AgentOptions
 {
@@ -190,7 +190,7 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
     {
         [MemoryScope.Personal] = personalMemoryPath,
         [MemoryScope.Project] = projectMemoryPath,
-        [MemoryScope.Session] = Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{TranscriptRecorder.ToFileName(agentId)}.db"),
+        [MemoryScope.Session] = SessionMemoryPath(agentId),
     });
 
     // Ambient metadata stamped on every write: who was writing, where, in which conversation.
@@ -208,9 +208,9 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
     var retriever = new MemoryRetriever(mem, queryRewriter, reranker);
 
     if (!isEcho)
-        sleepJobs.Add(new SleepJob(
+        sleepJobs[agentId] = new SleepJob(
             provider, mem, utilityLedger, consolidationLedger, pendingConsolidations,
-            agentId, consolidationPolicy, smallModel));
+            agentId, consolidationPolicy, smallModel);
 
     return (mem, comp, utility, retriever);
 }
@@ -365,7 +365,37 @@ AgentConversation CreateConversation(string surface, string conversationId)
     };
     AttachLogging(loop, handle.Id);
     new TranscriptRecorder(transcriptDirectory, handle.Id).Attach(loop);
-    return new AgentConversation(queue, loop);
+    return new AgentConversation(queue, loop, onDispose: () =>
+    {
+        sleepJobs.TryRemove(handle.Id, out _);
+        bus.Remove(handle.Id);
+        (mem.Store as IDisposable)?.Dispose();
+    });
+}
+
+string SessionMemoryPath(string agentId) =>
+    Path.Combine(workspace.Root, ".agent", "memory", "agents", $"{TranscriptRecorder.ToFileName(agentId)}.db");
+
+// Deleting a conversation ends its session and removes its transcript, saved context, and session
+// memory. What it taught the shared personal and project memory stays, and so do the ledgers.
+async Task<bool> DeleteConversationAsync(ConversationRouter router, string surface, string conversationId)
+{
+    var agentId = $"{surface}:{conversationId}";
+    await router.CloseAsync(surface, conversationId);
+
+    var transcript = Path.Combine(transcriptDirectory, $"{TranscriptRecorder.ToFileName(agentId)}.jsonl");
+    var memory = SessionMemoryPath(agentId);
+    var files = new[] { transcript, contexts.PathFor(agentId), memory, memory + "-wal", memory + "-shm" };
+
+    var existed = false;
+    foreach (var file in files.Where(File.Exists))
+    {
+        File.Delete(file);
+        existed = true;
+    }
+    if (existed)
+        Console.WriteLine($"  🗑 conversation deleted: {agentId}");
+    return existed;
 }
 
 // Surfaces: the console is always on; others join when configured.
@@ -377,12 +407,16 @@ if (!string.IsNullOrWhiteSpace(config.TelegramBotToken))
 if (!string.IsNullOrWhiteSpace(config.DiscordBotToken))
     surfaces.Add(new DiscordSurface(config.DiscordBotToken));
 
+ConversationRouter? conversationRouter = null;
 if (config.WebchatEnabled)
 {
     var webchat = new WebchatSurface(
         config.WebchatPort,
         conversationId => TranscriptRecorder.ReadConversation(transcriptDirectory, $"webchat:{conversationId}"),
-        () => TranscriptRecorder.ListConversations(transcriptDirectory, "webchat"));
+        () => TranscriptRecorder.ListConversations(transcriptDirectory, "webchat"),
+        conversationId => conversationRouter is null
+            ? Task.FromResult(false)
+            : DeleteConversationAsync(conversationRouter, "webchat", conversationId));
     surfaces.Add(webchat);
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
@@ -391,6 +425,7 @@ var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
 using var router = new ConversationRouter(surfaces, CreateConversation, turnTaking: turnTaking);
+conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
 // Sleep timer: every interval, run each registered agent's consolidation pass. Mechanical
@@ -411,7 +446,7 @@ if (!isEcho && sleepMinutes > 0)
                 break;
             }
 
-            foreach (var job in sleepJobs)
+            foreach (var job in sleepJobs.Values)
             {
                 if (cts.Token.IsCancellationRequested)
                     break;

@@ -110,6 +110,9 @@ Everything the agent does is kept under the workspace's `.agent` folder, which i
 | `conversations/<agent>.json` | Each conversation's working context, saved after every turn so it continues after a restart |
 | `memory/` | The memory databases |
 
+Deleting a web chat conversation ends its session and removes its transcript, saved context, and
+session memory. What it added to personal and project memory stays, and so do the ledgers.
+
 ## The loop
 
 `AgentLoop.RunAsync` repeats one cycle until cancelled: perceive new input, assemble the

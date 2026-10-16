@@ -10,15 +10,20 @@ namespace CloudAgent.Core.Surfaces;
 /// whose textual replies are surfaced via <see cref="Responded"/>. The router posts inbound
 /// messages in and ships <see cref="Responded"/> back out to the surface.
 /// </summary>
-public sealed class AgentConversation
+public sealed class AgentConversation : IDisposable
 {
     private readonly QueueInputSource _input;
     private readonly AgentLoop _loop;
+    private readonly Action? _onDispose;
 
-    public AgentConversation(QueueInputSource input, AgentLoop loop)
+    /// <param name="input">The queue the router posts inbound text to.</param>
+    /// <param name="loop">The agent loop that reads it.</param>
+    /// <param name="onDispose">Releases what the session holds once its loop has stopped.</param>
+    public AgentConversation(QueueInputSource input, AgentLoop loop, Action? onDispose = null)
     {
         _input = input;
         _loop = loop;
+        _onDispose = onDispose;
         _loop.ResponseReceived += (_, response) =>
         {
             if (!string.IsNullOrWhiteSpace(response.Text))
@@ -37,4 +42,6 @@ public sealed class AgentConversation
 
     /// <summary>Run the underlying loop until cancelled.</summary>
     public Task RunAsync(CancellationToken cancellationToken) => _loop.RunAsync(cancellationToken);
+
+    public void Dispose() => _onDispose?.Invoke();
 }

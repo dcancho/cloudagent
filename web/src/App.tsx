@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Composer, ConversationRow, Icon, IconButton, MessageBubble, StatusTag, TypingIndicator } from './lucent'
+import { Button, Composer, ConversationRow, Icon, IconButton, MessageBubble, StatusTag, TypingIndicator } from './lucent'
 import { Markdown } from './Markdown'
 
 type Msg = { role: 'user' | 'assistant'; text: string }
@@ -89,6 +89,8 @@ function App() {
   const [current, setCurrent] = useState<string | undefined>(storedConversation)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(storedCollapsed)
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  const leaveAfterDelete = useRef(false)
 
   useEffect(() => {
     if (!sidebarOpen) return
@@ -129,6 +131,14 @@ function App() {
       }
       if (frame.type === 'conversations') {
         setConversations(frame.items)
+        if (leaveAfterDelete.current) {
+          leaveAfterDelete.current = false
+          storeConversation(null)
+          setCurrent(undefined)
+          setMessages([])
+          setAgentTyping(false)
+          setSession((s) => s + 1)
+        }
         return
       }
       if (frame.type === 'history') {
@@ -163,6 +173,15 @@ function App() {
     setMessages([])
     setAgentTyping(false)
     setSession((s) => s + 1)
+  }
+
+  function deleteConversation(id: string) {
+    setConfirmingDelete(null)
+    const ws = wsRef.current
+    if (ws?.readyState !== WebSocket.OPEN) return
+    leaveAfterDelete.current = id === current
+    setConversations((list) => list.filter((c) => c.id !== id))
+    ws.send(JSON.stringify({ type: 'delete', conversation: id }))
   }
 
   useEffect(() => {
@@ -204,15 +223,33 @@ function App() {
           />
         </div>
         <div className="app__conversations">
-          {conversations.map((c) => (
-            <ConversationRow
-              key={c.id}
-              title={c.title}
-              time={shortTime(c.updatedAt)}
-              active={c.id === current}
-              onClick={() => openConversation(c.id)}
-            />
-          ))}
+          {conversations.map((c) =>
+            confirmingDelete === c.id ? (
+              <div key={c.id} className="app__conversation app__conversation--confirming">
+                <span className="app__conversation-title">{c.title}</span>
+                <Button size="sm" danger onClick={() => deleteConversation(c.id)} disabled={!connected}>
+                  Delete
+                </Button>
+                <IconButton icon="close" label="Keep conversation" size="sm" onClick={() => setConfirmingDelete(null)} />
+              </div>
+            ) : (
+              <div key={c.id} className="app__conversation">
+                <ConversationRow
+                  title={c.title}
+                  time={shortTime(c.updatedAt)}
+                  active={c.id === current}
+                  onClick={() => openConversation(c.id)}
+                />
+                <IconButton
+                  className="app__conversation-delete"
+                  icon="delete"
+                  label="Delete conversation"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(c.id)}
+                />
+              </div>
+            ),
+          )}
         </div>
       </nav>
       <div className="app__scrim" onClick={() => setSidebarOpen(false)} />

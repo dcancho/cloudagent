@@ -117,6 +117,16 @@ public sealed class AgentBus(CancellationToken rootToken = default)
         handle.Cancel();
     }
 
+    /// <summary>Stop an agent and its descendants, and forget them, so the id can be registered again.</summary>
+    public void Remove(string id)
+    {
+        foreach (var child in ChildrenOf(id).ToArray())
+            Remove(child.Id);
+
+        Stop(id);
+        _agents.TryRemove(id, out _);
+    }
+
     /// <summary>Stop an agent and all of its descendants.</summary>
     public void Stop(string id)
     {

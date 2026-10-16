@@ -69,6 +69,33 @@ public sealed class ConversationRouter : IDisposable
         return Task.WhenAll(running);
     }
 
+    /// <summary>
+    /// End a conversation's session, if one is open: drop its waiting messages, stop its loop, wait
+    /// for the loop to finish, and release what it holds. A later message opens a new session.
+    /// </summary>
+    public async Task CloseAsync(string surface, string conversationId)
+    {
+        _turns.Discard(surface, conversationId);
+        if (!_sessions.TryRemove($"{surface}:{conversationId}", out var session))
+            return;
+
+        session.StopTyping();
+        await session.Cancellation.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            if (session.Runner is not null)
+                await session.Runner.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            session.Cancellation.Dispose();
+            session.Conversation.Dispose();
+        }
+    }
+
     public void Dispose() => _turns.Dispose();
 
     private async Task OnInboundAsync(ISurface surface, InboundMessage message, CancellationToken cancellationToken)
@@ -99,7 +126,7 @@ public sealed class ConversationRouter : IDisposable
     private Session OpenSession(ISurface surface, string conversationId)
     {
         var conversation = _sessionFactory(surface.Name, conversationId);
-        var session = new Session(conversation, conversationId);
+        var session = new Session(conversation, conversationId, CancellationTokenSource.CreateLinkedTokenSource(_runToken));
 
         conversation.Responded += text =>
         {
@@ -108,7 +135,8 @@ public sealed class ConversationRouter : IDisposable
             _ = SendSafelyAsync(surface, new OutboundMessage(conversationId, text), _runToken);
         };
 
-        session.Runner = Task.Run(() => conversation.RunAsync(_runToken), _runToken);
+        var token = session.Cancellation.Token;
+        session.Runner = Task.Run(() => conversation.RunAsync(token), token);
         ConversationOpened?.Invoke(surface.Name, conversationId);
         return session;
     }
@@ -125,12 +153,13 @@ public sealed class ConversationRouter : IDisposable
         }
     }
 
-    private sealed class Session(AgentConversation conversation, string conversationId)
+    private sealed class Session(AgentConversation conversation, string conversationId, CancellationTokenSource cancellation)
     {
         private readonly object _gate = new();
         private CancellationTokenSource? _typing;
 
         public AgentConversation Conversation { get; } = conversation;
+        public CancellationTokenSource Cancellation { get; } = cancellation;
         public Task? Runner { get; set; }
 
         public void StartTyping(ITypingIndicator indicator, CancellationToken runToken)
