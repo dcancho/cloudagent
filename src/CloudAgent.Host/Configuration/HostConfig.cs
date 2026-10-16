@@ -14,6 +14,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="Llm">Provider/model configuration (see <see cref="LlmConfig"/>).</param>
 /// <param name="WorkspaceRoot">Rooted area the agent may act within (<c>AGENT_WORKSPACE</c>).</param>
 /// <param name="TavilyApiKey">Web-search key; null leaves search unconfigured.</param>
+/// <param name="PersonalMemoryPath">The personal memory database, shared by every workspace of this user
+/// (<c>PERSONAL_MEMORY_PATH</c>).</param>
 /// <param name="ConsolidationPolicyPath">Resolved path to the consolidation policy doc
 /// (<c>CONSOLIDATION_POLICY</c>); the host reads it with a built-in fallback if absent.</param>
 /// <param name="MemoryBudgetTokens">Working-memory compaction budget (<c>AGENT_MEMORY_BUDGET_TOKENS</c>).</param>
@@ -35,6 +37,7 @@ public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
     string? TavilyApiKey,
+    string PersonalMemoryPath,
     string ConsolidationPolicyPath,
     int MemoryBudgetTokens,
     int SleepIntervalMinutes,
@@ -88,6 +91,9 @@ public sealed record HostConfig(
             LlmConfig.FromEnvironment(),
             workspaceRoot,
             Environment.GetEnvironmentVariable("TAVILY_API_KEY"),
+            Environment.GetEnvironmentVariable("PERSONAL_MEMORY_PATH")
+                ?? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudagent", "memory", "personal.db"),
             policyPath,
             budget,
             sleep,
