@@ -15,10 +15,18 @@ public delegate AgentLoop SubagentLoopBuilder(AgentHandle child, IInputSource in
 /// <summary>
 /// Spawns and runs child agents. Each child is a real <see cref="AgentLoop"/> running as its own
 /// task, fed by its mailbox, with a scoped task delivered as its first message. Children share
-/// the workspace tools they're given but get their own context and memory.
+/// their parent's workspace tools but get their own context and memory.
 /// </summary>
-public sealed class AgentOrchestrator(AgentBus bus, ToolRegistry sharedTools, SubagentLoopBuilder build)
+/// <param name="bus">Where children are registered and talk to their parent.</param>
+/// <param name="sharedToolsFor">The workspace tools of a parent, by its id; children get the same.</param>
+/// <param name="build">Builds a child's loop.</param>
+public sealed class AgentOrchestrator(AgentBus bus, Func<string?, ToolRegistry> sharedToolsFor, SubagentLoopBuilder build)
 {
+    public AgentOrchestrator(AgentBus bus, ToolRegistry sharedTools, SubagentLoopBuilder build)
+        : this(bus, _ => sharedTools, build)
+    {
+    }
+
     /// <summary>Spawn a child under <paramref name="parentId"/> with a scoped task and start it.</summary>
     public AgentHandle Spawn(string role, string task, string? parentId)
     {
@@ -34,7 +42,7 @@ public sealed class AgentOrchestrator(AgentBus bus, ToolRegistry sharedTools, Su
     private ToolRegistry ComposeChildTools(AgentHandle child)
     {
         var registry = new ToolRegistry();
-        foreach (var tool in sharedTools.All)
+        foreach (var tool in sharedToolsFor(child.ParentId).All)
             registry.Register(tool);
 
         registry

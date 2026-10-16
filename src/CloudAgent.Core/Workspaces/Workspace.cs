@@ -13,16 +13,19 @@ public sealed class Workspace : IWorkspace
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    public Workspace(string root)
+    public Workspace(string root, ExecutionPolicy? execution = null)
     {
         if (string.IsNullOrWhiteSpace(root))
             throw new ArgumentException("Workspace root must be provided.", nameof(root));
 
         Root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
         Directory.CreateDirectory(Root);
+        Execution = execution ?? ExecutionPolicy.None;
     }
 
     public string Root { get; }
+
+    public ExecutionPolicy Execution { get; }
 
     public string Resolve(string path)
     {

@@ -165,6 +165,66 @@ var childOptions = new AgentOptions
 // Attention (eje 5) knobs — recall shape and budget — live with the module, not AgentOptions.
 var attentionOptions = new AttentionOptions();
 
+// Profiles: the same agent in different workspaces. The general profile works in the agent's own
+// workspace; each configured repository gets a coding profile with its own tools, index, and
+// project memory, kept under the agent's workspace so the repository itself stays clean.
+var generalProfile = new AgentProfile("general", options, childOptions, workspace, workspaceTools, projectMemoryPath);
+var codeProfiles = new Dictionary<string, AgentProfile>(StringComparer.OrdinalIgnoreCase);
+foreach (var repo in config.CodeRepos)
+{
+    var root = Path.GetFullPath(repo.Path).TrimEnd(Path.DirectorySeparatorChar);
+    if (!Directory.Exists(root))
+    {
+        Console.Error.WriteLine($"  ✖ code repo '{repo.Name}' skipped: {root} does not exist");
+        continue;
+    }
+    var running = Path.GetFullPath(AppContext.BaseDirectory);
+    if (running.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine(
+            $"  ✖ code repo '{repo.Name}' skipped: the host runs from inside it. Point it at a git worktree instead.");
+        continue;
+    }
+    codeProfiles[repo.Name] = BuildCodeProfile(repo.Name, root);
+}
+
+AgentProfile BuildCodeProfile(string name, string root)
+{
+    var repoWorkspace = new Workspace(root, ExecutionPolicy.Allow(config.CodeCommands));
+    var state = Path.Combine(workspace.Root, ".agent", "repos", name);
+    var repoIndexPath = Path.Combine(state, "index.json");
+    var repoIndex = VectorIndex.Load(repoIndexPath);
+
+    var tools = Toolset.CreateCode(repoWorkspace, search)
+        .Register(new IndexWorkspaceTool(new WorkspaceIndexer(repoWorkspace, embeddings, repoIndex), repoIndex, repoIndexPath))
+        .Register(new SearchIndexTool(embeddings, repoIndex))
+        .Register(new SummarizeFileTool(repoWorkspace, summarizer));
+    foreach (var tool in workspaceTools.All.Where(t =>
+                 t.Name is "calculate" or "fetch_url" or "ask_page" or "read_page" || t.Name.StartsWith("todo_")))
+        tools.Register(tool);
+
+    var rules =
+        $" You are working in the {name} repository; your file tools act inside it. Read a file before you change it, " +
+        "and change it with edit_file. Find code with search_files. After changing code, build it and run its tests " +
+        "with run_command, and fix what fails before you say you are done. Check git status and git diff before you " +
+        "finish. Do not commit, push, or switch branches unless you are asked to.";
+    AgentOptions Coding(AgentOptions basis) => new()
+    {
+        SystemPrompt = basis.SystemPrompt + rules,
+        Model = basis.Model,
+        IterationDelay = basis.IterationDelay,
+        WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
+        MaxToolSteps = 40,
+    };
+    return new AgentProfile(
+        name, Coding(options), Coding(childOptions), repoWorkspace, tools, Path.Combine(state, "project.db"), Routed: false);
+}
+
+// The profile each running agent was built with, so its subagents inherit it.
+var agentProfiles = new System.Collections.Concurrent.ConcurrentDictionary<string, AgentProfile>();
+AgentProfile ProfileOf(string? agentId) =>
+    agentId is not null && agentProfiles.TryGetValue(agentId, out var profile) ? profile : generalProfile;
+
 // Wrap the assembler in the metacognitive gate (eje 8) when enabled: it suppresses injected
 // memories whose measured track record says they keep not helping, logging each suppression.
 IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, string label)
@@ -184,12 +244,12 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
 // SQLite store (FTS5 + vector, RRF-fused) replaces the JSON files; memory embeddings use the
 // same backend as the index (Foundry when configured — pennies — else the offline hash).
 (MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility, MemoryRetriever Retriever)
-    BuildMemoryStack(string agentId)
+    BuildMemoryStack(string agentId, string projectPath)
 {
     var store = new SqliteMemoryStore(new Dictionary<MemoryScope, string>
     {
         [MemoryScope.Personal] = personalMemoryPath,
-        [MemoryScope.Project] = projectMemoryPath,
+        [MemoryScope.Project] = projectPath,
         [MemoryScope.Session] = SessionMemoryPath(agentId),
     });
 
@@ -264,6 +324,10 @@ var transcriptDirectory = Path.Combine(workspace.Root, ".agent", "transcripts");
 // Each conversation's working context is saved after every turn, so it continues after a restart.
 var contexts = new ContextStore(Path.Combine(workspace.Root, ".agent", "conversations"));
 
+// Which repository each conversation works in; the rest work in the agent's own workspace.
+var conversationWorkspaces = new ConversationWorkspaces(
+    Path.Combine(workspace.Root, ".agent", "conversations", "workspaces.json"));
+
 // Context routing: a decision model chooses per turn how much memory to recall and which tool
 // categories to offer. Off by default; every uncertain or failed decision runs the full pipeline.
 var routingOptions = new RoutingOptions
@@ -314,16 +378,20 @@ bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Sta
 
 SubagentLoopBuilder buildChild = (child, input, childTools) =>
 {
-    var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id);
+    var profile = ProfileOf(child.ParentId);
+    agentProfiles[child.Id] = profile;
+    var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id, profile.ProjectMemoryPath);
     childTools.Register(new RememberTool(mem));
-    var attention = BuildAttention(childOptions.SystemPrompt, retriever, $"child {child.Role}");
-    var loop = new AgentLoop(provider, childOptions, input, new AgentContext(), childTools, comp, attention, utility, BuildRouter(mem));
+    var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}");
+    var loop = new AgentLoop(
+        provider, profile.ChildOptions, input, new AgentContext(), childTools, comp, attention, utility,
+        profile.Routed ? BuildRouter(mem) : null);
     AttachLogging(loop, $"child {child.Role}");
     new TranscriptRecorder(transcriptDirectory, child.Id).Attach(loop);
     return loop;
 };
 
-var orchestrator = new AgentOrchestrator(bus, workspaceTools, buildChild);
+var orchestrator = new AgentOrchestrator(bus, parentId => ProfileOf(parentId).Tools, buildChild);
 
 // Each conversation is a root agent that can spawn children. It perceives the human (its
 // surface queue) and its children (its mailbox) through a composite input.
@@ -332,10 +400,14 @@ AgentConversation CreateConversation(string surface, string conversationId)
     var handle = bus.Register(role: surface, id: $"{surface}:{conversationId}");
     var queue = new QueueInputSource();
     var input = new CompositeInputSource(queue, bus.InputFor(handle));
-    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id);
+    var profile = conversationWorkspaces.Of(handle.Id) is { } bound && codeProfiles.TryGetValue(bound, out var code)
+        ? code
+        : generalProfile;
+    agentProfiles[handle.Id] = profile;
+    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id, profile.ProjectMemoryPath);
 
     var agentTools = new ToolRegistry();
-    foreach (var tool in workspaceTools.All)
+    foreach (var tool in profile.Tools.All)
         agentTools.Register(tool);
     agentTools
         .Register(new RememberTool(mem))
@@ -347,11 +419,13 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new ReplyToAgentTool(bus, handle))
         .Register(new StopAgentTool(bus));
 
-    var attention = BuildAttention(options.SystemPrompt, retriever, handle.Id);
+    var attention = BuildAttention(profile.Options.SystemPrompt, retriever, handle.Id);
     var context = contexts.Load(handle.Id);
     if (context is not null)
         Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
-    var loop = new AgentLoop(provider, options, input, context ?? new AgentContext(), agentTools, comp, attention, utility, BuildRouter(mem));
+    var loop = new AgentLoop(
+        provider, profile.Options, input, context ?? new AgentContext(), agentTools, comp, attention, utility,
+        profile.Routed ? BuildRouter(mem) : null);
     loop.TurnEnded += _ =>
     {
         try
@@ -368,6 +442,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
     return new AgentConversation(queue, loop, onDispose: () =>
     {
         sleepJobs.TryRemove(handle.Id, out _);
+        agentProfiles.TryRemove(handle.Id, out _);
         bus.Remove(handle.Id);
         (mem.Store as IDisposable)?.Dispose();
     });
@@ -387,7 +462,8 @@ async Task<bool> DeleteConversationAsync(ConversationRouter router, string surfa
     var memory = SessionMemoryPath(agentId);
     var files = new[] { transcript, contexts.PathFor(agentId), memory, memory + "-wal", memory + "-shm" };
 
-    var existed = false;
+    var existed = conversationWorkspaces.Of(agentId) is not null;
+    conversationWorkspaces.Forget(agentId);
     foreach (var file in files.Where(File.Exists))
     {
         File.Delete(file);
@@ -416,7 +492,11 @@ if (config.WebchatEnabled)
         () => TranscriptRecorder.ListConversations(transcriptDirectory, "webchat"),
         conversationId => conversationRouter is null
             ? Task.FromResult(false)
-            : DeleteConversationAsync(conversationRouter, "webchat", conversationId));
+            : DeleteConversationAsync(conversationRouter, "webchat", conversationId),
+        new WebchatWorkspaces(
+            codeProfiles.Keys.Order().ToList(),
+            conversationId => conversationWorkspaces.Of($"webchat:{conversationId}"),
+            (conversationId, name) => conversationWorkspaces.Bind($"webchat:{conversationId}", name)));
     surfaces.Add(webchat);
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
@@ -486,6 +566,10 @@ Console.WriteLine($"Sleep:     {(isEcho || sleepMinutes <= 0 ? "off" : $"every {
     $"pending proposals: {pendingConsolidations.List().Count}; ledger chain {(consolidationLedger.Verify() ? "OK" : "BROKEN")}");
 Console.WriteLine($"Taskboard: {todos.Count} task(s)");
 Console.WriteLine($"Tools:     {string.Join(", ", workspaceTools.All.Select(t => t.Name))}");
+if (codeProfiles.Count > 0)
+    Console.WriteLine(
+        $"Code:      {string.Join(", ", codeProfiles.Values.Select(p => $"{p.Name} ({p.Workspace.Root})"))}; " +
+        $"may run {string.Join(", ", config.CodeCommands)}");
 Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
 Console.WriteLine($"Records:   transcripts in {transcriptDirectory}, host log in {logDirectory}");

@@ -1,3 +1,4 @@
+using CloudAgent.Core.Tools.Code;
 using CloudAgent.Core.Tools.Files;
 using CloudAgent.Core.Tools.Web;
 using CloudAgent.Core.Workspaces;
@@ -19,4 +20,14 @@ public static class Toolset
             .Register(new CreateDirectoryTool(workspace))
             .Register(new DeletePathTool(workspace))
             .Register(new WebSearchTool(search));
+
+    /// <summary>
+    /// The default set plus what working on code needs: exact edits, exact search, and running
+    /// the programs <paramref name="workspace"/> allows.
+    /// </summary>
+    public static ToolRegistry CreateCode(IWorkspace workspace, IWebSearchProvider search) =>
+        CreateDefault(workspace, search)
+            .Register(new EditFileTool(workspace))
+            .Register(new SearchFilesTool(workspace))
+            .Register(new RunCommandTool(workspace));
 }

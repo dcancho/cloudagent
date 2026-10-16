@@ -96,6 +96,8 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
 | `CONTEXT_ROUTING` | Who chooses per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)): `decision` for the Foundry decision model, `generative` for the background chat model, `off` for the full pipeline every turn. Decisions go to `.agent/routing.jsonl` | `decision` when the two variables below are set, else `off` |
+| `CODE_REPOS` | Repositories a coding agent may work on, as `name=path` pairs separated by `;` | none |
+| `CODE_COMMANDS` | Programs a coding agent may run in them, comma separated | `dotnet,git,npm,node` |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
 
 ### Records
@@ -141,11 +143,31 @@ user agent, follows robots.txt, paces requests per host, and refuses to connect 
 private, or link-local addresses. Fetched pages are cached for a day under `.agent/web`, and
 everything from a page is marked as untrusted content.
 
+### Working on code
+
+Each repository in `CODE_REPOS` gets a coding profile: the same agent and memory machinery, with
+its file tools rooted in that repository. A web chat conversation picks its repository when it
+starts and keeps it. On top of the file tools, a coding conversation has:
+
+| Tool | Does |
+| --- | --- |
+| `edit_file` | Replaces exact text; fails when the text is missing or appears more than once. Keeps line endings and the byte order mark |
+| `search_files` | Regular expression search over file contents, skipping build output, dependencies, and `.git` |
+| `run_command` | Runs one allowed program with its arguments, without a shell, with a timeout. Variables whose names contain KEY, TOKEN, SECRET, or PASSWORD are not passed on |
+
+`read_file` reads long files in ranges of lines. A coding turn may take 40 rounds of tool calls
+instead of 10, and ends in a reply when they run out. Each repository's index and project memory
+live under `.agent/repos/<name>` in the agent's workspace, so the repository stays clean. The
+host refuses a repository it is running from; point `CODE_REPOS` at a git worktree of it instead.
+
+The allowlist guards against mistakes, not against a determined caller: git hooks, MSBuild
+targets, and npm scripts can run anything, so give the agent repositories you would let it change.
+
 ## Subagents
 
 Subagents run concurrently. Each is an `AgentLoop` with its own context, its own memory, and a
 mailbox. A child can ask its parent a question while the parent keeps working, and stop requests
-propagate down the tree. Children share the workspace but not memory.
+propagate down the tree. Children share their parent's workspace and tools but not memory.
 
 ## Surfaces
 

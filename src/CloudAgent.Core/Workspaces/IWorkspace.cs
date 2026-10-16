@@ -21,6 +21,9 @@ public interface IWorkspace
 
     /// <summary>Express an absolute in-bounds path relative to <see cref="Root"/>, for display.</summary>
     string ToRelative(string absolutePath);
+
+    /// <summary>The programs an agent may run here.</summary>
+    ExecutionPolicy Execution { get; }
 }
 
 /// <summary>Thrown when a path resolves outside the workspace boundary.</summary>
