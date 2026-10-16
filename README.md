@@ -97,6 +97,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
 | `CONTEXT_ROUTING` | Who chooses per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)): `decision` for the Foundry decision model, `generative` for the background chat model, `off` for the full pipeline every turn. Decisions go to `.agent/routing.jsonl` | `decision` when the two variables below are set, else `off` |
+| `LEARN_IDLE_MIN` | Minutes a conversation must be quiet before the sleep timer learns from it: what was said since the last pass (not tool output) is archived as episodes, and its durable facts are staged for review | 2 |
 | `TOKEN_BUDGET` | Tokens, input and output together, the workspace's agents may spend. Once spent, a turn in progress ends in a reply without more tools, later messages get a fixed reply without calling the model, and consolidation stops. A 5% reserve allows the closing replies; past it every call is refused. Spending is kept in `.agent/usage.json` across restarts | no limit |
 | `CODE_REPOS` | Repositories a coding agent may work on, as `name=path` pairs separated by `;` | none |
 | `CODE_COMMANDS` | Programs a coding agent may run in them, comma separated | `dotnet,git,npm,node` |

@@ -32,6 +32,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="DecisionsModel">Decision model deployment name (<c>DECISIONS_MODEL</c>).</param>
 /// <param name="CodeRepos">Repositories a coding agent may work on (<c>CODE_REPOS</c>, <c>name=path</c> pairs
 /// separated by <c>;</c>).</param>
+/// <param name="LearnIdleMinutes">How long a conversation must be quiet before the sleep timer learns from it
+/// (<c>LEARN_IDLE_MIN</c>).</param>
 /// <param name="TokenBudget">Tokens, input and output together, the workspace's agents may spend before they
 /// stop (<c>TOKEN_BUDGET</c>); null means no limit. Spending is kept in the workspace across restarts.</param>
 /// <param name="CodeCommands">Programs a coding agent may run in them (<c>CODE_COMMANDS</c>, comma separated).</param>
@@ -53,13 +55,15 @@ public sealed record HostConfig(
     string? DecisionsModel,
     IReadOnlyList<CodeRepo> CodeRepos,
     IReadOnlyList<string> CodeCommands,
-    long? TokenBudget)
+    long? TokenBudget,
+    int LearnIdleMinutes)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
     public const int DefaultMemoryBudgetTokens = 8000;
     public const int DefaultSleepIntervalMinutes = 30;
     public const int DefaultWebchatPort = 5080;
+    public const int DefaultLearnIdleMinutes = 2;
 
     /// <summary>Resolve the full host configuration from environment variables and defaults.</summary>
     public static HostConfig FromEnvironment()
@@ -112,7 +116,8 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("CODE_COMMANDS") is { Length: > 0 } commands
                 ? commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 : DefaultCodeCommands,
-            long.TryParse(Environment.GetEnvironmentVariable("TOKEN_BUDGET"), out var tokens) && tokens > 0 ? tokens : null);
+            long.TryParse(Environment.GetEnvironmentVariable("TOKEN_BUDGET"), out var tokens) && tokens > 0 ? tokens : null,
+            int.TryParse(Environment.GetEnvironmentVariable("LEARN_IDLE_MIN"), out var idle) && idle >= 0 ? idle : DefaultLearnIdleMinutes);
     }
 }
 

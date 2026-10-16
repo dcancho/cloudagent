@@ -141,6 +141,10 @@ var consolidationPolicy = File.Exists(policyPath)
 
 var sleepJobs = new System.Collections.Concurrent.ConcurrentDictionary<string, SleepJob>();
 
+// Conversations that never compact would leave nothing in memory; a learner per conversation
+// archives and stages what was said once the conversation goes quiet.
+var learners = new System.Collections.Concurrent.ConcurrentDictionary<string, SessionLearner>();
+
 var options = new AgentOptions
 {
     SystemPrompt =
@@ -431,6 +435,15 @@ AgentConversation CreateConversation(string surface, string conversationId)
     var loop = new AgentLoop(
         provider, profile.Options, input, context ?? new AgentContext(), agentTools, comp, attention, utility,
         profile.Routed ? BuildRouter(mem) : null);
+    if (!isEcho)
+    {
+        var learner = new SessionLearner(
+            mem, new Consolidator(provider, mem, smallModel), pendingConsolidations, consolidationLedger, handle.Id,
+            () => loop.Context.Messages);
+        loop.InputReceived += _ => learner.Touch(busy: true);
+        loop.TurnEnded += _ => learner.Touch(busy: false);
+        learners[handle.Id] = learner;
+    }
     loop.TurnEnded += _ =>
     {
         try
@@ -447,6 +460,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
     return new AgentConversation(queue, loop, onDispose: () =>
     {
         sleepJobs.TryRemove(handle.Id, out _);
+        learners.TryRemove(handle.Id, out _);
         agentProfiles.TryRemove(handle.Id, out _);
         bus.Remove(handle.Id);
         (mem.Store as IDisposable)?.Dispose();
@@ -533,6 +547,25 @@ if (!isEcho && sleepMinutes > 0)
 
             if (budget is { Exhausted: true })
                 continue;
+
+            foreach (var (id, learner) in learners)
+            {
+                if (cts.Token.IsCancellationRequested || !learner.IsDue(TimeSpan.FromMinutes(config.LearnIdleMinutes)))
+                    continue;
+                try
+                {
+                    var staged = await learner.LearnAsync(cts.Token);
+                    Console.WriteLine($"  🎓 [{id}] learned from a quiet conversation; staged: {staged ?? "nothing"}");
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  ✖ [{id}] learning failed: {ex.Message}");
+                }
+            }
 
             foreach (var job in sleepJobs.Values)
             {

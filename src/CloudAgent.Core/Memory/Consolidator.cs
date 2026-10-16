@@ -68,6 +68,31 @@ public sealed class Consolidator(
         return stored;
     }
 
+    /// <summary>
+    /// Extract durable facts from the given turns without storing them, leaving out those memory
+    /// already holds, so they can be staged for review instead of learned outright.
+    /// </summary>
+    public async Task<IReadOnlyList<DistilledFact>> ProposeAsync(
+        IReadOnlyList<Message> messages, string evidence, CancellationToken cancellationToken = default)
+    {
+        var transcript = RenderTranscript(messages);
+        if (string.IsNullOrWhiteSpace(transcript))
+            return [];
+
+        var proposed = new List<DistilledFact>();
+        foreach (var candidate in await ExtractAsync(transcript, cancellationToken).ConfigureAwait(false))
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Fact))
+                continue;
+            var scope = Enum.TryParse<MemoryScope>(candidate.Scope, ignoreCase: true, out var parsed) ? parsed : MemoryScope.Project;
+            if (await IsDuplicateAsync(candidate.Fact, scope, cancellationToken).ConfigureAwait(false))
+                continue;
+            proposed.Add(new DistilledFact(
+                scope.ToString().ToLowerInvariant(), candidate.Fact, Math.Clamp(candidate.Importance, 0, 100) / 100.0, evidence));
+        }
+        return proposed;
+    }
+
     private async Task<IReadOnlyList<FactCandidate>> ExtractAsync(
         string transcript, CancellationToken cancellationToken)
     {
