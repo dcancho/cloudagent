@@ -27,15 +27,18 @@ namespace CloudAgent.Surfaces;
 /// never say hello keep receiving plain text. A hello may carry <c>"conversation"</c> to continue an
 /// earlier conversation; the server answers with <c>welcome</c> (the conversation id to keep) and, when
 /// there is one, <c>history</c> (the messages so far). A <c>list</c> frame is answered with
-/// <c>conversations</c>: every web chat conversation, most recent first.
+/// <c>conversations</c>: every web chat conversation, most recent first. A <c>delete</c> frame naming a
+/// <c>conversation</c> deletes it and is answered with <c>conversations</c>.
 /// </summary>
 /// <param name="port">Port to listen on, on localhost.</param>
 /// <param name="history">The messages so far in a conversation, by conversation id.</param>
 /// <param name="conversations">Every web chat conversation, most recent first.</param>
+/// <param name="delete">Deletes a conversation by id.</param>
 public sealed class WebchatSurface(
     int port = 5080,
     Func<string, IReadOnlyList<(string Role, string Text)>>? history = null,
-    Func<IReadOnlyList<ConversationSummary>>? conversations = null) : ITypingSource, ITypingIndicator
+    Func<IReadOnlyList<ConversationSummary>>? conversations = null,
+    Func<string, Task<bool>>? delete = null) : ITypingSource, ITypingIndicator
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(4);
 
@@ -94,6 +97,12 @@ public sealed class WebchatSurface(
                     if (client.Typed && TypeOf(frame) == "list")
                     {
                         await SendConversationsAsync(client, cancellationToken);
+                        continue;
+                    }
+
+                    if (client.Typed && TypeOf(frame) == "delete")
+                    {
+                        await DeleteAsync(client, frame, cancellationToken);
                         continue;
                     }
 
@@ -204,6 +213,23 @@ public sealed class WebchatSurface(
             })
             .ToArray());
         return client.SendAsync(new JsonObject { ["type"] = "conversations", ["items"] = items }.ToJsonString(), cancellationToken);
+    }
+
+    private async Task DeleteAsync(Client client, string frame, CancellationToken cancellationToken)
+    {
+        var id = (JsonNode.Parse(frame) as JsonObject)?["conversation"]?.GetValue<string>();
+        if (delete is not null && id is not null && IsValidId(id))
+        {
+            try
+            {
+                await delete(id);
+            }
+            catch (IOException ex)
+            {
+                Console.Error.WriteLine($"[webchat] could not delete conversation {id}: {ex.Message}");
+            }
+        }
+        await SendConversationsAsync(client, cancellationToken);
     }
 
     private static string? TypeOf(string frame)

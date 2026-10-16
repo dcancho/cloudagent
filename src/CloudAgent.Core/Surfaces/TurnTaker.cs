@@ -167,6 +167,17 @@ public sealed class TurnTaker : IDisposable
         return trimmed[^1] is '?' ? MessageShape.Complete : MessageShape.Neutral;
     }
 
+    /// <summary>Drop a conversation's waiting messages without delivering them.</summary>
+    public void Discard(string surface, string conversationId)
+    {
+        lock (_gate)
+        {
+            var key = Key(surface, conversationId);
+            if (_pending.Remove(key, out var pending))
+                pending.Timer?.Dispose();
+        }
+    }
+
     public void Dispose()
     {
         lock (_gate)

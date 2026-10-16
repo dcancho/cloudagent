@@ -1,4 +1,5 @@
 export { Icon } from './Icon'
+export { Button } from './Button'
 export { IconButton } from './IconButton'
 export { StatusTag } from './StatusTag'
 export { MessageBubble } from './MessageBubble'

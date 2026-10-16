@@ -46,7 +46,7 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
             if (!string.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
 
-            var connection = new SqliteConnection($"Data Source={path}");
+            var connection = new SqliteConnection($"Data Source={path};Pooling=False");
             connection.Open();
             Execute(connection, "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             Execute(connection,
