@@ -151,8 +151,11 @@ memory unchanged, and a review pass over its facts proposes which ones to promot
 - **No level above projects.** Personal and project are the shared levels; an organization level is
   out of scope.
 - **A fact is not linked or copied between projects; shared systems carry it.** Two projects often
-  share a fact because they share a system: the same HR export, the same framework, the same API. A
-  project lists the systems it works with. A fact learned in one project about a system reaches
+  share a fact because they share a system: the same HR export, the same framework, the same API.
+  Systems are recognized from usage, as entities: names that recur in the project's conversations,
+  the packages and configuration in its repositories, the commands it runs and the formats it reads.
+  Nobody declares them. A system recognized often enough in a project's work becomes one of its
+  systems; the list is visible in the project, and a member can remove a wrong one. A fact learned in one project about a system reaches
   every other project that lists the same system as a **hint**: recalled with less weight and
   marked with where it came from. When the work in the second project agrees with it, consolidation
   confirms it there and it becomes that project's fact; when the work contradicts it, the hint is
@@ -179,11 +182,6 @@ memory unchanged, and a review pass over its facts proposes which ones to promot
   a coding tool and a chat app from another vendor share the same project context without
   synchronizing it by hand.
 
-## Open questions
-
-- How a project lists its systems: by hand, inferred from its repositories (package references,
-  configuration), or proposed by learning and confirmed in review.
-
 ## Changes this would require
 
 - A project registry: create, rename, archive, link repositories and conversations, list members.
@@ -196,8 +194,8 @@ memory unchanged, and a review pass over its facts proposes which ones to promot
   and group surfaces gain a way to set the project.
 - Visibility rules for project memory in shared conversations.
 - A migration that keeps today's repository memory and stages promotions to a project.
-- A list of systems per project, hints across projects that share a system, and confirmation of
-  hints in consolidation.
+- Entity recognition of systems from each project's work, hints across projects that share a
+  system, and confirmation of hints in consolidation.
 - Consolidation policy addenda by kind of work, chosen per conversation.
 - Archive and restore for projects; deletion that keeps the ledger entry and lasting person links.
 - A read-only MCP server over project instructions and facts, filtered by visibility.
