@@ -150,15 +150,39 @@ memory unchanged, and a review pass over its facts proposes which ones to promot
 
 - **No level above projects.** Personal and project are the shared levels; an organization level is
   out of scope.
+- **A fact is not linked or copied between projects; shared systems carry it.** Two projects often
+  share a fact because they share a system: the same HR export, the same framework, the same API. A
+  project lists the systems it works with. A fact learned in one project about a system reaches
+  every other project that lists the same system as a **hint**: recalled with less weight and
+  marked with where it came from. When the work in the second project agrees with it, consolidation
+  confirms it there and it becomes that project's fact; when the work contradicts it, the hint is
+  dropped for that project and the conflict is surfaced. Agreement across projects is evidence that
+  the fact is true, which a manual link or copy would not give.
+- **One base consolidation policy, with addenda by kind of work.** What is worth remembering
+  depends on the kind of work (code, research, writing), and one project can hold several kinds.
+  So addenda attach to the kind of work, not to the project: each conversation's material is
+  consolidated with the base policy plus the addendum for the work it shows. Project instructions
+  stay the place for anything specific to one project.
+- **Archive by default; delete only on explicit confirmation.** An archived project is not recalled
+  and does not appear in choices, but keeps everything and can be restored. Its conversations stay
+  readable, marked as belonging to an archived project. Deleting removes the project's memory and
+  instructions for real; the ledger records that a deletion happened and which fact ids it removed,
+  not their content. Repository memory stays, since it describes the code, not the project. One
+  thing about people survives a deletion: the link between a person and a fact whose effects last
+  beyond the project (who decided a convention, who approved a rule) is kept wherever that fact
+  survives, in a repository's memory, another project or the code itself.
+- **Other agents can read project memory through MCP, and only read it.** An MCP server exposes a
+  project's instructions and facts, with each fact's level and evidence, to agents that are not
+  CloudAgent. It does not expose the recall pipeline, the ranking, or conversation context, and it
+  accepts no writes: the other agent reads the knowledge and adapts it to its own understanding. The
+  visibility rules apply, so it serves only what the connecting member could see. This is what lets
+  a coding tool and a chat app from another vendor share the same project context without
+  synchronizing it by hand.
 
 ## Open questions
 
-- Can one fact belong to two projects, as a link rather than a copy?
-- Should each project have its own consolidation policy, or only its own instructions?
-- What happens to a project's memory when it is archived or deleted, and to conversations linked to
-  it?
-- Should a project's context be exportable, for example as an interoperable memory format, so it is
-  not locked into this harness either?
+- How a project lists its systems: by hand, inferred from its repositories (package references,
+  configuration), or proposed by learning and confirmed in review.
 
 ## Changes this would require
 
@@ -172,3 +196,8 @@ memory unchanged, and a review pass over its facts proposes which ones to promot
   and group surfaces gain a way to set the project.
 - Visibility rules for project memory in shared conversations.
 - A migration that keeps today's repository memory and stages promotions to a project.
+- A list of systems per project, hints across projects that share a system, and confirmation of
+  hints in consolidation.
+- Consolidation policy addenda by kind of work, chosen per conversation.
+- Archive and restore for projects; deletion that keeps the ledger entry and lasting person links.
+- A read-only MCP server over project instructions and facts, filtered by visibility.
