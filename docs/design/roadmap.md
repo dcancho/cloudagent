@@ -42,6 +42,10 @@ harnesses kept outside the repository. The repository has no test project yet.
 - **Identity and behavior policy as a seam.** The persona is a string.
 - **Speak or stay quiet.** A gate for deciding whether to respond in a shared conversation. See
   the [participation](proposals/participation.md) proposal.
+- **Projects.** A named context that repositories, conversations on any surface, and people link
+  to, with its own memory and resident instructions. Memory scopes become a ladder (personal,
+  project, repository, session), so team knowledge reaches every repository and chat in the
+  project instead of staying in one repository. See the [projects](proposals/projects.md) proposal.
 - **Knowing the people in a conversation.** Sender identity and a person memory scope. See the
   [people](proposals/people.md) proposal.
 - **Turns that do not end in a message.** See the
