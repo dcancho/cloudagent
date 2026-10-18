@@ -27,14 +27,15 @@ public sealed class ContextAssembler(
         CancellationToken cancellationToken = default)
     {
         var residents = await LoadResidentsAsync(cancellationToken).ConfigureAwait(false);
-        var hits = memory == MemoryLevel.None
-            ? []
+        var recall = memory == MemoryLevel.None
+            ? RecallResult.Empty
             : await RecallAsync(query, light: memory == MemoryLevel.Light, cancellationToken).ConfigureAwait(false);
 
         var system = AttentionRendering.System(persona, residents);
-        var ephemeral = AttentionRendering.Ephemeral(context.State.Render(), context.RollingSummary, hits);
+        var ephemeral = AttentionRendering.Ephemeral(
+            context.State.Render(), context.RollingSummary, recall.Hits, recall.ColdStubs, options.ColdStubPreviewChars);
 
-        return new AssembledContext(system, ephemeral, hits);
+        return new AssembledContext(system, ephemeral, recall.Hits) { ColdStubs = recall.ColdStubs };
     }
 
     /// <summary>The resident-stratum memories that stand in the system prefix; empty without memory.</summary>
@@ -51,16 +52,16 @@ public sealed class ContextAssembler(
     /// <summary>Recall the turn's memories through the pipeline (rewrite → wide hybrid → rerank →
     /// budget), or its light form (hybrid search on the message as written, half the budget);
     /// empty when there is no retriever or no query.</summary>
-    private async Task<IReadOnlyList<MemoryHit>> RecallAsync(string? query, bool light, CancellationToken cancellationToken)
+    private async Task<RecallResult> RecallAsync(string? query, bool light, CancellationToken cancellationToken)
     {
         if (retriever is null || string.IsNullOrWhiteSpace(query))
-            return [];
+            return RecallResult.Empty;
 
         var budgetChars = options.RecallBudgetTokens * CharsPerToken;
         return await retriever
             .RetrieveAsync(
                 query, options.RecallScopes, options.RecallTopK, options.RecallThreshold,
-                budgetChars: light ? budgetChars / 2 : budgetChars, light, cancellationToken)
+                budgetChars: light ? budgetChars / 2 : budgetChars, light, options.ColdStubLimit, options.ColdStubMinScore, cancellationToken)
             .ConfigureAwait(false);
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,8 +28,14 @@ public static class AttentionRendering
     }
 
     /// <summary>The volatile per-turn context: operational state, rolling summary, recalled
-    /// memories. Framed as background reference, never as instructions. Null when nothing to inject.</summary>
-    public static string? Ephemeral(string renderedState, string? summary, IReadOnlyList<MemoryHit> hits)
+    /// memories, and stubs for matching Cold memories. Framed as background reference, never as
+    /// instructions. Null when nothing to inject.</summary>
+    public static string? Ephemeral(
+        string renderedState,
+        string? summary,
+        IReadOnlyList<MemoryHit> hits,
+        IReadOnlyList<MemoryHit>? coldStubs = null,
+        int stubPreviewChars = 80)
     {
         var sb = new StringBuilder();
 
@@ -48,6 +55,23 @@ public static class AttentionRendering
               .Append("(Recalled from long-term memory; may be stale — verify before relying on them.)\n")
               .Append(string.Join("\n", hits.Select(h => $"- ({h.Entry.Scope}/{h.Entry.Kind}) {h.Entry.Content}")));
 
+        if (coldStubs is { Count: > 0 })
+            sb.Append(sb.Length > 0 ? "\n\n" : "")
+              .Append("## Set-aside memories that match\n")
+              .Append("(Moved out of recall because they had not been useful. If one applies, call restore_memory with its id to read it in full before relying on it.)\n")
+              .Append(string.Join("\n", coldStubs.Select(h => $"- [{h.Entry.Id}] ({h.Entry.Scope}/{h.Entry.Kind}) {Preview(h.Entry.Content, stubPreviewChars)}")));
+
         return sb.Length == 0 ? null : sb.ToString();
+    }
+
+    /// <summary>The start of a memory's content on one line, cut at a word boundary.</summary>
+    public static string Preview(string content, int maxChars)
+    {
+        var flat = string.Join(' ', content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (flat.Length <= maxChars)
+            return flat;
+
+        var cut = flat.LastIndexOf(' ', maxChars);
+        return (cut > maxChars / 2 ? flat[..cut] : flat[..maxChars]) + "…";
     }
 }

@@ -15,6 +15,9 @@ harnesses kept outside the repository. The repository has no test project yet.
   truncation of large tool results.
 - Utility loop: injection records, a post-turn judge, per-memory statistics.
 - Sleep job with mechanical moves, staged distillation, and a verifiable hash-chained ledger.
+- Paging from Cold: matching Cold memories leave stubs in recall, `restore_memory` brings one
+  back to Active, and its utility record starts over. The memory row of the
+  [fidelity ladder](proposals/fidelity-ladder.md).
 - Attention module extracted from the loop, with a metacognitive confidence gate.
 - Prompt cache awareness through the stable and ephemeral split.
 - Concurrent subagents with mailboxes, ask and answer, and supervised stop.
@@ -35,9 +38,6 @@ harnesses kept outside the repository. The repository has no test project yet.
 
 - **Relevance-based eviction.** Compaction evicts the oldest turns. The utility log already
   measures access; it does not yet influence what stays in the window.
-- **Paging from Cold.** Cold is currently a one-way door. Nothing moves a memory back to Active,
-  and there are no stubs that would let a cold memory be found and restored on demand. This is
-  the memory case of the [fidelity ladder](proposals/fidelity-ladder.md).
 - **Planning and flow as a seam.** Sequencing lives inside the loop.
 - **Identity and behavior policy as a seam.** The persona is a string.
 - **Speak or stay quiet.** A gate for deciding whether to respond in a shared conversation. See

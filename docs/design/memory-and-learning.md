@@ -46,9 +46,16 @@ Each memory has a residency:
 | --- | --- |
 | Resident | Always in the stable system prompt |
 | Active | Eligible for recall |
-| Cold | Excluded from recall; kept, so forgetting is reversible |
+| Cold | Out of full recall; a strong match leaves a stub that can be restored |
 
 Forgetting is always demotion to Cold, never deletion.
+
+Cold memories still compete in the first recall pass. One that ranks among the top matches and
+clears a minimum similarity is not injected; a stub is, with its id and a short preview, at most
+two per turn. The agent reads it in full with `restore_memory`, which moves it back to Active,
+records the reason in the ledger, and starts its utility record over, so the sleep job and the
+metacognitive gate judge it on what happens after it came back. `search_memory` with
+`archived=true` finds Cold memories on purpose.
 
 ## The utility loop
 
@@ -99,6 +106,5 @@ Compaction evicts the oldest turns when the context exceeds its budget. Three de
 
 ## Not built
 
-Two ideas central to the thesis are designed but not implemented: eviction driven by relevance
-rather than age, and paging cold memories back in when a stub or cue matches. See the
-[roadmap](roadmap.md).
+Eviction driven by relevance rather than age is central to the thesis and designed but not
+implemented. See the [roadmap](roadmap.md).

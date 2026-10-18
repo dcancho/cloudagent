@@ -117,7 +117,8 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
         float[] queryVector,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeCold = false)
     {
         if (topK <= 0)
             return Task.FromResult<IReadOnlyList<MemoryHit>>([]);
@@ -126,14 +127,15 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
 
         // Semantic leg: cosine over every Active entry in scope (linear scan, same as the
         // rest of the harness — fine until the corpus outgrows memory). Resident entries are
-        // already standing in the prompt and Cold ones are deliberately forgotten, so recall
-        // considers only the Active stratum.
+        // already standing in the prompt and Cold ones are set aside, so recall considers only
+        // the Active stratum unless the caller asks for Cold too (to leave stubs).
         var entries = new Dictionary<string, MemoryEntry>();
         foreach (var scope in active)
         {
             foreach (var entry in LoadScope(_connections[scope]))
             {
-                if (entry.Residency == MemoryResidency.Active)
+                if (entry.Residency == MemoryResidency.Active
+                    || (includeCold && entry.Residency == MemoryResidency.Cold))
                     entries[entry.Id] = entry;
             }
         }
@@ -158,7 +160,7 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
         }
 
         var lexicalLeg = lexical
-            .Where(hit => entries.ContainsKey(hit.Id)) // FTS is stratum-blind; filter to Active
+            .Where(hit => entries.ContainsKey(hit.Id)) // FTS is stratum-blind; filter to the strata in play
             .OrderBy(hit => hit.Bm25)
             .Take(CandidatesPerLeg)
             .Select(hit => hit.Id)

@@ -48,7 +48,8 @@ public sealed class MetacognitiveAttentionManager(
 
         // Some were suppressed — re-render the volatile block over the survivors (state and
         // summary are untouched; only the memory section shrinks).
-        var ephemeral = AttentionRendering.Ephemeral(context.State.Render(), context.RollingSummary, kept);
+        var ephemeral = AttentionRendering.Ephemeral(
+            context.State.Render(), context.RollingSummary, kept, assembled.ColdStubs, options.ColdStubPreviewChars);
         return assembled with { EphemeralContext = ephemeral, InjectedMemories = kept };
     }
 

@@ -106,7 +106,7 @@ public sealed class SleepJob(
             var stat = stats.GetValueOrDefault(entry.Id);
             var reason = entry.Kind switch
             {
-                MemoryKind.Episodic when now - entry.CreatedAt > _options.EpisodeTtl
+                MemoryKind.Episodic when now - (stat?.RestoredAt ?? entry.CreatedAt) > _options.EpisodeTtl
                                          && (stat is null || stat.Useful == 0) =>
                     $"episode past TTL ({_options.EpisodeTtl.TotalDays:0}d) with no measured usefulness",
                 MemoryKind.Fact when stat is not null

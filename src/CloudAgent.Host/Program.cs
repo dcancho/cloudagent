@@ -381,6 +381,10 @@ IDecisionModel? decisionModel = config.ContextRouting switch
 ContextRouter? BuildRouter(MemoryManager memory) =>
     decisionModel is null ? null : new ContextRouter(decisionModel, routingOptions, () => memory.Store.Count);
 
+void RegisterColdRecovery(ToolRegistry tools, MemoryManager mem, string agentId) => tools
+    .Register(new RestoreMemoryTool(mem, utilityLedger, consolidationLedger, agentId, attentionOptions.RecallScopes))
+    .Register(new SearchMemoryTool(mem, attentionOptions.RecallScopes, attentionOptions.ColdStubPreviewChars));
+
 // Multi-agent: a bus + orchestrator so any agent can spawn children that run concurrently.
 var bus = new AgentBus(cts.Token);
 bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Status}");
@@ -391,6 +395,7 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     agentProfiles[child.Id] = profile;
     var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id, profile.ProjectMemoryPath);
     childTools.Register(new RememberTool(mem));
+    RegisterColdRecovery(childTools, mem, child.Id);
     var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}");
     var loop = new AgentLoop(
         provider, profile.ChildOptions, input, new AgentContext(), childTools, comp, attention, utility,
@@ -427,6 +432,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new ListAgentsTool(bus, handle))
         .Register(new ReplyToAgentTool(bus, handle))
         .Register(new StopAgentTool(bus));
+    RegisterColdRecovery(agentTools, mem, handle.Id);
 
     var attention = BuildAttention(profile.Options.SystemPrompt, retriever, handle.Id);
     var context = contexts.Load(handle.Id);
@@ -613,7 +619,7 @@ if (codeProfiles.Count > 0)
     Console.WriteLine(
         $"Code:      {string.Join(", ", codeProfiles.Values.Select(p => $"{p.Name} ({p.Workspace.Root})"))}; " +
         $"may run {string.Join(", ", config.CodeCommands)}");
-Console.WriteLine($"Agent:     remember + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
+Console.WriteLine($"Agent:     remember, search_memory, restore_memory + spawn_agent, delegate_task, list_agents, reply_to_agent, stop_agent");
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
 Console.WriteLine($"Records:   transcripts in {transcriptDirectory}, host log in {logDirectory}");
 Console.WriteLine($"Routing:   {decisionModel?.Name ?? "off (full pipeline every turn)"}");

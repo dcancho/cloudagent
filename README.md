@@ -146,6 +146,11 @@ user agent, follows robots.txt, paces requests per host, and refuses to connect 
 private, or link-local addresses. Fetched pages are cached for a day under `.agent/web`, and
 everything from a page is marked as untrusted content.
 
+Memories the sleep job set aside (Cold) are not lost. When one matches a turn strongly, recall
+leaves a stub with its id instead of the content; `restore_memory` brings it back into recall
+with a fresh utility record, and `search_memory` with `archived=true` looks for set-aside
+memories on purpose.
+
 ### Working on code
 
 Each repository in `CODE_REPOS` gets a coding profile: the same agent and memory machinery, with

@@ -16,14 +16,16 @@ public interface IMemoryStore
     /// Return the memories most relevant to the query within the given scopes. Both forms of
     /// the query are provided so a store can search lexically (<paramref name="queryText"/>),
     /// semantically (<paramref name="queryVector"/>), or fuse the two; a vector-only store
-    /// simply ignores the text.
+    /// simply ignores the text. Only Active entries compete unless <paramref name="includeCold"/>
+    /// is set, in which case Cold entries are ranked alongside them.
     /// </summary>
     Task<IReadOnlyList<MemoryHit>> RecallAsync(
         string queryText,
         float[] queryVector,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool includeCold = false);
 
     Task ForgetAsync(string id, CancellationToken cancellationToken = default);
 
