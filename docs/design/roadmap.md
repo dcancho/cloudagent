@@ -1,7 +1,8 @@
 # Roadmap
 
-Status of each part of the design. "Built" means implemented and exercised with test
-harnesses kept outside the repository. The repository has no test project yet.
+Status of each part of the design. "Built" means implemented and exercised by tests. The
+measurement paths are covered by deterministic tests in `tests/`; other parts were exercised with
+harnesses kept outside the repository.
 
 ## Built
 

@@ -34,7 +34,8 @@ public sealed class UtilityTracker(IUtilityLedger ledger, UtilityJudge? judge, s
 
     /// <summary>
     /// Judge the finished turn and record a useful/unused verdict per injected memory.
-    /// Returns how many were useful, or null when no judge is configured.
+    /// Returns how many were useful, or null when no judge is configured or it gave no verdict; then
+    /// nothing is recorded, because a failed judgment is not evidence that a memory was unused.
     /// </summary>
     public async Task<int?> JudgeTurnAsync(
         IReadOnlyList<MemoryHit> injected,
@@ -47,9 +48,13 @@ public sealed class UtilityTracker(IUtilityLedger ledger, UtilityJudge? judge, s
             return null;
 
         var entries = injected.Select(hit => hit.Entry).ToArray();
-        var useful = (await judge
+        var verdict = await judge
             .JudgeAsync(entries, userText, assistantText, cancellationToken)
-            .ConfigureAwait(false)).ToHashSet();
+            .ConfigureAwait(false);
+        if (verdict is null)
+            return null;
+
+        var useful = verdict.ToHashSet();
 
         var now = DateTimeOffset.UtcNow;
         var events = entries
