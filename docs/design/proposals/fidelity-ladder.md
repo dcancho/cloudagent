@@ -43,12 +43,14 @@ Three rules make the ladder trustworthy:
 | --- | --- | --- | --- |
 | Web page | `fetch_url` | `ask_page` | `read_page` |
 | Workspace file | `summarize_file` | Not built | `read_file` |
-| Cold memory | A stub left in recall (not built) | Not built | Restoring the memory to Active (not built) |
+| Cold memory | A stub left in recall, or `search_memory` with `archived=true` | Not built | `restore_memory` |
 
-Web pages are the first complete implementation. The memory row is the "paging from Cold" item in
-the [roadmap](../roadmap.md): today, demotion to Cold is a one-way door because nothing in recall
-says a cold memory exists. A stub is the summary level of the ladder applied to memory, and paging
-it back in is the source level.
+Web pages are the first complete implementation. For memory, a stub is the summary level and
+restoring is the source level. A stub carries the memory's id, scope, kind, and the first words of
+its content; it appears when the Cold memory ranks among the top recall matches and clears a
+minimum similarity. Restoring moves the memory back to Active, records the agent's reason in the
+consolidation ledger, and resets its utility record, so it is not demoted again on its old
+history.
 
 ## Risks
 
@@ -74,5 +76,7 @@ it back in is the source level.
 
 - Should the agent's choice of level be measured by the utility loop, so it learns when skimming
   is enough?
-- What should a stub for a cold memory contain so that recall can match it without reviving it?
+- A stub previews the start of the content, so a short fact can be read whole from the stub and
+  used without a restore, which the ledger then cannot count. Would a generated label serve
+  better than a preview?
 - Should the query level be added for workspace files, or is the semantic index enough there?

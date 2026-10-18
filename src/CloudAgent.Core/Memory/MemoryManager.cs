@@ -49,10 +49,19 @@ public sealed class MemoryManager(
         string query,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeCold = false)
     {
         var queryVector = await embeddings.EmbedAsync(query, cancellationToken).ConfigureAwait(false);
-        return await store.RecallAsync(query, queryVector, scopes, topK, cancellationToken).ConfigureAwait(false);
+        return await store.RecallAsync(query, queryVector, scopes, topK, cancellationToken, includeCold).ConfigureAwait(false);
+    }
+
+    /// <summary>The entry with this id in any of the given scopes, whatever its stratum; null if none.</summary>
+    public async Task<MemoryEntry?> FindAsync(
+        string id, IReadOnlyCollection<MemoryScope> scopes, CancellationToken cancellationToken = default)
+    {
+        var entries = await store.ListAsync(scopes, cancellationToken).ConfigureAwait(false);
+        return entries.FirstOrDefault(e => e.Id == id);
     }
 
     /// <summary>

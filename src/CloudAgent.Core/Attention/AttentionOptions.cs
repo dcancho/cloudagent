@@ -26,6 +26,15 @@ public sealed class AttentionOptions
     public MemoryScope[] RecallScopes { get; init; } =
         [MemoryScope.Personal, MemoryScope.Project, MemoryScope.Session];
 
+    /// <summary>Most Cold memories mentioned as restorable stubs per turn; 0 keeps Cold out of recall.</summary>
+    public int ColdStubLimit { get; init; } = 2;
+
+    /// <summary>Cosine a Cold memory needs to leave a stub; in a small store the top-K alone admits weak matches.</summary>
+    public double ColdStubMinScore { get; init; } = 0.30;
+
+    /// <summary>Length of the preview a stub shows of its memory, in characters.</summary>
+    public int ColdStubPreviewChars { get; init; } = 80;
+
     // ---- Metacognition (eje 8) — the gate that suppresses low-track-record injections. ----
 
     /// <summary>Wrap the assembler in the metacognitive gate. Safe on: it is inert until the

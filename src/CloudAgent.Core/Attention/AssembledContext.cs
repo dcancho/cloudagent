@@ -15,4 +15,8 @@ namespace CloudAgent.Core.Attention;
 public sealed record AssembledContext(
     string System,
     string? EphemeralContext,
-    IReadOnlyList<MemoryHit> InjectedMemories);
+    IReadOnlyList<MemoryHit> InjectedMemories)
+{
+    /// <summary>Cold memories mentioned as stubs this turn. Not injected, so not recorded as utility.</summary>
+    public IReadOnlyList<MemoryHit> ColdStubs { get; init; } = [];
+}

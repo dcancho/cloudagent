@@ -13,6 +13,9 @@ public enum UtilitySignal
 
     /// <summary>The post-turn judge saw no influence — the memory was ballast this turn.</summary>
     JudgedUnused,
+
+    /// <summary>The memory came back from Cold; its track record starts over from here.</summary>
+    Restored,
 }
 
 /// <summary>
@@ -48,6 +51,9 @@ public sealed class MemoryUtilityStats
 
     public DateTimeOffset LastSeenAt { get; private set; }
 
+    /// <summary>When the memory last came back from Cold, if ever.</summary>
+    public DateTimeOffset? RestoredAt { get; private set; }
+
     /// <summary>Fraction of injections that were judged useful, in [0, 1].</summary>
     public double UsefulRate => Injections == 0 ? 0 : (double)Useful / Injections;
 
@@ -60,6 +66,11 @@ public sealed class MemoryUtilityStats
                 break;
             case UtilitySignal.JudgedUseful:
                 Useful++;
+                break;
+            case UtilitySignal.Restored:
+                Injections = 0;
+                Useful = 0;
+                RestoredAt = utilityEvent.At;
                 break;
         }
 

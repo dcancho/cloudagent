@@ -51,7 +51,8 @@ public sealed class FileMemoryStore : IMemoryStore
         float[] queryVector,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeCold = false)
     {
         if (topK <= 0)
             return Task.FromResult<IReadOnlyList<MemoryHit>>([]);
@@ -59,7 +60,8 @@ public sealed class FileMemoryStore : IMemoryStore
         var hits = scopes
             .Where(_byScope.ContainsKey)
             .SelectMany(scope => _byScope[scope])
-            .Where(entry => entry.Residency == MemoryResidency.Active)
+            .Where(entry => entry.Residency == MemoryResidency.Active
+                            || (includeCold && entry.Residency == MemoryResidency.Cold))
             .Select(entry => new MemoryHit(entry, VectorIndex.Cosine(queryVector, entry.Embedding)))
             .OrderByDescending(hit => hit.Score)
             .Take(topK)

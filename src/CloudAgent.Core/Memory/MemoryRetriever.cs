@@ -6,6 +6,15 @@ using System.Threading.Tasks;
 
 namespace CloudAgent.Core.Memory;
 
+/// <summary>What recall found for a turn.</summary>
+/// <param name="Hits">Active memories to inject in full.</param>
+/// <param name="ColdStubs">Cold memories that ranked among the top matches, to mention as stubs
+/// the agent can restore; never injected in full.</param>
+public sealed record RecallResult(IReadOnlyList<MemoryHit> Hits, IReadOnlyList<MemoryHit> ColdStubs)
+{
+    public static RecallResult Empty { get; } = new([], []);
+}
+
 /// <summary>
 /// The read-side pipeline: rewrite the query (the question rarely resembles the answer),
 /// run one wide-and-cheap first pass (the store's hybrid BM25 + vector search), then one
@@ -32,30 +41,45 @@ public sealed class MemoryRetriever(
     /// <paramref name="threshold"/> drive the fallback selection when no reranker decides;
     /// <paramref name="budgetChars"/> caps the total injected content (0 = unlimited).
     /// <paramref name="light"/> skips the query rewrite and the rerank, the two model calls.
+    /// <paramref name="coldStubLimit"/> lets Cold memories compete in the first pass: any that rank
+    /// within the top-K and score at least <paramref name="coldStubMinScore"/> come back as stubs, at
+    /// most this many (0 = Cold stays out of recall).
     /// </summary>
-    public async Task<IReadOnlyList<MemoryHit>> RetrieveAsync(
+    public async Task<RecallResult> RetrieveAsync(
         string query,
         IReadOnlyCollection<MemoryScope> scopes,
         int topK,
         double threshold,
         int budgetChars,
         bool light = false,
+        int coldStubLimit = 0,
+        double coldStubMinScore = 0,
         CancellationToken cancellationToken = default)
     {
         var searchQuery = rewriter is null || light
             ? query
             : await rewriter.RewriteAsync(query, cancellationToken).ConfigureAwait(false);
 
-        var candidates = await memory
-            .RecallAsync(searchQuery, scopes, WideCandidates, cancellationToken)
+        var ranked = await memory
+            .RecallAsync(searchQuery, scopes, WideCandidates, cancellationToken, includeCold: coldStubLimit > 0)
             .ConfigureAwait(false);
-        if (candidates.Count == 0)
-            return [];
+        if (ranked.Count == 0)
+            return RecallResult.Empty;
+
+        var stubs = ranked
+            .Take(topK)
+            .Where(hit => hit.Entry.Residency == MemoryResidency.Cold && hit.Score >= coldStubMinScore)
+            .Take(coldStubLimit)
+            .ToArray();
+
+        var candidates = ranked.Where(hit => hit.Entry.Residency != MemoryResidency.Cold).ToArray();
+        if (candidates.Length == 0)
+            return new RecallResult([], stubs);
 
         var selected = await SelectAsync(query, candidates, topK, threshold, useReranker: !light, cancellationToken)
             .ConfigureAwait(false);
 
-        return ApplyBudget(selected, budgetChars);
+        return new RecallResult(ApplyBudget(selected, budgetChars), stubs);
     }
 
     private async Task<IReadOnlyList<MemoryHit>> SelectAsync(
