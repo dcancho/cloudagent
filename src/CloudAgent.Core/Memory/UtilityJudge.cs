@@ -32,16 +32,17 @@ public sealed class UtilityJudge(ILlmProvider provider, string? model = null)
 
     /// <summary>
     /// Judge which of <paramref name="injected"/> influenced <paramref name="assistantText"/>.
-    /// Returns the zero-based indices of the useful ones; empty on any failure.
+    /// Returns the zero-based indices of the useful ones; empty when the model says none helped;
+    /// null when there was nothing to judge or the call failed, so no verdict gets recorded.
     /// </summary>
-    public async Task<IReadOnlyList<int>> JudgeAsync(
+    public async Task<IReadOnlyList<int>?> JudgeAsync(
         IReadOnlyList<MemoryEntry> injected,
         string? userText,
         string assistantText,
         CancellationToken cancellationToken = default)
     {
         if (injected.Count == 0 || string.IsNullOrWhiteSpace(assistantText))
-            return [];
+            return null;
 
         var numbered = new StringBuilder();
         for (var i = 0; i < injected.Count; i++)
@@ -75,19 +76,19 @@ public sealed class UtilityJudge(ILlmProvider provider, string? model = null)
         }
         catch
         {
-            return [];
+            return null;
         }
 
         return Parse(response.Text, injected.Count);
     }
 
-    /// <summary>Parse the 1-based numbers out of the reply and map them to 0-based indices.</summary>
-    private static IReadOnlyList<int> Parse(string text, int count)
+    /// <summary>Parse the 1-based numbers out of the reply into 0-based indices; null when there is no array.</summary>
+    private static IReadOnlyList<int>? Parse(string text, int count)
     {
         var start = text.IndexOf('[');
         var end = text.LastIndexOf(']');
         if (start < 0 || end <= start)
-            return [];
+            return null;
 
         try
         {
@@ -100,7 +101,7 @@ public sealed class UtilityJudge(ILlmProvider provider, string? model = null)
         }
         catch (JsonException)
         {
-            return [];
+            return null;
         }
     }
 

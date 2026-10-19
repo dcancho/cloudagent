@@ -1,5 +1,7 @@
 # CloudAgent
 
+[![CI](https://github.com/dcancho/cloudagent/actions/workflows/ci.yml/badge.svg)](https://github.com/dcancho/cloudagent/actions/workflows/ci.yml)
+
 An autonomous agent harness in .NET 10, built around one question: how does an agent
 remember, decide what to pay attention to, and learn from its own history over time?
 
@@ -46,6 +48,8 @@ src/
     Workspaces/           the sandbox the agent acts within
   CloudAgent.Surfaces/    web chat and Discord adapters
   CloudAgent.Host/        console runner, typed configuration, composition root
+tests/
+  CloudAgent.Core.Tests/  deterministic tests of the measurement paths, with a scripted model
 web/                      React client for the web chat (see web/README.md)
 docs/
   design/                 the ideas, independent of the code
@@ -201,9 +205,18 @@ at once.
 ## Status
 
 This is a working research harness, not a product. Memory, attention, and consolidation are
-implemented and were checked with out-of-repo test harnesses; the repository does not yet have
-a test project. Several of the central ideas are designed but not built. The
+implemented. Several of the central ideas are designed but not built. The
 [roadmap](docs/design/roadmap.md) says which.
+
+The tests cover what the harness claims to measure: the utility ledger and its replay, the
+judge and what a failed judgment records, the sleep job's moves, the hash-chained ledger and
+tamper detection, the metacognitive gate, retrieval with its fallbacks, recovery from Cold, the
+token budget, and the routing ledger. They use a scripted model and a real SQLite store, so they
+need no keys and give the same result every run.
+
+```powershell
+dotnet test
+```
 
 ## License
 
