@@ -68,8 +68,8 @@ harnesses kept outside the repository.
   entities, filtering in the store query before any model call sees a candidate, and labels that
   propagate to facts and gists derived from labeled episodes. See the
   [entity access](proposals/entity-access.md) proposal. Depends on people and projects.
-- **Conversation gists.** A condensed, turn-by-turn account of each conversation, written only
-  once it goes quiet, recalled in place of its episodes and replacing the flat sleep summary. See
+- **Conversation gists.** A retelling of each conversation in order, with marked readings,
+  written only once it goes quiet, recalled in place of its episodes and replacing the flat sleep summary. See
   the [conversation gist](proposals/conversation-gist.md) proposal.
 - **Threshold tuning.** The sleep job's defaults are placeholders awaiting real ledger data.
 - **Consolidation policy review.** The policy is a draft.

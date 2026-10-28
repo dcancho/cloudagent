@@ -21,10 +21,11 @@ what a person remembers about a conversation they took part in.
 Facts are a third form, and they do something else: they keep the lesson and drop the
 conversation.
 
-What is missing is the shape of the exchange. "Marta asked for a nightly export; the agent pointed out the lock;
-she moved the start to 06:15; the failure email's recipient was left open." That is not a transcript and not a summary. It is a turn-by-turn account
-of roughly what each side said, with the cues that mattered: a correction, a hesitation, a
-reversal, a question nobody answered.
+What is missing is the account a participant would give a colleague who asks "what happened in
+that conversation?". It keeps the order of events and who moved the discussion, and it carries the
+reading that makes the outcome make sense: "Ana kept insisting; I think she was defending her
+idea more than the evidence". That is not a transcript and not a summary. The exact words stay in
+the transcript, for a specific search later.
 
 Psychology has a name for the difference. Fuzzy-trace theory separates verbatim traces (the exact
 surface) from gist traces (the meaning and its structure), and finds that people store both, in
@@ -33,35 +34,58 @@ current design keeps only verbatim (episodes) and a lossy abstraction (the summa
 
 ## Proposal
 
-### 1. A gist is a condensed transcript, one line per turn
+### 1. A gist is a retelling, in order
 
-A gist covers one conversation, or one contiguous stretch of it. It keeps the turn structure and
-the speakers and condenses each turn to what it did:
+A gist covers one conversation, or one contiguous stretch of it. It is written as a short
+narrative that follows the conversation's order, the way someone who was there would retell it:
 
 ```
-[2026-10-28, web, 14 turns]
-Marta: wants the HR export moved to a scheduled job; asks for an estimate.
-Agent: proposes a nightly job; asks whether the file must arrive before 08:00.
-Marta: yes, before 07:30. Also wants a failure email.
-Agent: points out the export reads the payroll lock, which is held until 06:00.
-Marta: accepts 06:15 start.
-  -> decided: export runs at 06:15, emails on failure.
-Agent: asks who receives the failure email. Unanswered.
-  -> open: recipient of the failure email.
+[2026-10-28, #payroll, Ana, Bruno, Carla, agent; 38 messages]
+Ana proposed moving the HR export to a nightly job, because the manual run had been late
+three times in October. Bruno said they had tried a scheduled export last year and dropped it:
+it collided with the payroll lock and produced half-empty files. Ana kept pressing for it.
+(Reading: she seemed to be defending the idea more than answering the lock problem; she did not
+address it until the agent raised it again.) The agent pointed out the lock is held until 06:00.
+Carla joined late and asked what the discussion was about; Ana and Bruno caught her up. They
+agreed to run the export at 06:15 and email on failure.
+  -> decided: nightly export at 06:15, failure email.
+  -> open: who receives the failure email.
 ```
 
 Rules for writing it:
 
-- **One line per turn**, merged only when consecutive turns by the same speaker do one thing.
-- **Speakers by name**, using the identities from the [people](people.md) proposal when present.
-- **Acts, not words.** "Points out the payroll lock", not the paragraph that explained it.
-  Quotes are kept only for exact strings that matter: names, numbers, commands, error messages.
-- **Cues are marked**, on their own line under the turn that produced them: `decided`, `open`,
-  `corrected`, `reversed`, `rejected`. These are the points facts and future conversations need.
-- **Observable cues only.** "Asked the same thing three times" is a cue. "Was frustrated" is an
-  emotional state, which the consolidation policy and the people proposal already forbid.
-- **Every line cites its episodes.** The gist stores the episode ids each line condenses, so any
-  line can be expanded back to what was said.
+- **Linear.** Events in the order they happened. Order is what lets a later reader see that a
+  decision came after an objection, or that someone changed their mind.
+- **Who moved it, roughly what they said.** Speakers by name, using the identities from the
+  [people](people.md) proposal when present. Positions and reasons, condensed, not quoted. Quotes
+  are kept only for exact strings that matter: names, numbers, commands, error messages.
+- **Readings are allowed, and marked.** An interpretation that helps read the situation ("she
+  seemed to be defending the idea", "the question was not really answered", "the agreement
+  sounded reluctant") goes in, in parentheses, labeled as a reading, hedged, and tied to what was
+  observed. A reading without its observation is not allowed.
+- **Outcomes are marked**, on their own lines at the end of the part that produced them:
+  `decided`, `open`, `corrected`, `reversed`, `rejected`.
+- **Length follows the conversation, not a quota.** A 40-message discussion is a paragraph or
+  two; what does not change the story is left out.
+- **Every sentence cites its episodes.** The gist stores the episode ids each sentence condenses,
+  so any part can be expanded back to what was said.
+
+### Readings and the rule against emotional states
+
+The consolidation policy and the people proposal forbid recording emotional states and character
+judgments. That rule protects durable knowledge about people: a fact like "Ana gets defensive"
+would be recalled forever, in every context, from one afternoon.
+
+A reading in a gist is different in scope. It belongs to one moment of one conversation, says so,
+and shows what it rests on. So readings are allowed in gists under two limits:
+
+- **They never leave the gist.** Distillation may not turn a reading into a fact, a person fact,
+  or evidence for one. A pattern about a person still needs three independent episodes of
+  observed behavior, exactly as the policy says.
+- **They follow the visibility of the people involved.** A gist with a reading about Ana is not
+  recalled in a conversation where it would be inappropriate for that reading to surface. With the
+  [entity access](entity-access.md) proposal built, readings about a person can carry that
+  person's label.
 
 ### 2. Made only during sleep
 
@@ -98,7 +122,7 @@ Consequences:
   gist is injected, its episodes are not, which saves most of the budget a conversation costs
   today.
 - **Episodes can go Cold sooner** once a gist covers them, because the gist keeps them findable: a
-  recalled gist line leads to its episodes through `restore_memory`, the same path Cold stubs
+  recalled gist sentence leads to its episodes through `restore_memory`, the same path Cold stubs
   already use.
 - **The flat sleep summary goes away.** Distillation stops writing one summary across mixed
   conversations. Its job becomes extracting facts only.
@@ -113,9 +137,9 @@ A gist adds no knowledge the episodes did not have. It is a lossy view of them, 
 reversible: deleting a gist loses nothing. So, unlike facts, it is written without review and
 logged in the ledger as `gist` with the episode ids it covers.
 
-This holds only while gists stay acts and cues. A gist line that makes a claim the conversation
-did not ("Marta prefers X") is a fact in disguise. The policy says so, and a gist that fails the
-check is dropped and logged, not stored.
+This holds only while a gist retells. A sentence that generalizes beyond the conversation ("Ana
+prefers X", "Bruno always objects") is a fact in disguise, and an unmarked reading is a judgment in
+disguise. The policy says so, and a gist that fails the check is dropped and logged, not stored.
 
 ### 5. Measured like any memory
 
@@ -150,18 +174,20 @@ never applied decays to Cold like any other memory.
   never ends needs a cut, probably at long silences or topic changes.
 - Whether a gist is rewritten when a conversation resumes days later, or a second gist is added.
   Rewriting risks the re-summarization drift the design avoids elsewhere; adding is safer.
-- Which cue labels are enough. The five above are a starting set.
-- Whether tool calls get a line. `SessionLearner` leaves tool output out; a gist may want "ran the
+- Which outcome labels are enough. The five above are a starting set.
+- Whether the people a reading is about can see it. The people proposal lets a person list what
+  is kept about them; readings in gists probably belong in that listing.
+- Whether tool calls get a sentence. `SessionLearner` leaves tool output out; a gist may want "ran the
   tests: 3 failures" as an act.
 
 ## Changes this would require
 
-- A `Gist` memory kind, with the cited episode ids stored per line.
+- A `Gist` memory kind, with the cited episode ids stored per sentence.
 - A gist writer called from `SessionLearner` and from `SleepJob`, with its own prompt section in
   `docs/consolidation-policy.md`.
 - Removal of the flat summary from distillation, and distillation reading gists as a guide.
 - A shorter TTL for episodes covered by a gist.
-- `restore_memory` expanding a gist line into its episodes.
+- `restore_memory` expanding a gist sentence into its episodes.
 - A `gist` ledger entry.
 
 ## References
