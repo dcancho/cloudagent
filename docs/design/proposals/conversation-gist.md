@@ -70,22 +70,35 @@ Rules for writing it:
 - **Every sentence cites its episodes.** The gist stores the episode ids each sentence condenses,
   so any part can be expanded back to what was said.
 
-### Readings and the rule against emotional states
+### Readings and the risk they carry
 
-The consolidation policy and the people proposal forbid recording emotional states and character
-judgments. That rule protects durable knowledge about people: a fact like "Ana gets defensive"
-would be recalled forever, in every context, from one afternoon.
+The risk is not that the agent forms a reading. A participant in a conversation forms readings
+too, and needs them to understand what happened. The risk is that a reading becomes a
+psychological assessment of a person that someone else can later ask for: "what is Ana like?",
+"is Bruno difficult to work with?", "what did the agent make of Ana in that meeting?". One
+afternoon's impression, delivered as an answer about who someone is, to someone who was not there.
 
-A reading in a gist is different in scope. It belongs to one moment of one conversation, says so,
-and shows what it rests on. So readings are allowed in gists under two limits:
+The consolidation policy and the people proposal already forbid emotional states and character
+judgments as facts. Readings in gists are allowed, under rules that close the paths to that risk:
 
-- **They never leave the gist.** Distillation may not turn a reading into a fact, a person fact,
-  or evidence for one. A pattern about a person still needs three independent episodes of
+- **A reading cannot be found by asking about the person.** Readings are stored inside the gist
+  but left out of its embedding and its full-text index. A gist is recalled for its topic (the
+  export, the lock, the decision), never because a query about Ana matches what the agent thought
+  of her.
+- **A reading is shown only to people who were there.** When a gist is rendered into a
+  conversation, its readings are kept only if everyone who will read the reply took part in the
+  conversation the gist covers. Anyone else gets the gist without them: what happened, in order,
+  who said what, what was decided.
+- **A reading never leaves the gist.** Distillation may not turn a reading into a fact, a person
+  fact, or evidence for one. A pattern about a person still needs three independent episodes of
   observed behavior, exactly as the policy says.
-- **They follow the visibility of the people involved.** A gist with a reading about Ana is not
-  recalled in a conversation where it would be inappropriate for that reading to surface. With the
-  [entity access](entity-access.md) proposal built, readings about a person can carry that
-  person's label.
+- **The agent does not give psychological assessments of people.** Asked what someone is like,
+  whether they are defensive, or what they "really" think, it answers with what was said and
+  decided, not with readings, regardless of who asks. This is a behavior rule in the persona, not
+  a memory rule, because the model can form a judgment from the transcript alone.
+
+The first three keep the stored reading from reaching a third party. The fourth covers what
+storage cannot: a judgment made on the spot.
 
 ### 2. Made only during sleep
 
