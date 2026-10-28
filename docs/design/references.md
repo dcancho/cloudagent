@@ -36,6 +36,9 @@ derived from it. Check the sources for exact claims.
   connectionist models of learning and memory. Psychological Review, 102(3), 419-457.
   https://doi.org/10.1037/0033-295X.102.3.419
   The background for fast episodic storage consolidated into slower general knowledge.
+- Reyna, V. F., Brainerd, C. J. (1995). Fuzzy-trace theory: An interim synthesis. Learning and
+  Individual Differences, 7(1), 1-75. https://doi.org/10.1016/1041-6080(95)90031-4
+  Verbatim and gist memory traces stored in parallel; the background for conversation gists.
 
 ## Prompt caching
 

@@ -64,6 +64,13 @@ harnesses kept outside the repository.
   each turn's action history, and sampled shadow pairs, the same turn with a memory withheld, would
   give the verdict and calibrate the cheap reading. See the
   [memory counterfactuals](proposals/memory-counterfactuals.md) proposal.
+- **Memories that belong to entities.** Entity labels on memories, access lists on restricted
+  entities, filtering in the store query before any model call sees a candidate, and labels that
+  propagate to facts and gists derived from labeled episodes. See the
+  [entity access](proposals/entity-access.md) proposal. Depends on people and projects.
+- **Conversation gists.** A condensed, turn-by-turn account of each conversation, written only
+  once it goes quiet, recalled in place of its episodes and replacing the flat sleep summary. See
+  the [conversation gist](proposals/conversation-gist.md) proposal.
 - **Threshold tuning.** The sleep job's defaults are placeholders awaiting real ledger data.
 - **Consolidation policy review.** The policy is a draft.
 

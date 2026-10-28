@@ -28,6 +28,10 @@ Proposals are ideas that are reasoned through but not built. Each states its sta
   pipeline each turn needs, and falls back to all of it when unsure.
 - [Fidelity ladder](proposals/fidelity-ladder.md): perceiving a source as a summary, a query, or
   the source itself, and climbing only as far as needed.
+- [Entity access](proposals/entity-access.md): memories that belong to entities such as a client or
+  a domain of work, hidden from anyone not on the entity's access list.
+- [Conversation gist](proposals/conversation-gist.md): a turn-by-turn condensed account of a
+  conversation, written during sleep, between the literal episodes and a summary.
 
 The consolidation judge prompt lives at [../consolidation-policy.md](../consolidation-policy.md)
 because the host loads it at runtime. It is part of the design and is meant to be edited.
