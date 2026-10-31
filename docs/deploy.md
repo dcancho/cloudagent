@@ -1,6 +1,6 @@
 # Deploying to a single VPS
 
-Target: one Ubuntu 24.04 VPS (2 vCore, 4 GB RAM), the host running under systemd as the
+Target: one Ubuntu 24.04 or later VPS (2 vCore, 4 GB RAM), the host running under systemd as the
 unprivileged user `cloudagent`, reachable only through Tailscale and the outbound Discord and
 Telegram connections. Nothing listens on a public port except SSH, and after step 6 not even that.
 
@@ -16,7 +16,7 @@ The build is self-contained for linux-x64, so the server needs no .NET. SQLite s
 
 ## 1. Provision the VPS
 
-Create the VPS with Ubuntu 24.04 and your SSH key, then log in as the default user (`ubuntu` on
+Create the VPS with Ubuntu 24.04 or later and your SSH key, then log in as the default user (`ubuntu` on
 OVHcloud). From the repository root on your machine:
 
 ```powershell

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time server setup for Ubuntu 24.04. Run as root from the copied deploy folder. Safe to repeat.
+# One-time server setup for Ubuntu 24.04 or later. Run as root from the copied deploy folder. Safe to repeat.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root: sudo bash provision.sh" >&2; exit 1; }
@@ -13,8 +13,17 @@ fi
 id "$deploy_user" >/dev/null
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y sqlite3 ufw curl ca-certificates
+
+wait_for_apt() {
+    while fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1; do
+        echo "Waiting for another package manager (often unattended-upgrades) to finish..."
+        sleep 10
+    done
+}
+
+wait_for_apt
+apt-get -o DPkg::Lock::Timeout=600 update
+apt-get -o DPkg::Lock::Timeout=600 install -y sqlite3 ufw curl ca-certificates psmisc
 
 id cloudagent >/dev/null 2>&1 || useradd --system --home-dir /var/lib/cloudagent --shell /usr/sbin/nologin cloudagent
 
@@ -45,6 +54,7 @@ ufw allow OpenSSH
 ufw --force enable
 
 if ! command -v tailscale >/dev/null 2>&1; then
+    wait_for_apt
     curl -fsSL https://tailscale.com/install.sh | sh
 fi
 
