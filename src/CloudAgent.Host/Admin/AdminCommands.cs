@@ -176,6 +176,13 @@ public static class AdminCommands
         Table(output, "By model", report.ByModel);
         Table(output, "By agent", report.ByAgent);
 
+        if (report.ByPart.Count > 0)
+        {
+            output.WriteLine("\nInput by prompt part (estimated)");
+            foreach (var part in report.ByPart)
+                output.WriteLine($"  {part.Part,-35}{part.Tokens,12:N0} in{part.Share,9:P1}");
+        }
+
         var unpriced = report.ByModel.Where(m => m.Totals.Unpriced).Select(m => m.Key).ToList();
         if (unpriced.Count > 0)
             output.WriteLine($"\nNo price for {string.Join(", ", unpriced.Select(m => $"'{m}'"))}: costs are a floor. " +

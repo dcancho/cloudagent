@@ -51,12 +51,14 @@ public sealed class UsageReport
         UsageTotals total,
         IReadOnlyList<UsageGroup> byPurpose,
         IReadOnlyList<UsageGroup> byModel,
-        IReadOnlyList<UsageGroup> byAgent)
+        IReadOnlyList<UsageGroup> byAgent,
+        IReadOnlyList<UsagePart> byPart)
     {
         Total = total;
         ByPurpose = byPurpose;
         ByModel = byModel;
         ByAgent = byAgent;
+        ByPart = byPart;
     }
 
     public UsageTotals Total { get; }
@@ -68,6 +70,9 @@ public sealed class UsageReport
     /// <summary>Calls made outside any agent, such as the sleep timer's, are under <see cref="NoAgent"/>.</summary>
     public IReadOnlyList<UsageGroup> ByAgent { get; }
 
+    /// <summary>Where the input tokens of calls that recorded their composition went, largest first.</summary>
+    public IReadOnlyList<UsagePart> ByPart { get; }
+
     public const string NoAgent = "(no agent)";
 
     public static UsageReport Build(IEnumerable<UsageRecord> records, IReadOnlyDictionary<string, ModelPrice> prices)
@@ -77,7 +82,29 @@ public sealed class UsageReport
             Fold(all, prices),
             Group(all, r => r.Purpose, prices),
             Group(all, r => r.Model, prices),
-            Group(all, r => r.Agent ?? NoAgent, prices));
+            Group(all, r => r.Agent ?? NoAgent, prices),
+            Compose(all));
+    }
+
+
+    private static IReadOnlyList<UsagePart> Compose(List<UsageRecord> records)
+    {
+        var tokens = new Dictionary<string, double>();
+        foreach (var record in records)
+        {
+            var chars = record.Chars?.Values.Sum() ?? 0;
+            if (record.InputTokens is not { } input || chars == 0)
+                continue;
+
+            foreach (var (part, size) in record.Chars!)
+                tokens[part] = tokens.GetValueOrDefault(part) + input * (double)size / chars;
+        }
+
+        var total = tokens.Values.Sum();
+        return tokens
+            .OrderByDescending(p => p.Value)
+            .Select(p => new UsagePart(p.Key, (long)Math.Round(p.Value), total == 0 ? 0 : p.Value / total))
+            .ToList();
     }
 
     private static IReadOnlyList<UsageGroup> Group(
@@ -110,3 +137,9 @@ public sealed class UsageReport
         return totals;
     }
 }
+
+/// <summary>Input tokens attributed to one part of the prompt.</summary>
+/// <param name="Part">See <see cref="PromptPart"/>.</param>
+/// <param name="Tokens">Input tokens, estimated by dividing each call's reported input in proportion to the characters of its parts.</param>
+/// <param name="Share">Fraction of the measured input tokens.</param>
+public sealed record UsagePart(string Part, long Tokens, double Share);
