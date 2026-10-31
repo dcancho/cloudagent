@@ -13,7 +13,7 @@ namespace CloudAgent.Surfaces;
 /// one-to-one DM is direct. Requires a bot token and the Message Content intent enabled in the
 /// Discord developer portal.
 /// </summary>
-public sealed class DiscordSurface : ITypingSource, ITypingIndicator
+public sealed class DiscordSurface : ITypingSource, ITypingIndicator, IHandleSource
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(10);
 
@@ -40,6 +40,8 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator
     }
 
     public string Name => "discord";
+
+    public string? Handle => _client.CurrentUser is { } me ? "@" + me.Username : null;
 
     public event Action<InboundTyping>? TypingReceived;
 

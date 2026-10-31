@@ -50,6 +50,7 @@ namespace CloudAgent.Host.Configuration;
 /// it without mentioning it again (<c>GROUP_ENGAGEMENT_SEC</c>); 0 requires a mention or reply every time.</param>
 /// <param name="MaxInputTokens">Most input tokens, estimated, one model call may carry (<c>MAX_INPUT_TOKENS</c>); the least
 /// useful context is dropped past it. 0 means no cap.</param>
+/// <param name="AgentName">What the agent calls itself (<c>AGENT_NAME</c>); by default its handle on the surface.</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -75,7 +76,8 @@ public sealed record HostConfig(
     int LearnIdleMinutes,
     string? ModelPrices = null,
     int GroupEngagementSeconds = HostConfig.DefaultGroupEngagementSeconds,
-    int MaxInputTokens = HostConfig.DefaultMaxInputTokens)
+    int MaxInputTokens = HostConfig.DefaultMaxInputTokens,
+    string? AgentName = null)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -145,7 +147,8 @@ public sealed record HostConfig(
             int.TryParse(Environment.GetEnvironmentVariable("LEARN_IDLE_MIN"), out var idle) && idle >= 0 ? idle : DefaultLearnIdleMinutes,
             Environment.GetEnvironmentVariable("MODEL_PRICES"),
             int.TryParse(Environment.GetEnvironmentVariable("GROUP_ENGAGEMENT_SEC"), out var engagement) && engagement >= 0 ? engagement : DefaultGroupEngagementSeconds,
-            int.TryParse(Environment.GetEnvironmentVariable("MAX_INPUT_TOKENS"), out var maxInput) && maxInput >= 0 ? maxInput : DefaultMaxInputTokens);
+            int.TryParse(Environment.GetEnvironmentVariable("MAX_INPUT_TOKENS"), out var maxInput) && maxInput >= 0 ? maxInput : DefaultMaxInputTokens,
+            Environment.GetEnvironmentVariable("AGENT_NAME"));
     }
 }
 
