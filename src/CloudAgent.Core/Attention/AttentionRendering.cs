@@ -19,6 +19,7 @@ public static class AttentionRendering
     public const string SummaryHeader = "## Summary of earlier conversation";
     public const string RecalledHeader = "## Relevant memories";
     public const string StubsHeader = "## Set-aside memories that match";
+    public const string GuidanceHeader = "Guidance for this turn:";
 
     /// <summary>The stable system prefix: persona plus standing (resident) memories.</summary>
     public static string System(string persona, IReadOnlyList<MemoryEntry> residents)

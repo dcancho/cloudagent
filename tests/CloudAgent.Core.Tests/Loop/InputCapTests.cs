@@ -21,6 +21,9 @@ public sealed class InputCapTests
                 stubs > 0 ? $"{AttentionRendering.StubsHeader}\n(note)\n- [id] {Block(stubs)}" : null,
             }.Where(s => s is not null));
 
+    private static LlmRequest Fit(LlmRequest request, int cap, string? notice = null, int memories = 0) =>
+        InputCap.Fit(request, cap, notice, memories).Request;
+
     private static LlmRequest Request(string? ephemeral, params Message[] messages) =>
         new() { System = "persona", EphemeralContext = ephemeral, Messages = messages, Model = "m" };
 
@@ -29,7 +32,7 @@ public sealed class InputCapTests
     {
         var request = Request(Ephemeral(summary: 100), Message.User("hi"));
 
-        var fitted = InputCap.Fit(request, 10_000);
+        var fitted = Fit(request, 10_000);
 
         Assert.Equal(request.EphemeralContext, fitted.EphemeralContext);
         Assert.Null(fitted.Trimmed);
@@ -40,13 +43,13 @@ public sealed class InputCapTests
     {
         var request = Request(Ephemeral(summary: 100_000), Message.User("hi"));
 
-        Assert.Null(InputCap.Fit(request, 0).Trimmed);
+        Assert.Null(Fit(request, 0).Trimmed);
     }
 
     [Fact]
     public void Stubs_go_first()
     {
-        var fitted = InputCap.Fit(Request(Ephemeral(summary: 200, memories: 2, stubs: 4000), Message.User("hi")), 500);
+        var fitted = Fit(Request(Ephemeral(summary: 200, memories: 2, stubs: 4000), Message.User("hi")), 500, memories: 2);
 
         Assert.Equal("stubs", fitted.Trimmed);
         Assert.DoesNotContain(AttentionRendering.StubsHeader, fitted.EphemeralContext);
@@ -56,7 +59,7 @@ public sealed class InputCapTests
     [Fact]
     public void Recalled_memories_are_dropped_from_the_least_relevant_up_until_it_fits()
     {
-        var fitted = InputCap.Fit(Request(Ephemeral(memories: 5, memoryChars: 400), Message.User("hi")), 350);
+        var fitted = Fit(Request(Ephemeral(memories: 5, memoryChars: 400), Message.User("hi")), 350, memories: 5);
 
         Assert.Contains("memory1", fitted.EphemeralContext);
         Assert.DoesNotContain("memory5", fitted.EphemeralContext);
@@ -66,7 +69,7 @@ public sealed class InputCapTests
     [Fact]
     public void The_summary_goes_after_the_memories()
     {
-        var fitted = InputCap.Fit(Request(Ephemeral(summary: 20_000, memories: 1), Message.User("hi")), 300);
+        var fitted = Fit(Request(Ephemeral(summary: 20_000, memories: 1), Message.User("hi")), 300, memories: 1);
 
         Assert.DoesNotContain(AttentionRendering.SummaryHeader, fitted.EphemeralContext);
         Assert.Contains("1 recalled memory", fitted.Trimmed);
@@ -83,7 +86,7 @@ public sealed class InputCapTests
             messages.Add(Message.ToolResult($"c{i}", "t", Block(8000)));
         }
 
-        var fitted = InputCap.Fit(Request(null, messages.ToArray()), 3000);
+        var fitted = Fit(Request(null, messages.ToArray()), 3000);
 
         Assert.Equal(messages.Count, fitted.Messages.Count);
         Assert.Contains("tool result", fitted.Trimmed);
@@ -95,7 +98,7 @@ public sealed class InputCapTests
     [Fact]
     public void The_conversation_is_never_cut_even_when_it_cannot_fit()
     {
-        var fitted = InputCap.Fit(Request(null, Message.User(Block(20_000))), 100);
+        var fitted = Fit(Request(null, Message.User(Block(20_000))), 100);
 
         Assert.Equal(20_000, fitted.Messages[0].Content.Length);
         Assert.Equal("still over the cap", fitted.Trimmed);
@@ -104,8 +107,79 @@ public sealed class InputCapTests
     [Fact]
     public void The_notice_is_kept_whatever_was_trimmed()
     {
-        var fitted = InputCap.Fit(Request(Ephemeral(stubs: 4000), Message.User("hi")), 300, "NOTICE");
+        var fitted = Fit(Request(Ephemeral(stubs: 4000), Message.User("hi")), 300, "NOTICE");
 
         Assert.EndsWith("NOTICE", fitted.EphemeralContext);
+    }
+
+    [Fact]
+    public void A_memory_with_its_own_bullets_is_dropped_whole()
+    {
+        var multiline = $"{AttentionRendering.RecalledHeader}\n(note)\n- (s/k) first {Block(400)}\n- (s/k) second\n- a bullet inside it\n- another {Block(400)}";
+        var request = Request($"{AttentionRendering.StateHeader} (x)\nstate\n\n{multiline}", Message.User("hi"));
+
+        var fit = InputCap.Fit(request, 150, recalledMemories: 2);
+
+        Assert.Equal(1, fit.RecalledKept);
+        Assert.Contains("first", fit.Request.EphemeralContext);
+        Assert.DoesNotContain("a bullet inside it", fit.Request.EphemeralContext);
+        Assert.DoesNotContain("another", fit.Request.EphemeralContext);
+    }
+
+    [Fact]
+    public void A_recalled_section_that_does_not_parse_into_the_expected_memories_is_dropped_whole()
+    {
+        var fit = InputCap.Fit(Request(Ephemeral(memories: 2, memoryChars: 400), Message.User("hi")), 150, recalledMemories: 5);
+
+        Assert.Equal(0, fit.RecalledKept);
+        Assert.DoesNotContain(AttentionRendering.RecalledHeader, fit.Request.EphemeralContext);
+    }
+
+    [Fact]
+    public void The_memories_kept_are_reported_so_only_those_count_as_injected()
+    {
+        var fit = InputCap.Fit(Request(Ephemeral(memories: 5, memoryChars: 400), Message.User("hi")), 350, recalledMemories: 5);
+
+        Assert.InRange(fit.RecalledKept, 1, 4);
+        Assert.Equal(fit.RecalledKept, Enumerable.Range(1, 5).Count(i => fit.Request.EphemeralContext!.Contains($"memory{i} ")));
+    }
+
+    [Fact]
+    public void Turn_guidance_survives_when_the_section_before_it_is_dropped()
+    {
+        var guidance = $"{AttentionRendering.GuidanceHeader}\n- compute every figure";
+        var request = Request($"{Ephemeral(summary: 20_000)}\n\n{guidance}", Message.User("hi"));
+
+        var fitted = Fit(request, 300);
+
+        Assert.DoesNotContain(AttentionRendering.SummaryHeader, fitted.EphemeralContext);
+        Assert.Contains("compute every figure", fitted.EphemeralContext);
+    }
+
+    [Fact]
+    public void A_heading_inside_the_summary_does_not_split_it()
+    {
+        var summary = $"{AttentionRendering.SummaryHeader}\n(note)\nintro\n\n## Decisions\nbody {Block(4000)}";
+        var request = Request($"{AttentionRendering.StateHeader} (x)\nstate\n\n{summary}", Message.User("hi"));
+
+        var fitted = Fit(request, 300);
+
+        Assert.DoesNotContain("body", fitted.EphemeralContext);
+        Assert.DoesNotContain("## Decisions", fitted.EphemeralContext);
+    }
+
+    [Fact]
+    public void A_tool_result_barely_over_the_kept_length_is_left_alone()
+    {
+        var messages = new List<Message> { Message.User("go") };
+        for (var i = 0; i < 3; i++)
+        {
+            messages.Add(Message.Assistant("", [new ToolCall($"c{i}", "t", "{}")]));
+            messages.Add(Message.ToolResult($"c{i}", "t", Block(420)));
+        }
+
+        var fitted = Fit(Request(null, messages.ToArray()), 100);
+
+        Assert.All(fitted.Messages.Where(m => m.Role == Role.Tool), m => Assert.Equal(420, m.Content.Length));
     }
 }

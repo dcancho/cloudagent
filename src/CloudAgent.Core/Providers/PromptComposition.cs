@@ -15,6 +15,7 @@ public static class PromptPart
     public const string Summary = "rolling summary";
     public const string Recalled = "recalled memories";
     public const string Stubs = "set-aside stubs";
+    public const string Guidance = "turn guidance";
     public const string Tools = "tool definitions";
     public const string User = "user messages";
     public const string Assistant = "assistant messages";
@@ -66,9 +67,19 @@ public static class PromptComposition
         return parts;
     }
 
+    private static readonly (string Header, string Part)[] SectionHeaders =
+    [
+        (AttentionRendering.StateHeader, PromptPart.State),
+        (AttentionRendering.SummaryHeader, PromptPart.Summary),
+        (AttentionRendering.RecalledHeader, PromptPart.Recalled),
+        (AttentionRendering.StubsHeader, PromptPart.Stubs),
+        (AttentionRendering.GuidanceHeader, PromptPart.Guidance),
+    ];
+
     /// <summary>
-    /// The ephemeral context split into its sections, each with the part it counts as and its text up to
-    /// the start of the next section. Text before the first section is returned as <see cref="PromptPart.Other"/>.
+    /// The ephemeral context split at the headers the attention renderer and the loop write, each section
+    /// with the part it counts as and its text up to the next section. A heading inside a memory or the summary
+    /// is not a boundary. Text before the first header is returned as <see cref="PromptPart.Other"/>.
     /// </summary>
     public static List<(string Part, string Text)> Sections(string ephemeral)
     {
@@ -76,24 +87,24 @@ public static class PromptComposition
         if (ephemeral.Length == 0)
             return sections;
 
-        var starts = new List<int>();
-        if (ephemeral.StartsWith("## ", StringComparison.Ordinal))
-            starts.Add(0);
-        for (var i = ephemeral.IndexOf("\n\n## ", StringComparison.Ordinal); i >= 0; i = ephemeral.IndexOf("\n\n## ", i + 2, StringComparison.Ordinal))
-            starts.Add(i + 2);
-
-        if (starts.Count == 0 || starts[0] > 0)
-            sections.Add((PromptPart.Other, starts.Count == 0 ? ephemeral : ephemeral[..starts[0]]));
-
-        for (var i = 0; i < starts.Count; i++)
+        var starts = new SortedSet<int>();
+        foreach (var (header, _) in SectionHeaders)
         {
-            var end = i + 1 < starts.Count ? starts[i + 1] : ephemeral.Length;
-            var text = ephemeral[starts[i]..end];
-            var part = text.StartsWith(AttentionRendering.StateHeader, StringComparison.Ordinal) ? PromptPart.State
-                : text.StartsWith(AttentionRendering.SummaryHeader, StringComparison.Ordinal) ? PromptPart.Summary
-                : text.StartsWith(AttentionRendering.RecalledHeader, StringComparison.Ordinal) ? PromptPart.Recalled
-                : text.StartsWith(AttentionRendering.StubsHeader, StringComparison.Ordinal) ? PromptPart.Stubs
-                : PromptPart.Other;
+            if (ephemeral.StartsWith(header, StringComparison.Ordinal))
+                starts.Add(0);
+            for (var i = ephemeral.IndexOf("\n\n" + header, StringComparison.Ordinal); i >= 0; i = ephemeral.IndexOf("\n\n" + header, i + 2, StringComparison.Ordinal))
+                starts.Add(i + 2);
+        }
+
+        var ordered = starts.ToList();
+        if (ordered.Count == 0 || ordered[0] > 0)
+            sections.Add((PromptPart.Other, ordered.Count == 0 ? ephemeral : ephemeral[..ordered[0]]));
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var end = i + 1 < ordered.Count ? ordered[i + 1] : ephemeral.Length;
+            var text = ephemeral[ordered[i]..end];
+            var part = SectionHeaders.FirstOrDefault(h => text.StartsWith(h.Header, StringComparison.Ordinal)).Part ?? PromptPart.Other;
             sections.Add((part, text));
         }
         return sections;
