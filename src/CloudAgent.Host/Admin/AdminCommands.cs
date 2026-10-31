@@ -261,7 +261,10 @@ public static class AdminCommands
 
             var key = text[..equals].Trim();
             if (Environment.GetEnvironmentVariable(key) is null)
-                Environment.SetEnvironmentVariable(key, text[(equals + 1)..].Trim());
+                Environment.SetEnvironmentVariable(key, Unquote(text[(equals + 1)..].Trim()));
         }
     }
+
+    private static string Unquote(string value) =>
+        value.Length >= 2 && value[0] == value[^1] && value[0] is '"' or '\'' ? value[1..^1] : value;
 }
