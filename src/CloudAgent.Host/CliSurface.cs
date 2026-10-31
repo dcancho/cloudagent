@@ -45,7 +45,7 @@ public sealed class CliSurface(CancellationTokenSource stopSignal) : ISurface
                 continue;
 
             await onMessage(
-                new InboundMessage(Name, ConversationId, "local", "you", line, DateTimeOffset.Now),
+                new InboundMessage(Name, ConversationId, ConversationKind.Direct, "local", "you", line, DateTimeOffset.Now),
                 cancellationToken).ConfigureAwait(false);
         }
     }

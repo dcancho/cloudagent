@@ -116,7 +116,7 @@ public sealed class WebchatSurface(
                     if (!string.IsNullOrWhiteSpace(text))
                     {
                         await onMessage(
-                            new InboundMessage("webchat", conversationId, conversationId, "web", text, DateTimeOffset.UtcNow),
+                            new InboundMessage("webchat", conversationId, ConversationKind.Direct, conversationId, "web", text, DateTimeOffset.UtcNow),
                             cancellationToken);
                     }
                 }

@@ -253,7 +253,7 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
 // SQLite store (FTS5 + vector, RRF-fused) replaces the JSON files; memory embeddings use the
 // same backend as the index (Foundry when configured — pennies — else the offline hash).
 (MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility, MemoryRetriever Retriever)
-    BuildMemoryStack(string agentId, string projectPath)
+    BuildMemoryStack(string agentId, string projectPath, ConversationKind? kind = null)
 {
     var store = new SqliteMemoryStore(new Dictionary<MemoryScope, string>
     {
@@ -270,6 +270,8 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
         ambient["surface"] = agentId[..separator];
         ambient["conversation"] = agentId[(separator + 1)..];
     }
+    if (kind is not null)
+        ambient["kind"] = kind == ConversationKind.Direct ? "direct" : "group";
 
     var mem = new MemoryManager(store, embeddings, ambientMetadata: ambient);
     var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, smallModel), snapshotter);
@@ -409,7 +411,7 @@ var orchestrator = new AgentOrchestrator(bus, parentId => ProfileOf(parentId).To
 
 // Each conversation is a root agent that can spawn children. It perceives the human (its
 // surface queue) and its children (its mailbox) through a composite input.
-AgentConversation CreateConversation(string surface, string conversationId)
+AgentConversation CreateConversation(string surface, string conversationId, ConversationKind kind)
 {
     var handle = bus.Register(role: surface, id: $"{surface}:{conversationId}");
     var queue = new QueueInputSource();
@@ -418,7 +420,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
         ? code
         : generalProfile;
     agentProfiles[handle.Id] = profile;
-    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id, profile.ProjectMemoryPath);
+    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id, profile.ProjectMemoryPath, kind);
 
     var agentTools = new ToolRegistry();
     foreach (var tool in profile.Tools.All)
