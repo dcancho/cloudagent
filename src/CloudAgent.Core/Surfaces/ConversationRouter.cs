@@ -25,6 +25,7 @@ public sealed class ConversationRouter : IDisposable
     private readonly IReadOnlyDictionary<string, ISurface> _surfaces;
     private readonly Func<InboundMessage, AgentConversation> _sessionFactory;
     private readonly Func<InboundMessage, bool>? _authorize;
+    private readonly Func<InboundMessage, string?> _speakerOf;
     private readonly TurnTaker _turns;
     private CancellationToken _runToken;
 
@@ -35,15 +36,19 @@ public sealed class ConversationRouter : IDisposable
     /// <param name="authorize">Optional allowlist check. Unauthorized messages get a refusal in a direct
     /// conversation and are ignored in a group, where a refusal would only be noise.</param>
     /// <param name="turnTaking">End-of-turn detection settings; defaults apply when null.</param>
+    /// <param name="speakerOf">Names the sender of a message, such as the person it resolves to, so
+    /// a group's messages can be attributed. Senders it returns null for go by their display name.</param>
     public ConversationRouter(
         IEnumerable<ISurface> surfaces,
         Func<InboundMessage, AgentConversation> sessionFactory,
         Func<InboundMessage, bool>? authorize = null,
-        TurnTakingOptions? turnTaking = null)
+        TurnTakingOptions? turnTaking = null,
+        Func<InboundMessage, string?>? speakerOf = null)
     {
         _surfaces = surfaces.ToDictionary(s => s.Name);
         _sessionFactory = sessionFactory;
         _authorize = authorize;
+        _speakerOf = speakerOf ?? (_ => null);
         _turns = new TurnTaker(DeliverAsync, turnTaking);
         _turns.DeliveryFailed += ex => Console.Error.WriteLine($"[router] could not deliver a turn: {ex.Message}");
     }
@@ -124,7 +129,7 @@ public sealed class ConversationRouter : IDisposable
         if (surface is ITypingIndicator indicator)
             session.StartTyping(indicator, _runToken);
 
-        await session.Conversation.PostAsync(burst.Text, _runToken).ConfigureAwait(false);
+        await session.Conversation.PostAsync(burst.TextAttributed(_speakerOf), _runToken).ConfigureAwait(false);
     }
 
     private Session OpenSession(ISurface surface, InboundMessage first)

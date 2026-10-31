@@ -569,7 +569,7 @@ var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
 using var router = new ConversationRouter(
-    surfaces, CreateConversation, MayTalk, turnTaking);
+    surfaces, CreateConversation, MayTalk, turnTaking, message => PersonOf(message)?.Id);
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
