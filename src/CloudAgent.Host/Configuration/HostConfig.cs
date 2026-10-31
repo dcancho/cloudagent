@@ -44,6 +44,9 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="TokenBudget">Tokens, input and output together, the workspace's agents may spend before they
 /// stop (<c>TOKEN_BUDGET</c>); null means no limit. Spending is kept in the workspace across restarts.</param>
 /// <param name="CodeCommands">Programs a coding agent may run in them (<c>CODE_COMMANDS</c>, comma separated).</param>
+/// <param name="AgentName">What the agent is called (<c>AGENT_NAME</c>); null leaves it nameless, so in a group it
+/// only answers mentions of its account, replies to its messages, and follow-ups.</param>
+/// <param name="AgentAliases">Other names people call it by (<c>AGENT_ALIASES</c>, comma separated).</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -66,7 +69,9 @@ public sealed record HostConfig(
     IReadOnlyList<CodeRepo> CodeRepos,
     IReadOnlyList<string> CodeCommands,
     long? TokenBudget,
-    int LearnIdleMinutes)
+    int LearnIdleMinutes,
+    string? AgentName,
+    IReadOnlyList<string> AgentAliases)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -131,7 +136,10 @@ public sealed record HostConfig(
                 ? commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 : DefaultCodeCommands,
             long.TryParse(Environment.GetEnvironmentVariable("TOKEN_BUDGET"), out var tokens) && tokens > 0 ? tokens : null,
-            int.TryParse(Environment.GetEnvironmentVariable("LEARN_IDLE_MIN"), out var idle) && idle >= 0 ? idle : DefaultLearnIdleMinutes);
+            int.TryParse(Environment.GetEnvironmentVariable("LEARN_IDLE_MIN"), out var idle) && idle >= 0 ? idle : DefaultLearnIdleMinutes,
+            Environment.GetEnvironmentVariable("AGENT_NAME") is { } name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null,
+            (Environment.GetEnvironmentVariable("AGENT_ALIASES") ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 }
 

@@ -449,6 +449,22 @@ bool MayTalk(string surface, string senderId, string? display = null)
     return allowed;
 }
 
+// The agent's name, when it has one, and in a group how to tell what is for it. A burst reaches a
+// group conversation only when the router judged it might be; the agent makes the final call.
+var agentIdentity = config.AgentName is null ? null : new AgentIdentity(config.AgentName, config.AgentAliases);
+
+string PersonaFor(string basis, ConversationKind kind)
+{
+    var persona = agentIdentity is null ? basis : $"Your name is {agentIdentity.Describe()}. {basis}";
+    if (kind != ConversationKind.Group)
+        return persona;
+    return persona +
+        " This is a group conversation: each message starts with who wrote it, and several people may talk to each " +
+        "other, not to you. Messages under [Earlier in the group, not addressed to you] are what was said since your " +
+        "last turn; use them as context and do not answer them one by one. Answer what is asked of you under [New]. " +
+        $"If nothing there is for you, or people only talk about you, reply with exactly {SilentReply.Marker} and nothing else.";
+}
+
 string? PersonalPathFor(InboundMessage first)
 {
     if (first.Kind != ConversationKind.Direct || PersonOf(first) is not { } person)
@@ -484,7 +500,7 @@ AgentConversation CreateConversation(InboundMessage first)
         .Register(new StopAgentTool(bus));
     RegisterColdRecovery(agentTools, mem, handle.Id);
 
-    var attention = BuildAttention(profile.Options.SystemPrompt, retriever, handle.Id, handle.Id);
+    var attention = BuildAttention(PersonaFor(profile.Options.SystemPrompt, kind), retriever, handle.Id, handle.Id);
     var context = contexts.Load(handle.Id);
     if (context is not null)
         Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
@@ -556,10 +572,10 @@ if (config.ConsoleEnabled)
     surfaces.Add(new CliSurface(cts, cliPerson?.Id));
 
 if (!string.IsNullOrWhiteSpace(config.TelegramBotToken))
-    surfaces.Add(new TelegramSurface(config.TelegramBotToken));
+    surfaces.Add(new TelegramSurface(config.TelegramBotToken, agentName: agentIdentity?.Name));
 
 if (!string.IsNullOrWhiteSpace(config.DiscordBotToken))
-    surfaces.Add(new DiscordSurface(config.DiscordBotToken));
+    surfaces.Add(new DiscordSurface(config.DiscordBotToken, agentIdentity?.Name));
 
 ConversationRouter? conversationRouter = null;
 if (config.WebchatEnabled)
@@ -583,8 +599,25 @@ if (config.WebchatEnabled)
 var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
+// A message that only says the agent's name is judged by the decision model, when there is one: it
+// tells speaking to the agent from speaking about it, for much less than a turn of the main model.
+var addressedQuestion = DecisionQuestion.YesNo(
+    "addressed",
+    "Do the latest messages speak to the assistant, asking it something or expecting it to answer, rather than only mentioning it?");
+Func<string, CancellationToken, Task<bool>>? addressedJudge = decisionModel is null
+    ? null
+    : async (situation, ct) =>
+    {
+        var answers = await decisionModel.DecideAsync(situation, [addressedQuestion], ct);
+        var yes = answers[0]["yes"];
+        Console.WriteLine($"  👂 addressed? {yes:0.00}");
+        return yes >= 0.5;
+    };
+var groupAttention = new GroupAttention(agentIdentity, addressedJudge);
+
 using var router = new ConversationRouter(
-    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id);
+    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id,
+    groupAttention);
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
@@ -662,6 +695,8 @@ Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))
 Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok; personal in {config.PersonalMemoryDirectory}");
 Console.WriteLine($"People:    {people.People.Count} from {config.PeoplePath}; console as {cliPerson?.Id ?? "nobody"}; " +
     $"web chat without identity {(config.WebchatAnonymous ? "allowed" : "refused")}");
+Console.WriteLine($"Groups:    {(agentIdentity is null ? "nameless, answers mentions, replies and follow-ups" : $"answers to {agentIdentity.Describe()}")}; " +
+    $"name-only messages {(addressedJudge is null ? "always answered" : "judged by the decision model")}");
 Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {attentionOptions.RecallBudgetTokens} tok");
 Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");

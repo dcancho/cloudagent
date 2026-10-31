@@ -59,7 +59,11 @@ Discord, in the [developer portal](https://discord.com/developers/applications):
 application, add a bot, copy its token, and turn on the Message Content intent. Invite it to a
 server you share with the people who will use it; direct messages work from any shared server.
 
-Telegram: talk to `@BotFather`, send `/newbot`, and copy the token.
+Telegram: talk to `@BotFather`, send `/newbot`, and copy the token. To use the bot in a group, also
+send `/setprivacy`, pick the bot and choose `Disable`, then remove the bot from the group and add it
+again: Telegram applies the change only on joining. With privacy left on, the bot in a group only
+receives messages that mention it or reply to it, so it answers those without knowing what the
+group was saying before.
 
 ## 4. Fill in the configuration
 

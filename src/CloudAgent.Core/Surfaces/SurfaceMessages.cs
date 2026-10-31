@@ -13,6 +13,7 @@ namespace CloudAgent.Core.Surfaces;
 /// <param name="SenderDisplay">A human-readable sender name, if known.</param>
 /// <param name="Text">The message text.</param>
 /// <param name="ReceivedAt">When it arrived.</param>
+/// <param name="Addressing">Whether the surface itself marks the message as meant for the agent.</param>
 public sealed record InboundMessage(
     string Surface,
     string ConversationId,
@@ -20,7 +21,18 @@ public sealed record InboundMessage(
     string SenderId,
     string? SenderDisplay,
     string Text,
-    DateTimeOffset ReceivedAt);
+    DateTimeOffset ReceivedAt,
+    Addressing Addressing = Addressing.None);
+
+/// <summary>What the surface knows about whom a message is for.</summary>
+public enum Addressing
+{
+    /// <summary>Nothing on the surface says it is for the agent; its text may still name it.</summary>
+    None,
+
+    /// <summary>The message mentions the agent's account or replies to one of its messages.</summary>
+    Explicit,
+}
 
 /// <summary>Who a conversation is with: decided by the channel, not by how many people are in it now.</summary>
 public enum ConversationKind

@@ -104,6 +104,8 @@ To run it on a server, see [deploying to a VPS](docs/deploy.md).
 | `CLI` | `0` leaves the console surface out, for a host with no terminal such as a systemd service | on |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
+| `AGENT_NAME` | What the agent is called. In a group it answers messages that say this name (see [Groups](#groups)), and mentions of its Discord or Telegram account read as this name | none: in groups it answers only mentions of its account, replies and follow-ups |
+| `AGENT_ALIASES` | Other names people call it by, comma separated | none |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
 | `CONTEXT_ROUTING` | Who chooses per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)): `decision` for the Foundry decision model, `generative` for the background chat model, `off` for the full pipeline every turn. Decisions go to `.agent/routing.jsonl` | `decision` when the two variables below are set, else `off` |
 | `LEARN_IDLE_MIN` | Minutes a conversation must be quiet before the sleep timer learns from it: what was said since the last pass (not tool output) is archived as episodes, and its durable facts are staged for review | 2 |
@@ -133,6 +135,26 @@ whoever uses it already has the machine, and speaks as nobody unless started wit
 A web chat without Tailscale identity is refused unless `WEBCHAT_ANONYMOUS=1`. A refused web chat
 cannot connect at all, and each web chat conversation belongs to whoever opened it: nobody else can
 list, open or delete it. Each console identity keeps its own conversation.
+
+### Groups
+
+In a Discord channel or a Telegram group the agent does not take a turn on every message. A burst
+of messages reaches it when one of them mentions its account or replies to one of its messages,
+when someone it has just answered keeps talking within 2 minutes, or when a message says its name or
+an alias as a whole word, ignoring case and accents. A message that only says the name goes first
+to the decision model, when one is configured (`CONTEXT_ROUTING`), which tells speaking to the agent
+from speaking about it. Every other burst is held, up to the last 30 messages, and reaches the agent
+with its next turn in that group under `[Earlier in the group, not addressed to you]`, so it knows
+what was being said. Nothing held calls the model. Held messages live in memory and are lost on a
+restart.
+
+Even when it takes a turn, the agent may decide a group message is not for it and reply
+`<silent/>`, which sends nothing. Messages from people not in the people file are ignored in groups
+and are not held either.
+
+Telegram bots have privacy mode on by default, and in a group they then only receive messages
+that mention or reply to them. Turn it off in `@BotFather` with `/setprivacy` for the agent to
+follow the rest as context; see [deploy](docs/deploy.md#3-create-the-bots).
 
 Consolidation proposals stay with the conversation they were learned from: only that conversation
 can list, apply or discard them. The workspace's `.agent` folder, where memory, transcripts and

@@ -27,6 +27,7 @@ public sealed class ConversationRouter : IDisposable
     private readonly Func<InboundMessage, bool>? _authorize;
     private readonly Func<InboundMessage, string?> _speakerOf;
     private readonly TurnTaker _turns;
+    private readonly GroupAttention? _groups;
     private CancellationToken _runToken;
 
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
@@ -38,13 +39,17 @@ public sealed class ConversationRouter : IDisposable
     /// <param name="turnTaking">End-of-turn detection settings; defaults apply when null.</param>
     /// <param name="speakerOf">Names the sender of a message, such as the person it resolves to, so
     /// a group's messages can be attributed. Senders it returns null for go by their display name.</param>
+    /// <param name="groups">Decides which group bursts the agent answers and holds the rest as context. Without
+    /// it, the agent takes a turn on every burst in a group.</param>
     public ConversationRouter(
         IEnumerable<ISurface> surfaces,
         Func<InboundMessage, AgentConversation> sessionFactory,
         Func<InboundMessage, bool>? authorize = null,
         TurnTakingOptions? turnTaking = null,
-        Func<InboundMessage, string?>? speakerOf = null)
+        Func<InboundMessage, string?>? speakerOf = null,
+        GroupAttention? groups = null)
     {
+        _groups = groups;
         _surfaces = surfaces.ToDictionary(s => s.Name);
         _sessionFactory = sessionFactory;
         _authorize = authorize;
@@ -82,6 +87,7 @@ public sealed class ConversationRouter : IDisposable
     public async Task CloseAsync(string surface, string conversationId)
     {
         _turns.Discard(surface, conversationId);
+        _groups?.Forget(surface, conversationId);
         if (!_sessions.TryRemove($"{surface}:{conversationId}", out var session))
             return;
 
@@ -124,12 +130,26 @@ public sealed class ConversationRouter : IDisposable
     {
         var surface = _surfaces[burst.Surface];
         var key = $"{burst.Surface}:{burst.ConversationId}";
+        var lines = burst.TextAttributed(_speakerOf);
+
+        var inGroup = _groups is not null && burst.Messages[0].Kind == ConversationKind.Group;
+        if (inGroup)
+        {
+            if (await _groups!.DecideAsync(burst, lines, _runToken).ConfigureAwait(false) == GroupVerdict.Listen)
+            {
+                _groups.Hold(burst.Surface, burst.ConversationId, lines);
+                return;
+            }
+            lines = _groups.Compose(burst.Surface, burst.ConversationId, lines);
+        }
+
         var session = _sessions.GetOrAdd(key, _ => OpenSession(surface, burst.Messages[0]));
+        session.Speakers = burst.Messages.Select(m => m.SenderId).Distinct().ToArray();
 
         if (surface is ITypingIndicator indicator)
             session.StartTyping(indicator, _runToken);
 
-        await session.Conversation.PostAsync(burst.TextAttributed(_speakerOf), _runToken).ConfigureAwait(false);
+        await session.Conversation.PostAsync(lines, _runToken).ConfigureAwait(false);
     }
 
     private Session OpenSession(ISurface surface, InboundMessage first)
@@ -142,8 +162,12 @@ public sealed class ConversationRouter : IDisposable
         {
             session.StopTyping();
             _turns.MarkAnswered(surface.Name, conversationId);
+            if (first.Kind == ConversationKind.Group)
+                _groups?.Answered(surface.Name, conversationId, session.Speakers);
             _ = SendSafelyAsync(surface, new OutboundMessage(conversationId, text), _runToken);
         };
+
+        conversation.TurnEnded += session.StopTyping;
 
         var token = session.Cancellation.Token;
         if (surface is IActivityIndicator activity)
@@ -187,6 +211,9 @@ public sealed class ConversationRouter : IDisposable
         public AgentConversation Conversation { get; } = conversation;
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public Task? Runner { get; set; }
+
+        /// <summary>Who wrote the burst the agent is answering, so a reply opens their follow-up window.</summary>
+        public IReadOnlyList<string> Speakers { get; set; } = [];
 
         public void StartTyping(ITypingIndicator indicator, CancellationToken runToken)
         {
