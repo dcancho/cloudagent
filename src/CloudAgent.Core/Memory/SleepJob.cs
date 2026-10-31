@@ -17,9 +17,6 @@ public sealed class SleepOptions
     /// <summary>Episodes older than this that never proved useful get demoted to Cold.</summary>
     public TimeSpan EpisodeTtl { get; init; } = TimeSpan.FromDays(14);
 
-    /// <summary>Facts injected at least this often with zero usefulness get demoted to Cold.</summary>
-    public int DemoteFactMinInjections { get; init; } = 3;
-
     /// <summary>Promotion to Resident requires at least this many injections…</summary>
     public int PromoteMinInjections { get; init; } = 3;
 
@@ -91,8 +88,9 @@ public sealed class SleepJob(
     }
 
     /// <summary>
-    /// Forgetting as demotion: episodes past their TTL that never helped, and facts injected
-    /// often enough to be judged and never useful, move to Cold. Reversible by design.
+    /// Forgetting as demotion: episodes past their TTL that never helped move to Cold. Reversible
+    /// by design. Facts never leave Active here: being judged unused is a per-context verdict, which
+    /// the attention gate acts on where it was measured.
     /// </summary>
     private async Task<int> DecayAsync(
         IReadOnlyList<MemoryEntry> entries,
@@ -109,10 +107,6 @@ public sealed class SleepJob(
                 MemoryKind.Episodic when now - (stat?.RestoredAt ?? entry.CreatedAt) > _options.EpisodeTtl
                                          && (stat is null || stat.Useful == 0) =>
                     $"episode past TTL ({_options.EpisodeTtl.TotalDays:0}d) with no measured usefulness",
-                MemoryKind.Fact when stat is not null
-                                     && stat.Injections >= _options.DemoteFactMinInjections
-                                     && stat.Useful == 0 =>
-                    $"fact injected {stat.Injections}x, judged useful 0x",
                 _ => null,
             };
 

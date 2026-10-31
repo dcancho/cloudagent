@@ -13,11 +13,11 @@ public sealed class MetacognitionTests : IDisposable
 
     public void Dispose() => _fixture.Dispose();
 
-    private MetacognitiveAttentionManager Gate(List<MemoryHit>? suppressed = null)
+    private MetacognitiveAttentionManager Gate(List<MemoryHit>? suppressed = null, string agentId = "test")
     {
         var options = new AttentionOptions();
         var inner = new ContextAssembler("persona", new MemoryRetriever(_fixture.Memory), options);
-        return new MetacognitiveAttentionManager(inner, _fixture.Utility, options, hit => suppressed?.Add(hit));
+        return new MetacognitiveAttentionManager(inner, _fixture.Utility, options, agentId, hit => suppressed?.Add(hit));
     }
 
     [Fact]
@@ -65,5 +65,42 @@ public sealed class MetacognitionTests : IDisposable
 
         Assert.Contains(assembled.InjectedMemories, hit => hit.Entry.Id == memory.Id);
         Assert.Contains(memory.Content, assembled.EphemeralContext);
+    }
+
+    [Fact]
+    public async Task Suppresses_only_in_the_context_where_it_was_unused()
+    {
+        var memory = await _fixture.AddAsync("Payroll money rounds half away from zero at output.");
+        await _fixture.RecordAsync(memory.Id, injections: 3, agentId: "cli:a");
+
+        var there = await Gate(agentId: "cli:a").AssembleAsync(new AgentContext(), Query);
+        var elsewhere = await Gate(agentId: "cli:b").AssembleAsync(new AgentContext(), Query);
+
+        Assert.DoesNotContain(there.InjectedMemories, hit => hit.Entry.Id == memory.Id);
+        Assert.Contains(elsewhere.InjectedMemories, hit => hit.Entry.Id == memory.Id);
+    }
+
+    [Fact]
+    public async Task Evidence_from_different_contexts_does_not_add_up()
+    {
+        var memory = await _fixture.AddAsync("Payroll money rounds half away from zero at output.");
+        await _fixture.RecordAsync(memory.Id, injections: 2, agentId: "cli:a");
+        await _fixture.RecordAsync(memory.Id, injections: 2, agentId: "cli:b");
+
+        var assembled = await Gate(agentId: "cli:a").AssembleAsync(new AgentContext(), Query);
+
+        Assert.Contains(assembled.InjectedMemories, hit => hit.Entry.Id == memory.Id);
+    }
+
+    [Fact]
+    public async Task Usefulness_elsewhere_does_not_lift_suppression_here()
+    {
+        var memory = await _fixture.AddAsync("Payroll money rounds half away from zero at output.");
+        await _fixture.RecordAsync(memory.Id, injections: 3, agentId: "cli:a");
+        await _fixture.RecordAsync(memory.Id, injections: 3, useful: 3, agentId: "cli:b");
+
+        var assembled = await Gate(agentId: "cli:a").AssembleAsync(new AgentContext(), Query);
+
+        Assert.DoesNotContain(assembled.InjectedMemories, hit => hit.Entry.Id == memory.Id);
     }
 }

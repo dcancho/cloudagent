@@ -67,10 +67,13 @@ of the same criteria and are tuned together (the defaults live in `SleepOptions`
 | Rule | Default threshold |
 |---|---|
 | Episode to Cold | more than 14 days with no measured utility |
-| Fact to Cold | 3 or more injections, 0 times useful |
 | Active to Resident | 3 or more injections, useful rate of 0.5 or higher |
 | Resident to Active | useful rate below 0.25 with 3 or more injections |
 | Resident cap | 10 |
+
+Facts are never demoted to Cold from utility alone: a fact judged unused is redundant in that
+conversation, not wrong, so the attention gate suppresses it only in the conversation (agent) where
+it keeps going unused (3 or more injections there, 0 times useful).
 
 Forgetting is always demotion to Cold, never deletion: reversible by design. Every transition is
 recorded in the consolidation ledger (hash-chained, append-only).

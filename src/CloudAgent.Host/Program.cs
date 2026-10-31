@@ -236,12 +236,12 @@ AgentProfile ProfileOf(string? agentId) =>
 
 // Wrap the assembler in the metacognitive gate (eje 8) when enabled: it suppresses injected
 // memories whose measured track record says they keep not helping, logging each suppression.
-IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, string label)
+IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, string label, string agentId)
 {
     IAttentionManager attention = new ContextAssembler(persona, retriever, attentionOptions);
     if (attentionOptions.MetacognitionEnabled)
         attention = new MetacognitiveAttentionManager(
-            attention, utilityLedger, attentionOptions,
+            attention, utilityLedger, attentionOptions, agentId,
             onSuppressed: hit => Console.WriteLine(
                 $"  🚫 [{label}] suppressed low-confidence memory: " +
                 (hit.Entry.Content.Length <= 80 ? hit.Entry.Content : hit.Entry.Content[..80] + "…")));
@@ -396,7 +396,7 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id, profile.ProjectMemoryPath);
     childTools.Register(new RememberTool(mem));
     RegisterColdRecovery(childTools, mem, child.Id);
-    var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}");
+    var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}", child.Id);
     var loop = new AgentLoop(
         provider, profile.ChildOptions, input, new AgentContext(), childTools, comp, attention, utility,
         profile.Routed ? BuildRouter(mem) : null);
@@ -434,7 +434,7 @@ AgentConversation CreateConversation(string surface, string conversationId)
         .Register(new StopAgentTool(bus));
     RegisterColdRecovery(agentTools, mem, handle.Id);
 
-    var attention = BuildAttention(profile.Options.SystemPrompt, retriever, handle.Id);
+    var attention = BuildAttention(profile.Options.SystemPrompt, retriever, handle.Id, handle.Id);
     var context = contexts.Load(handle.Id);
     if (context is not null)
         Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
