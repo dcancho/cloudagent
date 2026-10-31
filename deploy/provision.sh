@@ -23,7 +23,8 @@ wait_for_apt() {
 
 wait_for_apt
 apt-get -o DPkg::Lock::Timeout=600 update
-apt-get -o DPkg::Lock::Timeout=600 install -y sqlite3 ufw curl ca-certificates psmisc
+icu="$(apt-cache pkgnames libicu | grep -E '^libicu[0-9]+$' | sort -V | tail -n 1)"
+apt-get -o DPkg::Lock::Timeout=600 install -y sqlite3 ufw curl ca-certificates psmisc "$icu"
 
 id cloudagent >/dev/null 2>&1 || useradd --system --home-dir /var/lib/cloudagent --shell /usr/sbin/nologin cloudagent
 

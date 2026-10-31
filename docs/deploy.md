@@ -12,7 +12,9 @@ Telegram connections. Nothing listens on a public port except SSH, and after ste
 | Backups | `/var/backups/cloudagent/<date>/`, the last 7 days |
 
 The build is self-contained for linux-x64, so the server needs no .NET. SQLite ships as
-`libe_sqlite3.so` inside the publish output.
+`libe_sqlite3.so` inside the publish output. The server does need ICU, which `provision.sh` installs:
+Discord.Net reads each server's locale, and without ICU it cannot load any server, so the bot only
+sees direct messages.
 
 ## 1. Provision the VPS
 
