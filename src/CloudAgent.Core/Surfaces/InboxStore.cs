@@ -108,9 +108,16 @@ public sealed class InboxStore(string directory, TimeProvider? time = null)
 
     private static void AppendLine(string path, Record record)
     {
-        using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.WriteThrough);
-        using var writer = new StreamWriter(stream);
-        writer.Write(JsonSerializer.Serialize(record, Json) + "\n");
+        using var stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite, 4096, FileOptions.WriteThrough);
+        var line = JsonSerializer.Serialize(record, Json) + "\n";
+        if (stream.Length > 0)
+        {
+            stream.Seek(-1, SeekOrigin.End);
+            if (stream.ReadByte() != '\n')
+                line = "\n" + line;
+        }
+        stream.Seek(0, SeekOrigin.End);
+        stream.Write(System.Text.Encoding.UTF8.GetBytes(line));
     }
 
     private static IEnumerable<InboxEntry> Replay(string path)

@@ -40,6 +40,7 @@ public sealed class ConversationRouter : IDisposable
     private TaskCompletionSource? _idle;
     private int _sending;
     private volatile bool _draining;
+    private readonly Dictionary<string, Recovery> _recovering = new();
 
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
 
@@ -92,6 +93,11 @@ public sealed class ConversationRouter : IDisposable
     {
         _runToken = cancellationToken;
         var interrupted = _inbox?.Pending() ?? [];
+        lock (_idleGate)
+        {
+            foreach (var key in interrupted.Where(e => _surfaces.ContainsKey(e.Message.Surface)).Select(e => KeyOf(e.Message)).Distinct())
+                _recovering[key] = new Recovery();
+        }
 
         foreach (var source in _surfaces.Values.OfType<ITypingSource>())
             source.TypingReceived += _turns.Typing;
@@ -113,7 +119,8 @@ public sealed class ConversationRouter : IDisposable
     /// </summary>
     public async Task DrainAsync(TimeSpan timeout)
     {
-        _draining = true;
+        lock (_idleGate)
+            _draining = true;
         _turns.Flush();
 
         using var limit = new CancellationTokenSource(timeout);
@@ -133,6 +140,7 @@ public sealed class ConversationRouter : IDisposable
     /// </summary>
     public async Task CloseAsync(string surface, string conversationId)
     {
+        await CancelRecoveryAsync($"{surface}:{conversationId}").ConfigureAwait(false);
         _turns.Discard(surface, conversationId);
         _inbox?.Clear(surface, conversationId);
         Release(ids: null, session: $"{surface}:{conversationId}");
@@ -175,14 +183,12 @@ public sealed class ConversationRouter : IDisposable
         if (admitted is null)
             return;
 
+        var id = Guid.NewGuid().ToString("N");
         if (_inbox is not null && !Ephemeral(admitted.Surface))
         {
             try
             {
-                var id = _inbox.Add(admitted);
-                _entryIds[admitted] = id;
-                if (!_draining)
-                    Track(id, $"{admitted.Surface}:{admitted.ConversationId}");
+                id = _inbox.Add(admitted);
             }
             catch (IOException ex)
             {
@@ -190,8 +196,56 @@ public sealed class ConversationRouter : IDisposable
             }
         }
 
-        if (!_draining)
-            _turns.Add(admitted);
+        var key = KeyOf(admitted);
+        _entryIds[admitted] = id;
+        lock (_idleGate)
+        {
+            if (_draining)
+            {
+                _entryIds.TryRemove(admitted, out _);
+                return;
+            }
+
+            _inFlight[id] = key;
+            if (_recovering.TryGetValue(key, out var recovery))
+                recovery.Held.Add(admitted);
+            else
+                _turns.Add(admitted);
+        }
+    }
+
+    private static string KeyOf(InboundMessage message) => $"{message.Surface}:{message.ConversationId}";
+
+    private async Task CancelRecoveryAsync(string key)
+    {
+        Recovery? recovery;
+        lock (_idleGate)
+            _recovering.Remove(key, out recovery);
+        if (recovery is null)
+            return;
+
+        await recovery.Gate.WaitAsync().ConfigureAwait(false);
+        recovery.Cancelled = true;
+        recovery.Gate.Release();
+    }
+
+    private void FinishRecovery(string key, Recovery recovery)
+    {
+        lock (_idleGate)
+        {
+            if (!_recovering.TryGetValue(key, out var current) || current != recovery)
+                return;
+
+            _recovering.Remove(key);
+            foreach (var message in recovery.Held)
+            {
+                if (!_draining)
+                    _turns.Add(message);
+                else if (_entryIds.TryRemove(message, out var id))
+                    _inFlight.Remove(id);
+            }
+            SignalIfIdle();
+        }
     }
 
     private static bool Ephemeral(string surface) => surface == "cli";
@@ -220,53 +274,89 @@ public sealed class ConversationRouter : IDisposable
     private async Task RedeliverConversationAsync(
         string surfaceName, string conversationId, List<InboxEntry> entries, CancellationToken cancellationToken)
     {
-        if (!_surfaces.TryGetValue(surfaceName, out var surface))
+        var key = $"{surfaceName}:{conversationId}";
+        Recovery? recovery;
+        lock (_idleGate)
+            _recovering.TryGetValue(key, out recovery);
+        if (recovery is null)
             return;
 
         try
         {
-            if (surface is IReadinessSource readiness)
-                await readiness.WaitUntilReadyAsync(conversationId, cancellationToken)
-                    .WaitAsync(_redelivery.ReadyTimeout, cancellationToken).ConfigureAwait(false);
+            await RecoverAsync(key, recovery, entries, cancellationToken).ConfigureAwait(false);
         }
-        catch (TimeoutException)
+        finally
         {
-            Console.Error.WriteLine($"[router] {surfaceName}:{conversationId} never became ready; its interrupted messages stay in the inbox");
-            return;
+            FinishRecovery(key, recovery);
         }
+    }
 
-        if (_draining)
-            return;
+    private async Task RecoverAsync(string key, Recovery recovery, List<InboxEntry> entries, CancellationToken cancellationToken)
+    {
+        var first = entries[0].Message;
+        var (surfaceName, conversationId) = (first.Surface, first.ConversationId);
+        var surface = _surfaces[surfaceName];
 
-        var now = _time.GetUtcNow();
-        var tooOld = entries.Where(e => now - e.PersistedAt > _redelivery.MaxAge).ToList();
-        var worn = entries.Where(e => e.Attempts >= _redelivery.MaxRedeliveries).Except(tooOld).ToList();
-        var revoked = _authorize is null
-            ? []
-            : entries.Where(e => !_authorize(e.Message)).Except(tooOld).Except(worn).ToList();
-        var dropped = tooOld.Concat(worn).Concat(revoked).ToList();
-        var fresh = entries.Except(dropped).ToList();
-
-        _inbox!.Complete(dropped.Select(e => e.Id));
-        foreach (var entry in worn)
-            Console.Error.WriteLine($"[router] gave up on a message from {surfaceName}:{conversationId} after {entry.Attempts} redelivery attempt(s)");
-
-        if (fresh.Count == 0)
+        if (surface is IReadinessSource readiness)
         {
-            if (tooOld.Count > 0)
-                await SendSafelyAsync(surface, new OutboundMessage(conversationId, _redelivery.StaleNotice), cancellationToken).ConfigureAwait(false);
-            return;
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            wait.CancelAfter(_redelivery.ReadyTimeout);
+            try
+            {
+                await readiness.WaitUntilReadyAsync(conversationId, wait.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                Console.Error.WriteLine($"[router] {key} never became ready; its interrupted messages stay in the inbox");
+                return;
+            }
         }
 
-        var ids = fresh.Select(e => e.Id).ToList();
-        _inbox.RecordAttempt(ids);
-        foreach (var id in ids)
-            Track(id, $"{surfaceName}:{conversationId}");
-        foreach (var entry in fresh)
-            _entryIds[entry.Message] = entry.Id;
+        await recovery.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (recovery.Cancelled || _draining)
+                return;
 
-        await SendSafelyAsync(surface, new OutboundMessage(conversationId, _redelivery.Notice), cancellationToken).ConfigureAwait(false);
-        await DeliverAsync(new Burst(surfaceName, conversationId, fresh.Select(e => e.Message).ToList())).ConfigureAwait(false);
+            var now = _time.GetUtcNow();
+            var tooOld = entries.Where(e => now - e.PersistedAt > _redelivery.MaxAge).ToList();
+            var worn = entries.Where(e => e.Attempts >= _redelivery.MaxRedeliveries).Except(tooOld).ToList();
+            var revoked = _authorize is null
+                ? []
+                : entries.Where(e => !_authorize(e.Message)).Except(tooOld).Except(worn).ToList();
+            var dropped = tooOld.Concat(worn).Concat(revoked).ToList();
+            var fresh = entries.Except(dropped).ToList();
+
+            _inbox!.Complete(dropped.Select(e => e.Id));
+            foreach (var entry in worn)
+                Console.Error.WriteLine($"[router] gave up on a message from {key} after {entry.Attempts} redelivery attempt(s)");
+
+            if (fresh.Count == 0)
+            {
+                if (tooOld.Count > 0)
+                    await SendSafelyAsync(surface, new OutboundMessage(conversationId, _redelivery.StaleNotice), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            lock (_idleGate)
+            {
+                if (_draining)
+                    return;
+                foreach (var entry in fresh)
+                    _inFlight[entry.Id] = key;
+            }
+
+            _inbox.RecordAttempt(fresh.Select(e => e.Id));
+            foreach (var entry in fresh)
+                _entryIds[entry.Message] = entry.Id;
+
+            await SendSafelyAsync(surface, new OutboundMessage(conversationId, _redelivery.Notice), cancellationToken).ConfigureAwait(false);
+            await DeliverAsync(new Burst(surfaceName, conversationId, fresh.Select(e => e.Message).ToList())).ConfigureAwait(false);
+        }
+        finally
+        {
+            recovery.Gate.Release();
+        }
     }
 
     private int UnfinishedCount
@@ -276,12 +366,6 @@ public sealed class ConversationRouter : IDisposable
             lock (_idleGate)
                 return _inFlight.Count;
         }
-    }
-
-    private void Track(string id, string session)
-    {
-        lock (_idleGate)
-            _inFlight[id] = session;
     }
 
     private void Release(IEnumerable<string>? ids, string? session = null)
@@ -330,18 +414,25 @@ public sealed class ConversationRouter : IDisposable
         await wait.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private void Settle(string receipt)
+    private async Task SettleAsync(Session session, string receipt)
     {
         var ids = receipt.Split(',');
         try
         {
-            _inbox?.Complete(ids);
+            var sent = await Task.WhenAll(session.TakeSends()).ConfigureAwait(false);
+            if (sent.All(ok => ok))
+                _inbox?.Complete(ids);
+            else
+                Console.Error.WriteLine("[router] a reply was not delivered; its message stays in the inbox");
         }
-        catch (IOException ex)
+        catch (Exception ex)
         {
             Console.Error.WriteLine($"[router] could not strike a message off the inbox: {ex.Message}");
         }
-        Release(ids);
+        finally
+        {
+            Release(ids);
+        }
     }
 
     private string? ReceiptOf(Burst burst)
@@ -378,9 +469,9 @@ public sealed class ConversationRouter : IDisposable
             _turns.MarkAnswered(surface.Name, conversationId);
             _participation?.Answered(surface.Name, conversationId);
             BeginSend();
-            _ = SendTrackedAsync(surface, new OutboundMessage(conversationId, text), _runToken);
+            session.TrackSend(SendTrackedAsync(surface, new OutboundMessage(conversationId, text), _runToken));
         };
-        conversation.Settled += Settle;
+        conversation.Settled += receipt => _ = SettleAsync(session, receipt);
 
         var token = session.Cancellation.Token;
         if (surface is IActivityIndicator activity)
@@ -391,11 +482,11 @@ public sealed class ConversationRouter : IDisposable
         return session;
     }
 
-    private async Task SendTrackedAsync(ISurface surface, OutboundMessage message, CancellationToken cancellationToken)
+    private async Task<bool> SendTrackedAsync(ISurface surface, OutboundMessage message, CancellationToken cancellationToken)
     {
         try
         {
-            await SendSafelyAsync(surface, message, cancellationToken).ConfigureAwait(false);
+            return await SendSafelyAsync(surface, message, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -403,15 +494,17 @@ public sealed class ConversationRouter : IDisposable
         }
     }
 
-    private static async Task SendSafelyAsync(ISurface surface, OutboundMessage message, CancellationToken cancellationToken)
+    private static async Task<bool> SendSafelyAsync(ISurface surface, OutboundMessage message, CancellationToken cancellationToken)
     {
         try
         {
             await surface.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            return true;
         }
         catch
         {
             // A surface send failure shouldn't take down the conversation.
+            return false;
         }
     }
 
@@ -432,6 +525,26 @@ public sealed class ConversationRouter : IDisposable
     {
         private readonly object _gate = new();
         private CancellationTokenSource? _typing;
+        private List<Task<bool>> _sends = [];
+
+        public void TrackSend(Task<bool> send)
+        {
+            lock (_gate)
+            {
+                _sends.RemoveAll(t => t.IsCompletedSuccessfully && t.Result);
+                _sends.Add(send);
+            }
+        }
+
+        public Task<bool>[] TakeSends()
+        {
+            lock (_gate)
+            {
+                var taken = _sends.ToArray();
+                _sends = [];
+                return taken;
+            }
+        }
 
         public AgentConversation Conversation { get; } = conversation;
         public CancellationTokenSource Cancellation { get; } = cancellation;
@@ -472,5 +585,12 @@ public sealed class ConversationRouter : IDisposable
                 _typing = null;
             }
         }
+    }
+
+    private sealed class Recovery
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public bool Cancelled { get; set; }
+        public List<InboundMessage> Held { get; } = [];
     }
 }

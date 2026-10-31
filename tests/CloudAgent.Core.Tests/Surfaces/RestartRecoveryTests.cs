@@ -31,10 +31,18 @@ public sealed class RestartRecoveryTests : IDisposable
     private static InboundMessage Direct(string text, DateTimeOffset? at = null) =>
         new("chat", "room", ConversationKind.Direct, "ana", "Ana", text, at ?? DateTimeOffset.UtcNow);
 
-    private InboxStore Inbox(TimeProvider? time = null) => new(_directory, time);
+    private readonly Dictionary<TimeProvider, InboxStore> _stores = new();
+
+    private InboxStore Inbox(TimeProvider? time = null)
+    {
+        time ??= TimeProvider.System;
+        if (!_stores.TryGetValue(time, out var store))
+            _stores[time] = store = new InboxStore(_directory, time);
+        return store;
+    }
 
     private (ConversationRouter Router, FakeSurface Surface, GatedModel Model) Start(
-        InboxStore inbox, bool gated = false, TimeProvider? time = null, FakeSurface? surface = null,
+        InboxStore? inbox, bool gated = false, TimeProvider? time = null, FakeSurface? surface = null,
         RedeliveryOptions? redelivery = null)
     {
         surface ??= new FakeSurface();
@@ -56,12 +64,12 @@ public sealed class RestartRecoveryTests : IDisposable
         return (router, surface, model);
     }
 
-    private static async Task Eventually(Func<bool> condition)
+    private static async Task Eventually(Func<bool> condition, Func<string>? describe = null)
     {
         var deadline = DateTime.UtcNow + Patience;
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "the condition was never met");
+            Assert.True(DateTime.UtcNow < deadline, "the condition was never met: " + (describe?.Invoke() ?? ""));
             await Task.Delay(10);
         }
     }
@@ -154,7 +162,7 @@ public sealed class RestartRecoveryTests : IDisposable
 
         var (_, surface, model) = Start(Inbox());
 
-        await Eventually(() => inbox.Pending().Count == 0 && surface.Sent.Count == 2);
+        await Eventually(() => inbox.Pending().Count == 0 && surface.Sent.Count == 2, () => $"pending {inbox.Pending().Count}, sent [{string.Join("|", surface.Sent)}], calls {model.Calls}");
         Assert.Equal(["Me reinicié mientras procesaba tu mensaje. Lo retomo ahora.", "ok"], surface.Sent);
         Assert.Equal("uno\ndos", model.LastUserText);
     }
@@ -228,6 +236,111 @@ public sealed class RestartRecoveryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_message_whose_reply_could_not_be_sent_stays_in_the_inbox()
+    {
+        var inbox = Inbox();
+        var (_, surface, model) = Start(inbox, surface: new FakeSurface { FailSends = true });
+
+        await surface.ReceiveAsync(Direct("hola"));
+        await Eventually(() => model.Calls == 1);
+        await Task.Delay(300);
+
+        Assert.Equal("hola", Assert.Single(inbox.Pending()).Message.Text);
+    }
+
+    [Fact]
+    public async Task A_message_stays_in_the_inbox_while_its_reply_is_still_being_sent()
+    {
+        var inbox = Inbox();
+        var surface = new FakeSurface { SendGate = new TaskCompletionSource() };
+        var (router, _, model) = Start(inbox, surface: surface);
+        await surface.ReceiveAsync(Direct("hola"));
+        await Eventually(() => model.Calls == 1);
+
+        await router.DrainAsync(TimeSpan.FromMilliseconds(200)).WaitAsync(Patience);
+        Assert.Single(inbox.Pending());
+
+        surface.SendGate.SetResult();
+        await Eventually(() => inbox.Pending().Count == 0);
+    }
+
+    [Fact]
+    public async Task Drain_waits_for_a_turn_in_a_router_without_an_inbox()
+    {
+        var (router, surface, model) = Start(null, gated: true);
+        await surface.ReceiveAsync(Direct("hola"));
+        await Eventually(() => model.Calls == 1);
+
+        var drain = router.DrainAsync(Patience);
+        await Task.Delay(150);
+        Assert.False(drain.IsCompleted);
+
+        model.Release();
+        await drain.WaitAsync(Patience);
+        Assert.Equal(["ok"], surface.Sent);
+    }
+
+    [Fact]
+    public async Task Closing_a_conversation_cancels_a_recovery_still_waiting_for_its_surface()
+    {
+        var inbox = Inbox();
+        inbox.Add(Direct("hola"));
+        var surface = new FakeSurface { Ready = new TaskCompletionSource() };
+        var (router, _, model) = Start(Inbox(), surface: surface);
+
+        await router.CloseAsync("chat", "room");
+        surface.Ready.SetResult();
+        await Task.Delay(300);
+
+        Assert.Empty(surface.Sent);
+        Assert.Equal(0, model.Calls);
+        Assert.Empty(inbox.Pending());
+    }
+
+    [Fact]
+    public async Task A_new_message_waits_behind_the_interrupted_one_it_follows()
+    {
+        var inbox = Inbox();
+        inbox.Add(Direct("viejo"));
+        var surface = new FakeSurface { Ready = new TaskCompletionSource() };
+        var (_, _, model) = Start(Inbox(), surface: surface);
+
+        await surface.ReceiveAsync(Direct("nuevo"));
+        await Task.Delay(200);
+        Assert.Equal(0, model.Calls);
+
+        surface.Ready.SetResult();
+        await Eventually(() => model.Calls == 2);
+        Assert.Equal(["viejo", "nuevo"], model.Texts);
+    }
+
+    [Fact]
+    public async Task A_recovery_that_times_out_stops_waiting_on_its_surface()
+    {
+        var inbox = Inbox();
+        inbox.Add(Direct("hola"));
+        var surface = new FakeSurface { Ready = new TaskCompletionSource() };
+
+        Start(Inbox(), surface: surface, redelivery: new RedeliveryOptions { ReadyTimeout = TimeSpan.FromMilliseconds(100) });
+
+        await Eventually(() => surface.ReadyCancelled);
+        Assert.Single(inbox.Pending());
+    }
+
+    [Fact]
+    public void A_torn_last_record_does_not_swallow_the_next_one()
+    {
+        var first = Inbox();
+        first.Add(Direct("uno"));
+        var file = Directory.EnumerateFiles(_directory).Single();
+        File.AppendAllText(file, "{\"op\":\"add\",\"id\":\"torn");
+
+        Inbox().Add(Direct("dos"));
+
+        Assert.Equal(["uno", "dos"], Inbox().Pending().Select(e => e.Message.Text));
+    }
+
+    [Fact]
     public async Task Closing_a_conversation_forgets_its_unfinished_messages()
     {
         var inbox = Inbox();
@@ -248,6 +361,12 @@ public sealed class RestartRecoveryTests : IDisposable
         public string Name => name;
 
         public TaskCompletionSource? Ready { get; init; }
+
+        public TaskCompletionSource? SendGate { get; init; }
+
+        public bool FailSends { get; init; }
+
+        public bool ReadyCancelled { get; private set; }
 
         public IReadOnlyList<string> Sent
         {
@@ -277,14 +396,30 @@ public sealed class RestartRecoveryTests : IDisposable
             return _handler(message with { Surface = name }, CancellationToken.None);
         }
 
-        public Task WaitUntilReadyAsync(string conversationId, CancellationToken cancellationToken = default) =>
-            Ready?.Task.WaitAsync(cancellationToken) ?? Task.CompletedTask;
-
-        public Task SendAsync(OutboundMessage message, CancellationToken cancellationToken = default)
+        public async Task WaitUntilReadyAsync(string conversationId, CancellationToken cancellationToken = default)
         {
+            if (Ready is null)
+                return;
+
+            try
+            {
+                await Ready.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                ReadyCancelled = true;
+                throw;
+            }
+        }
+
+        public async Task SendAsync(OutboundMessage message, CancellationToken cancellationToken = default)
+        {
+            if (SendGate is not null)
+                await SendGate.Task;
+            if (FailSends)
+                throw new IOException("send failed");
             lock (_sent)
                 _sent.Add(message.Text);
-            return Task.CompletedTask;
         }
     }
 
@@ -299,11 +434,15 @@ public sealed class RestartRecoveryTests : IDisposable
 
         public string? LastUserText { get; private set; }
 
+        public List<string> Texts { get; } = [];
+
         public void Release() => _gate.TrySetResult();
 
         public async Task<LlmResponse> CompleteAsync(LlmRequest request, CancellationToken cancellationToken = default)
         {
             LastUserText = request.Messages.LastOrDefault(m => m.Role == Role.User)?.Content;
+            lock (Texts)
+                Texts.Add(LastUserText ?? "");
             Interlocked.Increment(ref _calls);
             if (gated)
                 await _gate.Task.WaitAsync(cancellationToken);
