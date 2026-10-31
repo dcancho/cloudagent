@@ -169,18 +169,13 @@ public sealed class AgentLoop
                     .ConfigureAwait(false);
                 if (_decision is { Guidance.Count: > 0 })
                 {
-                    var guidance = "Guidance for this turn:\n" + string.Join('\n', _decision.Guidance.Select(g => $"- {g}"));
+                    var guidance = Attention.AttentionRendering.GuidanceHeader + "\n" +string.Join('\n', _decision.Guidance.Select(g => $"- {g}"));
                     _assembled = _assembled with
                     {
                         EphemeralContext = string.IsNullOrWhiteSpace(_assembled.EphemeralContext)
                             ? guidance
                             : $"{_assembled.EphemeralContext}\n\n{guidance}",
                     };
-                }
-                if (_assembled.InjectedMemories.Count > 0)
-                {
-                    await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);
-                    MemoriesRecalled?.Invoke(_assembled.InjectedMemories.Count);
                 }
 
                 // 3. Think and act until the model produces a plain answer.
@@ -222,26 +217,41 @@ public sealed class AgentLoop
             var toolDefinitions = SelectTools(allDefinitions, offered);
             var outOfBudget = _options.Budget?.Exhausted == true;
             var lastStep = hop >= _options.MaxToolSteps || outOfBudget;
-            var ephemeral = _assembled!.EphemeralContext;
+            string? limit = null;
             if (lastStep)
             {
                 var reason = outOfBudget
                     ? "This workspace has used its token budget, so you cannot call tools now and will not get another turn until it is raised."
                     : $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now.";
-                var limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
-                ephemeral = string.IsNullOrWhiteSpace(ephemeral) ? limit : $"{ephemeral}\n\n{limit}";
+                limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
             }
-            var request = new LlmRequest
+            var fit = InputCap.Fit(
+                new LlmRequest
+                {
+                    System = _assembled!.System,
+                    EphemeralContext = _assembled.EphemeralContext,
+                    Messages = _context.Messages,
+                    Model = _options.Model,
+                    Purpose = LlmPurpose.Turn,
+                    MaxTokens = _options.MaxTokens,
+                    Temperature = _options.Temperature,
+                    Tools = toolDefinitions,
+                },
+                _options.MaxInputTokens,
+                limit,
+                _assembled.InjectedMemories.Count);
+            var request = fit.Request;
+
+            if (hop == 0)
             {
-                System = _assembled.System,
-                EphemeralContext = ephemeral,
-                Messages = _context.Messages,
-                Model = _options.Model,
-                Purpose = LlmPurpose.Turn,
-                MaxTokens = _options.MaxTokens,
-                Temperature = _options.Temperature,
-                Tools = toolDefinitions,
-            };
+                if (fit.RecalledKept < _assembled.InjectedMemories.Count)
+                    _assembled = _assembled with { InjectedMemories = _assembled.InjectedMemories.Take(fit.RecalledKept).ToList() };
+                if (_assembled.InjectedMemories.Count > 0)
+                {
+                    await RecordInjectionAsync(iteration, cancellationToken).ConfigureAwait(false);
+                    MemoriesRecalled?.Invoke(_assembled.InjectedMemories.Count);
+                }
+            }
 
             LlmResponse response;
             try

@@ -14,13 +14,20 @@ namespace CloudAgent.Core.Attention;
 /// </summary>
 public static class AttentionRendering
 {
+    public const string StandingHeader = "\n\n## Standing memories\n";
+    public const string StateHeader = "## Operational state";
+    public const string SummaryHeader = "## Summary of earlier conversation";
+    public const string RecalledHeader = "## Relevant memories";
+    public const string StubsHeader = "## Set-aside memories that match";
+    public const string GuidanceHeader = "Guidance for this turn:";
+
     /// <summary>The stable system prefix: persona plus standing (resident) memories.</summary>
     public static string System(string persona, IReadOnlyList<MemoryEntry> residents)
     {
         var sb = new StringBuilder(persona);
 
         if (residents.Count > 0)
-            sb.Append("\n\n## Standing memories\n")
+            sb.Append(StandingHeader)
               .Append("(These earned permanent residence through measured usefulness.)\n")
               .Append(string.Join("\n", residents.Select(e => $"- {e.Content}")));
 
@@ -40,24 +47,24 @@ public static class AttentionRendering
         var sb = new StringBuilder();
 
         if (renderedState.Length > 0)
-            sb.Append("## Operational state (maintained by the harness; authoritative)\n")
+            sb.Append(StateHeader + " (maintained by the harness; authoritative)\n")
               .Append(renderedState);
 
         if (!string.IsNullOrWhiteSpace(summary))
             sb.Append(sb.Length > 0 ? "\n\n" : "")
-              .Append("## Summary of earlier conversation\n")
+              .Append(SummaryHeader + "\n")
               .Append("(Background reference only — the messages below are the live conversation.)\n")
               .Append(summary);
 
         if (hits.Count > 0)
             sb.Append(sb.Length > 0 ? "\n\n" : "")
-              .Append("## Relevant memories\n")
+              .Append(RecalledHeader + "\n")
               .Append("(Recalled from long-term memory; may be stale — verify before relying on them.)\n")
               .Append(string.Join("\n", hits.Select(h => $"- ({h.Entry.Scope}/{h.Entry.Kind}) {h.Entry.Content}")));
 
         if (coldStubs is { Count: > 0 })
             sb.Append(sb.Length > 0 ? "\n\n" : "")
-              .Append("## Set-aside memories that match\n")
+              .Append(StubsHeader + "\n")
               .Append("(Moved out of recall because they had not been useful. If one applies, call restore_memory with its id to read it in full before relying on it.)\n")
               .Append(string.Join("\n", coldStubs.Select(h => $"- [{h.Entry.Id}] ({h.Entry.Scope}/{h.Entry.Kind}) {Preview(h.Entry.Content, stubPreviewChars)}")));
 

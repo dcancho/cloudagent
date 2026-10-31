@@ -43,6 +43,8 @@ public static class UsageScope
 /// <param name="CacheWriteTokens">Prompt tokens written to cache, when reported.</param>
 /// <param name="Elapsed">Wall-clock time of the call.</param>
 /// <param name="Failed">The call threw; the tokens are unknown and the call may still have been billed.</param>
+/// <param name="Chars">Characters each part of the prompt took (see <see cref="PromptPart"/>); estimates how the input tokens divide.</param>
+/// <param name="Trimmed">What the input cap dropped from the prompt to fit it, when it had to.</param>
 public sealed record UsageRecord(
     DateTimeOffset At,
     string Purpose,
@@ -53,7 +55,9 @@ public sealed record UsageRecord(
     int? CacheReadTokens,
     int? CacheWriteTokens,
     TimeSpan Elapsed,
-    bool Failed);
+    bool Failed,
+    IReadOnlyDictionary<string, int>? Chars = null,
+    string? Trimmed = null);
 
 /// <summary>
 /// Every model call, one JSON line each, append-only. Tokens are the raw measurement; cost is
@@ -124,17 +128,17 @@ public sealed class LedgeredLlmProvider(ILlmProvider inner, UsageLedger ledger) 
         try
         {
             var response = await inner.CompleteAsync(request, cancellationToken).ConfigureAwait(false);
-            Write(purpose, model, started, response, failed: false);
+            Write(purpose, model, started, response, failed: false, request);
             return response;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Write(purpose, model, started, response: null, failed: true);
+            Write(purpose, model, started, response: null, failed: true, request);
             throw;
         }
     }
 
-    private void Write(string purpose, string model, long started, LlmResponse? response, bool failed) =>
+    private void Write(string purpose, string model, long started, LlmResponse? response, bool failed, LlmRequest request) =>
         ledger.Append(new UsageRecord(
             DateTimeOffset.UtcNow,
             purpose,
@@ -145,5 +149,7 @@ public sealed class LedgeredLlmProvider(ILlmProvider inner, UsageLedger ledger) 
             response?.CacheReadTokens,
             response?.CacheWriteTokens,
             System.Diagnostics.Stopwatch.GetElapsedTime(started),
-            failed));
+            failed,
+            PromptComposition.Measure(request),
+            request.Trimmed));
 }

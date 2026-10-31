@@ -176,6 +176,16 @@ public static class AdminCommands
         Table(output, "By model", report.ByModel);
         Table(output, "By agent", report.ByAgent);
 
+        if (report.ByPart.Count > 0)
+        {
+            output.WriteLine("\nInput by prompt part (estimated)");
+            foreach (var part in report.ByPart)
+                output.WriteLine($"  {part.Part,-35}{part.Tokens,12:N0} in{part.Share,9:P1}");
+        }
+
+        if (report.Trimmed > 0)
+            output.WriteLine($"\nThe input cap cut the prompt of {report.Trimmed:N0} call(s).");
+
         var unpriced = report.ByModel.Where(m => m.Totals.Unpriced).Select(m => m.Key).ToList();
         if (unpriced.Count > 0)
             output.WriteLine($"\nNo price for {string.Join(", ", unpriced.Select(m => $"'{m}'"))}: costs are a floor. " +
@@ -251,7 +261,10 @@ public static class AdminCommands
 
             var key = text[..equals].Trim();
             if (Environment.GetEnvironmentVariable(key) is null)
-                Environment.SetEnvironmentVariable(key, text[(equals + 1)..].Trim());
+                Environment.SetEnvironmentVariable(key, Unquote(text[(equals + 1)..].Trim()));
         }
     }
+
+    private static string Unquote(string value) =>
+        value.Length >= 2 && value[0] == value[^1] && value[0] is '"' or '\'' ? value[1..^1] : value;
 }
