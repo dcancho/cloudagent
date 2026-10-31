@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CloudAgent.Core.Memory;
 
@@ -43,6 +44,16 @@ public sealed record UtilityEvent(
 /// </summary>
 public sealed class MemoryUtilityStats
 {
+    private static readonly MemoryUtilityStats None = new(nested: true);
+
+    private readonly Dictionary<string, MemoryUtilityStats>? _byAgent;
+
+    public MemoryUtilityStats() => _byAgent = [];
+
+    private MemoryUtilityStats(bool nested)
+    {
+    }
+
     /// <summary>How many turns this memory was injected into.</summary>
     public int Injections { get; private set; }
 
@@ -57,8 +68,24 @@ public sealed class MemoryUtilityStats
     /// <summary>Fraction of injections that were judged useful, in [0, 1].</summary>
     public double UsefulRate => Injections == 0 ? 0 : (double)Useful / Injections;
 
+    /// <summary>The same totals restricted to the events one agent produced: its own context.</summary>
+    public MemoryUtilityStats InAgent(string agentId) =>
+        _byAgent is not null && _byAgent.TryGetValue(agentId, out var stats) ? stats : None;
+
     internal void Apply(UtilityEvent utilityEvent)
     {
+        if (_byAgent is not null)
+        {
+            if (utilityEvent.Signal == UtilitySignal.Restored)
+                _byAgent.Clear();
+            else
+            {
+                if (!_byAgent.TryGetValue(utilityEvent.AgentId, out var agentStats))
+                    _byAgent[utilityEvent.AgentId] = agentStats = new MemoryUtilityStats(nested: true);
+                agentStats.Apply(utilityEvent);
+            }
+        }
+
         switch (utilityEvent.Signal)
         {
             case UtilitySignal.Injected:

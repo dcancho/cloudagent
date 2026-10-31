@@ -134,7 +134,7 @@ public sealed class ColdRecoveryTests : IDisposable
         await _fixture.RecordAsync(money.Id, injections: 3);
         await Restore().InvokeAsync(Input($$"""{"id":"{{money.Id}}","reason":"x"}"""));
         var options = new AttentionOptions();
-        var gate = new MetacognitiveAttentionManager(Assembler(options), _fixture.Utility, options);
+        var gate = new MetacognitiveAttentionManager(Assembler(options), _fixture.Utility, options, "test");
 
         var assembled = await gate.AssembleAsync(new AgentContext(), Query);
 
@@ -145,22 +145,13 @@ public sealed class ColdRecoveryTests : IDisposable
     [Fact]
     public async Task Sleep_does_not_re_demote_on_the_old_record()
     {
-        var money = await ColdMoneyAsync();
         var episode = await _fixture.AddAsync("User: the overtime cap is ten hours.", MemoryScope.Session,
             MemoryKind.Episodic, MemoryResidency.Cold, DateTimeOffset.UtcNow.AddDays(-30));
-        await _fixture.RecordAsync(money.Id, injections: 3);
-        await Restore().InvokeAsync(Input($$"""{"id":"{{money.Id}}","reason":"x"}"""));
         await Restore().InvokeAsync(Input($$"""{"id":"{{episode.Id}}","reason":"x"}"""));
 
         await _fixture.Sleep().RunAsync();
 
-        Assert.Equal(MemoryResidency.Active, (await _fixture.FindAsync(money.Id))?.Residency);
         Assert.Equal(MemoryResidency.Active, (await _fixture.FindAsync(episode.Id))?.Residency);
-
-        await _fixture.RecordAsync(money.Id, injections: 3);
-        await _fixture.Sleep().RunAsync();
-
-        Assert.Equal(MemoryResidency.Cold, (await _fixture.FindAsync(money.Id))?.Residency);
     }
 
     [Theory]

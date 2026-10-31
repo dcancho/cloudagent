@@ -12,26 +12,28 @@ public sealed class SleepJobTests : IDisposable
     private async Task<MemoryResidency?> ResidencyAsync(MemoryEntry entry) => (await _fixture.FindAsync(entry.Id))?.Residency;
 
     [Fact]
-    public async Task Demotes_a_fact_injected_enough_times_and_never_useful()
+    public async Task Never_demotes_a_fact_to_cold_on_unused_judgments_alone()
     {
         var fact = await _fixture.AddAsync("Money uses decimal.");
-        await _fixture.RecordAsync(fact.Id, injections: 3);
+        await _fixture.RecordAsync(fact.Id, injections: 6, agentId: "cli:a");
+        await _fixture.RecordAsync(fact.Id, injections: 6, agentId: "cli:b");
 
         var result = await _fixture.Sleep().RunAsync();
 
-        Assert.Equal(1, result.Demoted);
-        Assert.Equal(MemoryResidency.Cold, await ResidencyAsync(fact));
+        Assert.Equal(0, result.Demoted);
+        Assert.Equal(MemoryResidency.Active, await ResidencyAsync(fact));
     }
 
     [Fact]
-    public async Task Leaves_a_fact_below_the_injection_threshold()
+    public async Task A_fact_unused_in_one_context_is_still_recalled_in_another()
     {
-        var fact = await _fixture.AddAsync("Money uses decimal.");
-        await _fixture.RecordAsync(fact.Id, injections: 2);
-
+        var fact = await _fixture.AddAsync("Payroll money rounds half away from zero at output.");
+        await _fixture.RecordAsync(fact.Id, injections: 5, agentId: "cli:a");
         await _fixture.Sleep().RunAsync();
 
-        Assert.Equal(MemoryResidency.Active, await ResidencyAsync(fact));
+        var hits = await _fixture.Memory.RecallAsync("How does payroll money round at output?", MemoryFixture.AllScopes, 3);
+
+        Assert.Contains(hits, hit => hit.Entry.Id == fact.Id);
     }
 
     [Fact]
@@ -110,9 +112,8 @@ public sealed class SleepJobTests : IDisposable
     [Fact]
     public async Task Every_move_lands_in_a_verifiable_ledger()
     {
-        var unused = await _fixture.AddAsync("Plants are watered on Fridays.");
+        var unused = await _fixture.AddAsync("User: hi", MemoryScope.Session, MemoryKind.Episodic, createdAt: DateTimeOffset.UtcNow.AddDays(-15));
         var useful = await _fixture.AddAsync("Money uses decimal.");
-        await _fixture.RecordAsync(unused.Id, injections: 3);
         await _fixture.RecordAsync(useful.Id, injections: 3, useful: 3);
 
         await _fixture.Sleep().RunAsync();

@@ -65,14 +65,14 @@ public sealed class MemoryFixture : IDisposable
     public Task<MemoryEntry?> FindAsync(string id) => Memory.FindAsync(id, AllScopes);
 
     /// <summary>Record <paramref name="injections"/> injections of a memory, of which <paramref name="useful"/> were judged useful.</summary>
-    public Task RecordAsync(string id, int injections, int useful = 0)
+    public Task RecordAsync(string id, int injections, int useful = 0, string agentId = "test")
     {
         var now = DateTimeOffset.UtcNow;
         var events = Enumerable.Range(0, injections)
             .SelectMany(i => new[]
             {
-                new UtilityEvent(id, "test", i, now, UtilitySignal.Injected, null),
-                new UtilityEvent(id, "test", i, now, i < useful ? UtilitySignal.JudgedUseful : UtilitySignal.JudgedUnused, null),
+                new UtilityEvent(id, agentId, i, now, UtilitySignal.Injected, null),
+                new UtilityEvent(id, agentId, i, now, i < useful ? UtilitySignal.JudgedUseful : UtilitySignal.JudgedUnused, null),
             })
             .ToArray();
         return Utility.AppendAsync(events);

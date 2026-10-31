@@ -14,14 +14,18 @@ namespace CloudAgent.Core.Attention;
 /// not over cosine similarity: similarity measures familiarity, which is exactly the half that
 /// fools you; the ledger measures the familiarity-vs-usefulness gap directly.
 ///
+/// The track record is the one this agent produced: a memory the judge found redundant here may
+/// still be needed in another conversation, so it is suppressed only where it keeps not helping.
+///
 /// This is read-time, per-turn, and reversible: a memory suppressed this turn is untouched in the
-/// store (unlike the sleep job's demotion to Cold). Inert until the ledger has data, so it does
+/// store. Inert until the ledger has data, so it does
 /// nothing on a cold start and only bites once measurement accumulates.
 /// </summary>
 public sealed class MetacognitiveAttentionManager(
     IAttentionManager inner,
     IUtilityLedger utility,
     AttentionOptions options,
+    string agentId,
     Action<MemoryHit>? onSuppressed = null) : IAttentionManager
 {
     public async Task<AssembledContext> AssembleAsync(
@@ -54,13 +58,13 @@ public sealed class MetacognitiveAttentionManager(
     }
 
     /// <summary>
-    /// Low confidence = the memory has been injected often enough to judge and has (almost) never
-    /// helped. Same shape as the sleep job's fact-demotion criterion, but applied live per turn.
+    /// Low confidence = the memory has been injected often enough in this agent's context to judge
+    /// and has (almost) never helped there.
     /// A memory with no track record yet is never suppressed (nothing to be skeptical about).
     /// </summary>
     private bool IsLowConfidence(IReadOnlyDictionary<string, MemoryUtilityStats> stats, string memoryId)
     {
-        var stat = stats.GetValueOrDefault(memoryId);
+        var stat = stats.GetValueOrDefault(memoryId)?.InAgent(agentId);
         return stat is not null
             && stat.Injections >= options.MetacognitionMinInjections
             && stat.UsefulRate <= options.MetacognitionMaxUsefulRate;
