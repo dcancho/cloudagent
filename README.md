@@ -98,7 +98,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `PEOPLE_FILE` | Who may talk to the agent, and which surface accounts belong to whom (see below) | `~/.cloudagent/people.json` |
 | `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
-| `WEBCHAT_ANONYMOUS` | `0` refuses web chat connections without Tailscale identity. Set it on any shared host | on |
+| `WEBCHAT_ANONYMOUS` | `1` lets web chat connections without Tailscale identity in, all as the same nobody sharing their conversations. Only for a web chat no one else can reach; `run.ps1` sets it | off |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
@@ -127,12 +127,13 @@ use lowercase letters, digits, `-` and `_`, since they name each person's memory
 
 Behind Tailscale Serve, the web chat speaks as the tailnet login. The console always gets in, since
 whoever uses it already has the machine, and speaks as nobody unless started with `--as <person>`.
-A web chat without Tailscale identity is let in unidentified unless `WEBCHAT_ANONYMOUS=0`. A refused
-web chat cannot connect at all, and each web chat conversation belongs to whoever opened it: nobody
-else can list, open or delete it. Each console identity keeps its own conversation.
+A web chat without Tailscale identity is refused unless `WEBCHAT_ANONYMOUS=1`. A refused web chat
+cannot connect at all, and each web chat conversation belongs to whoever opened it: nobody else can
+list, open or delete it. Each console identity keeps its own conversation.
 
 Consolidation proposals stay with the conversation they were learned from: only that conversation
-can list, apply or discard them.
+can list, apply or discard them. The workspace's `.agent` folder, where memory, transcripts and
+proposals live, is out of reach of the agent's file tools.
 
 Personal memory belongs to the person in a direct conversation, one database each in
 `PERSONAL_MEMORY_DIR`. Group conversations, and anyone unidentified, keep no personal memory.

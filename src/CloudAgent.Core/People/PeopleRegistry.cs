@@ -38,6 +38,8 @@ public sealed class PeopleRegistry
                 throw new ArgumentException($"Person '{person.Id}' appears more than once.", nameof(people));
             foreach (var account in person.Accounts)
             {
+                if (account.EndsWith($":{AnonymousSender}", StringComparison.Ordinal))
+                    throw new ArgumentException($"Account '{account}' is the unidentified sender, not a person's.", nameof(people));
                 if (!_byAccount.TryAdd(account, person))
                     throw new ArgumentException($"Account '{account}' is linked to more than one person.", nameof(people));
             }
@@ -81,5 +83,5 @@ public sealed class PeopleRegistry
 
     /// <summary>The person who holds this account, or null when nobody does.</summary>
     public Person? Resolve(string surface, string senderId) =>
-        _byAccount.GetValueOrDefault($"{surface}:{senderId}");
+        senderId == AnonymousSender ? null : _byAccount.GetValueOrDefault($"{surface}:{senderId}");
 }

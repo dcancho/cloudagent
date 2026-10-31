@@ -66,6 +66,15 @@ public sealed class PeopleRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => new PeopleRegistry([new Person(id, [])]));
     }
 
+    [Fact]
+    public void The_unidentified_sender_cannot_be_linked_to_a_person()
+    {
+        Assert.Throws<ArgumentException>(() => Load($$"""
+            { "diego": { "accounts": ["webchat:{{PeopleRegistry.AnonymousSender}}"] } }
+            """));
+        Assert.Null(PeopleRegistry.Empty.Resolve("webchat", PeopleRegistry.AnonymousSender));
+    }
+
     [Theory]
     [InlineData("diego")]
     [InlineData("ana_work")]

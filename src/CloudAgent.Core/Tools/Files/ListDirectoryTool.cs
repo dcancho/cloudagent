@@ -29,7 +29,7 @@ public sealed class ListDirectoryTool(IWorkspace workspace) : ITool
             return Task.FromResult(ToolResult.Fail($"Directory not found: {relative}"));
 
         var sb = new StringBuilder();
-        foreach (var dir in Directory.EnumerateDirectories(path).OrderBy(p => p))
+        foreach (var dir in Directory.EnumerateDirectories(path).Where(d => !workspace.IsState(d)).OrderBy(p => p))
             sb.AppendLine($"[dir]  {Path.GetFileName(dir)}/");
 
         foreach (var file in Directory.EnumerateFiles(path).OrderBy(p => p))

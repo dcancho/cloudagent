@@ -19,6 +19,9 @@ public interface IWorkspace
     /// <exception cref="WorkspaceAccessException">The path would escape the workspace.</exception>
     string Resolve(string path);
 
+    /// <summary>Whether a full path is the host's private state, which no tool may reach.</summary>
+    bool IsState(string fullPath);
+
     /// <summary>Express an absolute in-bounds path relative to <see cref="Root"/>, for display.</summary>
     string ToRelative(string absolutePath);
 
@@ -26,9 +29,9 @@ public interface IWorkspace
     ExecutionPolicy Execution { get; }
 }
 
-/// <summary>Thrown when a path resolves outside the workspace boundary.</summary>
-public sealed class WorkspaceAccessException(string attemptedPath, string root)
-    : Exception($"Path '{attemptedPath}' resolves outside the workspace root '{root}'.")
+/// <summary>Thrown when a path resolves outside the workspace boundary, or into its private state.</summary>
+public sealed class WorkspaceAccessException(string attemptedPath, string root, string? reason = null)
+    : Exception(reason ?? $"Path '{attemptedPath}' resolves outside the workspace root '{root}'.")
 {
     public string AttemptedPath { get; } = attemptedPath;
     public string Root { get; } = root;
