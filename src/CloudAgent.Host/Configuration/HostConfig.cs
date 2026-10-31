@@ -29,6 +29,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="WebchatAnonymous">Whether a web-chat connection without Tailscale identity gets in, unidentified
 /// (<c>WEBCHAT_ANONYMOUS=1</c>). Every such connection is the same nobody and shares its conversations, so this
 /// is for a web chat only this machine's user can reach.</param>
+/// <param name="ConsoleEnabled">Whether to start the console surface (<c>CLI</c>, on unless <c>0</c>); off for a host
+/// with no terminal, such as a service.</param>
 /// <param name="TurnTakingEnabled">Group messages into bursts before the agent answers (<c>TURN_TAKING</c>, on unless <c>0</c>).</param>
 /// <param name="ContextRouting">How each turn's pipeline is chosen (<c>CONTEXT_ROUTING</c>): <c>off</c> runs all of it,
 /// <c>decision</c> asks the Foundry decision model, <c>generative</c> asks the background chat model. Defaults to
@@ -56,6 +58,7 @@ public sealed record HostConfig(
     bool WebchatEnabled,
     int WebchatPort,
     bool WebchatAnonymous,
+    bool ConsoleEnabled,
     bool TurnTakingEnabled,
     string ContextRouting,
     Uri? DecisionsEndpoint,
@@ -118,6 +121,7 @@ public sealed record HostConfig(
             webchatEnabled,
             webchatPort,
             string.Equals(Environment.GetEnvironmentVariable("WEBCHAT_ANONYMOUS"), "1", StringComparison.Ordinal),
+            !string.Equals(Environment.GetEnvironmentVariable("CLI"), "0", StringComparison.Ordinal),
             !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal),
             routing,
             decisionsEndpoint,

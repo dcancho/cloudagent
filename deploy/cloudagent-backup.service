@@ -1,0 +1,13 @@
+[Unit]
+Description=CloudAgent SQLite backup
+
+[Service]
+Type=oneshot
+User=cloudagent
+Group=cloudagent
+ExecStart=/usr/local/sbin/cloudagent-backup
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/cloudagent /var/backups/cloudagent

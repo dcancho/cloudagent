@@ -330,13 +330,19 @@ void AttachLogging(AgentLoop loop, string label)
         Console.WriteLine($"  📊 [{label}] memories useful this turn: {useful}/{total}");
 }
 
-// Ctrl+C or typing "exit" stops everything cleanly.
+// Ctrl+C, SIGTERM or typing "exit" stops everything cleanly.
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
     cts.Cancel();
 };
+using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(
+    System.Runtime.InteropServices.PosixSignal.SIGTERM, context =>
+    {
+        context.Cancel = true;
+        cts.Cancel();
+    });
 
 // Every agent's loop is recorded event by event, one JSONL file per agent.
 var transcriptDirectory = Path.Combine(workspace.Root, ".agent", "transcripts");
@@ -430,12 +436,18 @@ Person? PersonOf(InboundMessage message) => message.Surface == "cli"
     ? people.Find(message.SenderId)
     : people.Resolve(message.Surface, message.SenderId);
 
-bool MayTalk(string surface, string senderId) => surface switch
+bool MayTalk(string surface, string senderId, string? display = null)
 {
-    "cli" => true,
-    "webchat" when senderId == PeopleRegistry.AnonymousSender => config.WebchatAnonymous,
-    _ => people.Resolve(surface, senderId) is not null,
-};
+    var allowed = surface switch
+    {
+        "cli" => true,
+        "webchat" when senderId == PeopleRegistry.AnonymousSender => config.WebchatAnonymous,
+        _ => people.Resolve(surface, senderId) is not null,
+    };
+    if (!allowed)
+        Console.WriteLine($"  ⛔ refused {surface}:{senderId}{(display is null ? "" : $" ({display})")}");
+    return allowed;
+}
 
 string? PersonalPathFor(InboundMessage first)
 {
@@ -538,8 +550,10 @@ async Task<bool> DeleteConversationAsync(ConversationRouter router, string surfa
     return existed;
 }
 
-// Surfaces: the console is always on; others join when configured.
-var surfaces = new List<ISurface> { new CliSurface(cts, cliPerson?.Id) };
+// Surfaces: the console is on unless CLI=0; others join when configured.
+var surfaces = new List<ISurface>();
+if (config.ConsoleEnabled)
+    surfaces.Add(new CliSurface(cts, cliPerson?.Id));
 
 if (!string.IsNullOrWhiteSpace(config.TelegramBotToken))
     surfaces.Add(new TelegramSurface(config.TelegramBotToken));
@@ -570,7 +584,7 @@ var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
 using var router = new ConversationRouter(
-    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId), turnTaking, message => PersonOf(message)?.Id);
+    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id);
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
