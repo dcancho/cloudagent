@@ -16,6 +16,7 @@ using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Agents;
 using CloudAgent.Core.Tools.Compute;
 using CloudAgent.Core.Tools.Index;
+using CloudAgent.Core.Tools.Results;
 using CloudAgent.Core.Tools.Memory;
 using CloudAgent.Core.Tools.Todos;
 using CloudAgent.Core.Tools.Web;
@@ -173,6 +174,7 @@ var options = new AgentOptions
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
     MaxInputTokens = config.MaxInputTokens,
     MaxToolPoints = config.MaxToolPoints,
+    MaxInlineResultChars = config.MaxInlineResultChars,
 };
 
 var childOptions = new AgentOptions
@@ -187,6 +189,7 @@ var childOptions = new AgentOptions
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
     MaxInputTokens = config.MaxInputTokens,
     MaxToolPoints = config.MaxToolPoints,
+    MaxInlineResultChars = config.MaxInlineResultChars,
 };
 
 // Attention (eje 5) knobs — recall shape and budget — live with the module, not AgentOptions.
@@ -418,6 +421,14 @@ void RegisterColdRecovery(ToolRegistry tools, MemoryManager mem, string agentId)
     .Register(new RestoreMemoryTool(mem, utilityLedger, consolidationLedger, agentId, attentionOptions.RecallScopes))
     .Register(new SearchMemoryTool(mem, attentionOptions.RecallScopes, attentionOptions.ColdStubPreviewChars));
 
+var resultsRoot = Path.Combine(workspace.Root, ".agent", "results");
+ToolResultStore ResultsFor(string agentId) => new(Path.Combine(resultsRoot, TranscriptRecorder.ToFileName(agentId)));
+if (Directory.Exists(resultsRoot))
+{
+    foreach (var directory in Directory.EnumerateDirectories(resultsRoot))
+        new ToolResultStore(directory).Prune(DateTimeOffset.UtcNow.AddDays(-7));
+}
+
 // Multi-agent: a bus + orchestrator so any agent can spawn children that run concurrently.
 var bus = new AgentBus(cts.Token);
 bus.StatusChanged += h => Console.WriteLine($"  🤖 {h.Id} ({h.Role}) -> {h.Status}");
@@ -429,12 +440,13 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     var personalPath = personalPaths.GetValueOrDefault(child.ParentId ?? "");
     personalPaths[child.Id] = personalPath;
     var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id, profile.ProjectMemoryPath, personalPath);
-    childTools.Register(new RememberTool(mem));
+    var childResults = ResultsFor(child.Id);
+    childTools.Register(new RememberTool(mem)).Register(new ReadResultTool(childResults));
     RegisterColdRecovery(childTools, mem, child.Id);
     var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}", child.Id);
     var loop = new AgentLoop(
         provider, profile.ChildOptions, input, new AgentContext(), childTools, comp, attention, utility,
-        profile.Routed ? BuildRouter(mem) : null) { AgentId = child.Id };
+        profile.Routed ? BuildRouter(mem) : null) { AgentId = child.Id, Results = childResults };
     AttachLogging(loop, $"child {child.Role}");
     new TranscriptRecorder(transcriptDirectory, child.Id).Attach(loop);
     return loop;
@@ -501,8 +513,7 @@ AgentOptions WithPrompt(AgentOptions basis, string systemPrompt) => new()
     MaxToolResultChars = basis.MaxToolResultChars,
     MaxToolSteps = basis.MaxToolSteps,
     MaxToolPoints = basis.MaxToolPoints,
-    KeepToolResultTurns = basis.KeepToolResultTurns,
-    AgedToolResultChars = basis.AgedToolResultChars,
+    MaxInlineResultChars = basis.MaxInlineResultChars,
 };
 
 AgentConversation CreateConversation(InboundMessage first)
@@ -531,6 +542,8 @@ AgentConversation CreateConversation(InboundMessage first)
         .Register(new ListAgentsTool(bus, handle))
         .Register(new ReplyToAgentTool(bus, handle))
         .Register(new StopAgentTool(bus));
+    var results = ResultsFor(handle.Id);
+    agentTools.Register(new ReadResultTool(results));
     RegisterColdRecovery(agentTools, mem, handle.Id);
 
     var agentOptions = Identified(profile.Options, first);
@@ -540,7 +553,7 @@ AgentConversation CreateConversation(InboundMessage first)
         Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
     var loop = new AgentLoop(
         provider, agentOptions, input, context ?? new AgentContext(), agentTools, comp, attention, utility,
-        profile.Routed ? BuildRouter(mem) : null) { AgentId = handle.Id };
+        profile.Routed ? BuildRouter(mem) : null) { AgentId = handle.Id, Results = results };
     if (!isEcho)
     {
         var learner = new SessionLearner(

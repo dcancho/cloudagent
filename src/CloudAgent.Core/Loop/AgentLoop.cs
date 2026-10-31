@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CloudAgent.Core.Abstractions;
 using CloudAgent.Core.Tools;
+using CloudAgent.Core.Tools.Results;
 
 namespace CloudAgent.Core.Loop;
 
@@ -98,6 +99,9 @@ public sealed class AgentLoop
     /// <summary>The id this agent's model calls are accounted to, when it has one.</summary>
     public string? AgentId { get; init; }
 
+    /// <summary>Where results too long for the context are kept whole; without it they are cut to <see cref="AgentOptions.MaxToolResultChars"/>.</summary>
+    public Tools.Results.ToolResultStore? Results { get; init; }
+
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
     /// <see cref="AgentOptions.MaxIterations"/> is reached.
@@ -183,8 +187,6 @@ public sealed class AgentLoop
 
                 // 3.5. Close the feedback loop: did the injected memories influence the reply?
                 await JudgeUtilityAsync(iteration, cancellationToken).ConfigureAwait(false);
-
-                _context.AgeToolResults(_options.KeepToolResultTurns, _options.AgedToolResultChars);
 
                 // 4. Keep working memory under budget; evicted turns become episodic memory.
                 await CompactAsync(cancellationToken).ConfigureAwait(false);
@@ -301,11 +303,27 @@ public sealed class AgentLoop
                     ? RequestTools(call, offered)
                     : await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
                 var content = result.Success ? result.Content : $"ERROR: {result.Error}";
-                content = JsonTruncator.Truncate(content, _options.MaxToolResultChars);
+                content = Inline(call.Name, content);
                 _context.Add(Message.ToolResult(call.Id, call.Name, content));
                 ToolInvoked?.Invoke(call, result);
             }
         }
+    }
+
+    private string Inline(string tool, string content)
+    {
+        var limit = _options.MaxInlineResultChars;
+        if (Results is null || limit <= 0 || tool == ReadResultTool.ToolName || content.Length <= limit)
+            return JsonTruncator.Truncate(content, _options.MaxToolResultChars);
+
+        var head = content[..limit];
+        var boundary = Math.Max(head.LastIndexOf('\n'), head.LastIndexOf(' '));
+        if (boundary > limit * 8 / 10)
+            head = head[..boundary];
+
+        var id = Results.Save(content);
+        return $"{head}\n[{content.Length:N0} characters in all, the first {head.Length:N0} shown. " +
+               $"Read more with read_result, id \"{id}\", offset {head.Length}.]";
     }
 
     /// <summary>

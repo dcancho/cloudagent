@@ -17,6 +17,7 @@ public static class ToolWeights
         ["calculate"] = 1,
         ["remember"] = 1,
         ["search_memory"] = 1,
+        ["read_result"] = 1,
         ["restore_memory"] = 1,
         ["list_consolidations"] = 1,
         ["read_file"] = 1,

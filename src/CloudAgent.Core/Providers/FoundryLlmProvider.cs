@@ -73,7 +73,7 @@ public sealed class FoundryLlmProvider : ILlmProvider
                 Response<ChatCompletions> response = await _client
                     .CompleteAsync(BuildOptions(request, model, quirks), cancellationToken)
                     .ConfigureAwait(false);
-                return MapResponse(response.Value);
+                return MapResponse(response.Value) with { CacheReadTokens = CachedTokens(response.GetRawResponse()) };
             }
             catch (RequestFailedException ex) when (ex.Status == 400 && attempt < 3 && quirks.LearnFrom(ex.Message))
             {
@@ -187,6 +187,25 @@ public sealed class FoundryLlmProvider : ILlmProvider
 
             default:
                 return new ChatRequestUserMessage(message.Content);
+        }
+    }
+
+    /// <summary>The prompt tokens the service served from its prefix cache, read from the raw usage block; null when absent.</summary>
+    public static int? CachedTokens(Response raw)
+    {
+        try
+        {
+            using var body = System.Text.Json.JsonDocument.Parse(raw.Content.ToMemory());
+            return body.RootElement.TryGetProperty("usage", out var usage)
+                && usage.TryGetProperty("prompt_tokens_details", out var details)
+                && details.TryGetProperty("cached_tokens", out var cached)
+                && cached.TryGetInt32(out var tokens)
+                    ? tokens
+                    : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
         }
     }
 

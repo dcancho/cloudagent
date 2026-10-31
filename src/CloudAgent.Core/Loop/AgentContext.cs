@@ -40,41 +40,6 @@ public sealed class AgentContext
     /// <summary>The most recent message, or null if the context is empty.</summary>
     public Message? Last => _messages.Count == 0 ? null : _messages[^1];
 
-    private const string AgedMarker = "\n[older tool result shortened]";
-
-    /// <summary>
-    /// Cut the tool results that precede the last <paramref name="keepTurns"/> user messages to
-    /// <paramref name="keepChars"/> characters each. The messages stay, so a call is never separated from its
-    /// result. Returns how many results were cut.
-    /// </summary>
-    public int AgeToolResults(int keepTurns, int keepChars)
-    {
-        if (keepTurns <= 0)
-            return 0;
-
-        var seen = 0;
-        var boundary = -1;
-        for (var i = _messages.Count - 1; i >= 0; i--)
-        {
-            if (_messages[i].Role == Role.User && ++seen == keepTurns)
-            {
-                boundary = i;
-                break;
-            }
-        }
-
-        var aged = 0;
-        for (var i = 0; i < boundary; i++)
-        {
-            if (_messages[i].Role == Role.Tool && _messages[i].Content.Length > keepChars + AgedMarker.Length)
-            {
-                _messages[i] = _messages[i] with { Content = _messages[i].Content[..keepChars] + AgedMarker };
-                aged++;
-            }
-        }
-        return aged;
-    }
-
 
     /// <summary>
     /// Remove the oldest messages, keeping roughly the most recent <paramref name="keepRecent"/>.

@@ -52,6 +52,7 @@ namespace CloudAgent.Host.Configuration;
 /// useful context is dropped past it. 0 means no cap.</param>
 /// <param name="AgentName">What the agent calls itself (<c>AGENT_NAME</c>); by default its handle on the surface.</param>
 /// <param name="MaxToolPoints">Points the tool calls of one turn may spend (<c>TOOL_POINTS</c>); a calculation costs 1, a web search 3. 0 means no limit beyond the steps.</param>
+/// <param name="MaxInlineResultChars">Characters of a tool result that go into the context (<c>TOOL_RESULT_INLINE_CHARS</c>); a longer one is kept whole and read on demand with <c>read_result</c>. 0 keeps results inline.</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -79,7 +80,8 @@ public sealed record HostConfig(
     int GroupEngagementSeconds = HostConfig.DefaultGroupEngagementSeconds,
     int MaxInputTokens = HostConfig.DefaultMaxInputTokens,
     string? AgentName = null,
-    int MaxToolPoints = HostConfig.DefaultMaxToolPoints)
+    int MaxToolPoints = HostConfig.DefaultMaxToolPoints,
+    int MaxInlineResultChars = HostConfig.DefaultMaxInlineResultChars)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -90,6 +92,7 @@ public sealed record HostConfig(
     public const int DefaultGroupEngagementSeconds = 90;
     public const int DefaultMaxInputTokens = 32_000;
     public const int DefaultMaxToolPoints = 30;
+    public const int DefaultMaxInlineResultChars = 3000;
 
     /// <summary>Resolve the full host configuration from environment variables and defaults.</summary>
     public static HostConfig FromEnvironment()
@@ -152,7 +155,8 @@ public sealed record HostConfig(
             int.TryParse(Environment.GetEnvironmentVariable("GROUP_ENGAGEMENT_SEC"), out var engagement) && engagement >= 0 ? engagement : DefaultGroupEngagementSeconds,
             int.TryParse(Environment.GetEnvironmentVariable("MAX_INPUT_TOKENS"), out var maxInput) && maxInput >= 0 ? maxInput : DefaultMaxInputTokens,
             Environment.GetEnvironmentVariable("AGENT_NAME"),
-            int.TryParse(Environment.GetEnvironmentVariable("TOOL_POINTS"), out var toolPoints) && toolPoints >= 0 ? toolPoints : DefaultMaxToolPoints);
+            int.TryParse(Environment.GetEnvironmentVariable("TOOL_POINTS"), out var toolPoints) && toolPoints >= 0 ? toolPoints : DefaultMaxToolPoints,
+            int.TryParse(Environment.GetEnvironmentVariable("TOOL_RESULT_INLINE_CHARS"), out var inlineChars) && inlineChars >= 0 ? inlineChars : DefaultMaxInlineResultChars);
     }
 }
 

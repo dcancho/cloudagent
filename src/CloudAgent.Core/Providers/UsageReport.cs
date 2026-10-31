@@ -5,10 +5,10 @@ using System.Linq;
 
 namespace CloudAgent.Core.Providers;
 
-/// <summary>What a model charges, in dollars per million tokens.</summary>
-public sealed record ModelPrice(decimal InputPerMillion, decimal OutputPerMillion);
+/// <summary>What a model charges, in dollars per million tokens; input read from the prompt cache may be cheaper.</summary>
+public sealed record ModelPrice(decimal InputPerMillion, decimal OutputPerMillion, decimal? CachedInputPerMillion = null);
 
-/// <summary>Prices written as <c>model=input/output</c> pairs separated by <c>;</c>.</summary>
+/// <summary>Prices written as <c>model=input/output</c> or <c>model=input/output/cachedInput</c>, separated by <c>;</c>.</summary>
 public static class ModelPrices
 {
     /// <summary>Parse the pairs, matching model names without regard to case. Malformed pairs are skipped.</summary>
@@ -20,11 +20,15 @@ public static class ModelPrices
             var halves = pair.Split('=', 2, StringSplitOptions.TrimEntries);
             var rates = halves.Length == 2 ? halves[1].Split('/', StringSplitOptions.TrimEntries) : [];
             if (halves[0].Length > 0
-                && rates.Length == 2
+                && rates.Length is 2 or 3
                 && decimal.TryParse(rates[0], NumberStyles.Number, CultureInfo.InvariantCulture, out var input)
                 && decimal.TryParse(rates[1], NumberStyles.Number, CultureInfo.InvariantCulture, out var output))
             {
-                prices[halves[0]] = new ModelPrice(input, output);
+                decimal? cached = null;
+                if (rates.Length == 3 && decimal.TryParse(rates[2], NumberStyles.Number, CultureInfo.InvariantCulture, out var cachedRate))
+                    cached = cachedRate;
+                if (rates.Length == 2 || cached is not null)
+                    prices[halves[0]] = new ModelPrice(input, output, cached);
             }
         }
         return prices;
@@ -34,7 +38,7 @@ public static class ModelPrices
 /// <summary>What a set of calls used.</summary>
 /// <param name="Cost">Dollars, counting only calls whose model has a price.</param>
 /// <param name="Unpriced">Some calls were on a model with no price, so <paramref name="Cost"/> is a floor.</param>
-public sealed record UsageTotals(int Calls, int Failed, long InputTokens, long OutputTokens, decimal Cost, bool Unpriced)
+public sealed record UsageTotals(int Calls, int Failed, long InputTokens, long OutputTokens, decimal Cost, bool Unpriced, long CachedTokens = 0)
 {
     public static readonly UsageTotals None = new(0, 0, 0, 0, 0m, false);
 
@@ -129,6 +133,7 @@ public sealed class UsageReport
         {
             var input = record.InputTokens ?? 0;
             var output = record.OutputTokens ?? 0;
+            var cachedTokens = Math.Min(record.CacheReadTokens ?? 0, input);
             var priced = prices.TryGetValue(record.Model, out var price);
             totals = totals with
             {
@@ -136,11 +141,18 @@ public sealed class UsageReport
                 Failed = totals.Failed + (record.Failed ? 1 : 0),
                 InputTokens = totals.InputTokens + input,
                 OutputTokens = totals.OutputTokens + output,
-                Cost = totals.Cost + (priced ? (input * price!.InputPerMillion + output * price.OutputPerMillion) / 1_000_000m : 0m),
+                Cost = totals.Cost + (priced ? PriceOf(price!, input, output, cachedTokens) : 0m),
                 Unpriced = totals.Unpriced || !priced,
+                CachedTokens = totals.CachedTokens + cachedTokens,
             };
         }
         return totals;
+    }
+
+    private static decimal PriceOf(ModelPrice price, long input, long output, long cached)
+    {
+        var cachedRate = price.CachedInputPerMillion ?? price.InputPerMillion;
+        return ((input - cached) * price.InputPerMillion + cached * cachedRate + output * price.OutputPerMillion) / 1_000_000m;
     }
 }
 

@@ -61,13 +61,11 @@ public sealed class AgentOptions
     public int MaxToolPoints { get; init; } = 30;
 
     /// <summary>
-    /// How many of the latest user turns keep their tool results whole; the results of earlier turns are
-    /// cut to <see cref="AgedToolResultChars"/> once a turn ends. 0 disables aging.
+    /// Characters of a tool result that go into the context. A longer result is kept whole in the workspace
+    /// and the context gets its start and an id the agent can read the rest with (see <see cref="Tools.Results.ReadResultTool"/>).
+    /// 0 keeps every result inline up to <see cref="MaxToolResultChars"/>.
     /// </summary>
-    public int KeepToolResultTurns { get; init; } = 2;
-
-    /// <summary>Characters an aged tool result keeps.</summary>
-    public int AgedToolResultChars { get; init; } = 500;
+    public int MaxInlineResultChars { get; init; } = 3000;
 
     /// <summary>
     /// The token budget this agent spends from, if any. Once it is spent, a turn in progress ends in
