@@ -26,6 +26,7 @@ public sealed class ConversationRouter : IDisposable
     private readonly Func<InboundMessage, AgentConversation> _sessionFactory;
     private readonly Func<InboundMessage, bool>? _authorize;
     private readonly Func<InboundMessage, string?> _speakerOf;
+    private readonly ParticipationGate? _participation;
     private readonly TurnTaker _turns;
     private CancellationToken _runToken;
 
@@ -38,17 +39,22 @@ public sealed class ConversationRouter : IDisposable
     /// <param name="turnTaking">End-of-turn detection settings; defaults apply when null.</param>
     /// <param name="speakerOf">Names the sender of a message, such as the person it resolves to, so
     /// a group's messages can be attributed. Senders it returns null for go by their display name.</param>
+    /// <param name="participation">When set, the agent answers in a group only when addressed or already
+    /// in conversation with the sender; other messages are kept as context. Without it every group
+    /// message gets a turn.</param>
     public ConversationRouter(
         IEnumerable<ISurface> surfaces,
         Func<InboundMessage, AgentConversation> sessionFactory,
         Func<InboundMessage, bool>? authorize = null,
         TurnTakingOptions? turnTaking = null,
-        Func<InboundMessage, string?>? speakerOf = null)
+        Func<InboundMessage, string?>? speakerOf = null,
+        ParticipationGate? participation = null)
     {
         _surfaces = surfaces.ToDictionary(s => s.Name);
         _sessionFactory = sessionFactory;
         _authorize = authorize;
         _speakerOf = speakerOf ?? (_ => null);
+        _participation = participation;
         _turns = new TurnTaker(DeliverAsync, turnTaking);
         _turns.DeliveryFailed += ex => Console.Error.WriteLine($"[router] could not deliver a turn: {ex.Message}");
     }
@@ -117,7 +123,9 @@ public sealed class ConversationRouter : IDisposable
             return;
         }
 
-        _turns.Add(message);
+        var admitted = _participation is null ? message : _participation.Admit(message);
+        if (admitted is not null)
+            _turns.Add(admitted);
     }
 
     private async Task DeliverAsync(Burst burst)
@@ -142,6 +150,7 @@ public sealed class ConversationRouter : IDisposable
         {
             session.StopTyping();
             _turns.MarkAnswered(surface.Name, conversationId);
+            _participation?.Answered(surface.Name, conversationId);
             _ = SendSafelyAsync(surface, new OutboundMessage(conversationId, text), _runToken);
         };
 

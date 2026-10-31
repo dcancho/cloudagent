@@ -39,6 +39,7 @@ public sealed class TelegramSurface : ITypingIndicator
         Func<InboundMessage, CancellationToken, Task> onMessage, CancellationToken cancellationToken)
     {
         long offset = 0;
+        var (botId, botUsername) = await ReadBotAsync(cancellationToken).ConfigureAwait(false);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -85,10 +86,47 @@ public sealed class TelegramSurface : ITypingIndicator
 
                     await onMessage(
                         new InboundMessage("telegram", conversationId, kind, senderId, senderName,
-                            textEl.GetString() ?? string.Empty, DateTimeOffset.UtcNow),
+                            textEl.GetString() ?? string.Empty, DateTimeOffset.UtcNow,
+                            IsAddressed(msg, botId, botUsername)),
                         cancellationToken).ConfigureAwait(false);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether a message speaks to the bot: it mentions <c>@botUsername</c>, is a command aimed at it,
+    /// or replies to one of its messages. Unknown bot identity counts as addressed.
+    /// </summary>
+    public static bool IsAddressed(JsonElement message, long? botId, string? botUsername)
+    {
+        if (botId is null && botUsername is null)
+            return true;
+
+        if (botId is { } id && message.TryGetProperty("reply_to_message", out var reply)
+            && reply.TryGetProperty("from", out var from) && from.TryGetProperty("id", out var fromId)
+            && fromId.GetInt64() == id)
+            return true;
+
+        if (botUsername is null || !message.TryGetProperty("text", out var textEl))
+            return false;
+
+        var mention = "@" + botUsername;
+        return (textEl.GetString() ?? string.Empty).Contains(mention, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<(long? Id, string? Username)> ReadBotAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _http.GetAsync($"{_baseUrl}/getMe", cancellationToken).ConfigureAwait(false);
+            using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            var bot = payload.RootElement.GetProperty("result");
+            return (bot.GetProperty("id").GetInt64(), bot.TryGetProperty("username", out var u) ? u.GetString() : null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (null, null);
         }
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudAgent.Core.Surfaces;
@@ -107,8 +108,25 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator
                 message.Channel is IDMChannel ? ConversationKind.Direct : ConversationKind.Group,
                 message.Author.Id.ToString(),
                 message.Author.Username,
-                message.Content,
-                DateTimeOffset.UtcNow),
+                message.CleanContent,
+                DateTimeOffset.UtcNow,
+                IsAddressedToMe(message)),
             CancellationToken.None);
+    }
+
+    private bool IsAddressedToMe(SocketMessage message)
+    {
+        var me = _client.CurrentUser;
+        if (me is null)
+            return true;
+
+        if (message.MentionedUsers.Any(u => u.Id == me.Id))
+            return true;
+
+        if (message is SocketUserMessage { ReferencedMessage: { } referenced } && referenced.Author.Id == me.Id)
+            return true;
+
+        return message.Channel is SocketGuildChannel guildChannel
+            && guildChannel.Guild.CurrentUser.Roles.Any(role => message.MentionedRoles.Any(m => m.Id == role.Id) && !role.IsEveryone);
     }
 }

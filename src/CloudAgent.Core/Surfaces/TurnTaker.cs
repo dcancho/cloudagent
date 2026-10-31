@@ -15,12 +15,18 @@ public sealed record Burst(string Surface, string ConversationId, IReadOnlyList<
     /// <summary>
     /// The burst as the agent reads it when it must tell speakers apart: in a group every message
     /// is prefixed <c>name: </c>, using <paramref name="nameOf"/> when it knows the sender and the
-    /// sender's display name or id otherwise. A direct conversation reads as plain <see cref="Text"/>.
+    /// sender's display name or id otherwise. Messages the agent only overheard before this burst come
+    /// first, each marked <c>[overheard]</c>. A direct conversation reads as plain <see cref="Text"/>.
     /// </summary>
-    public string TextAttributed(Func<InboundMessage, string?> nameOf) =>
-        string.Join('\n', Messages.Select(m => m.Kind == ConversationKind.Group
-            ? $"{nameOf(m) ?? (string.IsNullOrWhiteSpace(m.SenderDisplay) ? m.SenderId : m.SenderDisplay)}: {m.Text}"
-            : m.Text));
+    public string TextAttributed(Func<InboundMessage, string?> nameOf)
+    {
+        string Line(InboundMessage m, string prefix) => m.Kind == ConversationKind.Group
+            ? $"{prefix}{nameOf(m) ?? (string.IsNullOrWhiteSpace(m.SenderDisplay) ? m.SenderId : m.SenderDisplay)}: {m.Text}"
+            : m.Text;
+
+        return string.Join('\n', Messages.SelectMany(m =>
+            (m.Overheard ?? []).Select(o => Line(o, "[overheard] ")).Append(Line(m, string.Empty))));
+    }
 }
 
 /// <summary>Knobs for end-of-turn detection.</summary>

@@ -105,6 +105,7 @@ To run it on a server, see [deploying to a VPS](docs/deploy.md).
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
+| `GROUP_ENGAGEMENT_SEC` | Seconds a person the agent is talking with in a group can keep going without mentioning it again; `0` needs a mention or reply every time | 90 |
 | `CONTEXT_ROUTING` | Who chooses per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)): `decision` for the Foundry decision model, `generative` for the background chat model, `off` for the full pipeline every turn. Decisions go to `.agent/routing.jsonl` | `decision` when the two variables below are set, else `off` |
 | `LEARN_IDLE_MIN` | Minutes a conversation must be quiet before the sleep timer learns from it: what was said since the last pass (not tool output) is archived as episodes, and its durable facts are staged for review | 2 |
 | `TOKEN_BUDGET` | Tokens, input and output together, the workspace's agents may spend. Once spent, a turn in progress ends in a reply without more tools, later messages get a fixed reply without calling the model, and consolidation stops. A 5% reserve allows the closing replies; past it every call is refused. Spending is kept in `.agent/usage.json` across restarts | no limit |

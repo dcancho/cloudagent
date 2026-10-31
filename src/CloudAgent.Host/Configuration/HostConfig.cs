@@ -46,6 +46,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="CodeCommands">Programs a coding agent may run in them (<c>CODE_COMMANDS</c>, comma separated).</param>
 /// <param name="ModelPrices">What each model charges (<c>MODEL_PRICES</c>), as <c>model=input/output</c> dollars per
 /// million tokens separated by <c>;</c>. Only the admin usage report reads it.</param>
+/// <param name="GroupEngagementSeconds">How long a person the agent is talking with in a group can keep talking to
+/// it without mentioning it again (<c>GROUP_ENGAGEMENT_SEC</c>); 0 requires a mention or reply every time.</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -69,7 +71,8 @@ public sealed record HostConfig(
     IReadOnlyList<string> CodeCommands,
     long? TokenBudget,
     int LearnIdleMinutes,
-    string? ModelPrices = null)
+    string? ModelPrices = null,
+    int GroupEngagementSeconds = HostConfig.DefaultGroupEngagementSeconds)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -77,6 +80,7 @@ public sealed record HostConfig(
     public const int DefaultSleepIntervalMinutes = 30;
     public const int DefaultWebchatPort = 5080;
     public const int DefaultLearnIdleMinutes = 2;
+    public const int DefaultGroupEngagementSeconds = 90;
 
     /// <summary>Resolve the full host configuration from environment variables and defaults.</summary>
     public static HostConfig FromEnvironment()
@@ -135,7 +139,8 @@ public sealed record HostConfig(
                 : DefaultCodeCommands,
             long.TryParse(Environment.GetEnvironmentVariable("TOKEN_BUDGET"), out var tokens) && tokens > 0 ? tokens : null,
             int.TryParse(Environment.GetEnvironmentVariable("LEARN_IDLE_MIN"), out var idle) && idle >= 0 ? idle : DefaultLearnIdleMinutes,
-            Environment.GetEnvironmentVariable("MODEL_PRICES"));
+            Environment.GetEnvironmentVariable("MODEL_PRICES"),
+            int.TryParse(Environment.GetEnvironmentVariable("GROUP_ENGAGEMENT_SEC"), out var engagement) && engagement >= 0 ? engagement : DefaultGroupEngagementSeconds);
     }
 }
 

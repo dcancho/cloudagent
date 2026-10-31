@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CloudAgent.Core.Surfaces;
 
@@ -13,6 +14,10 @@ namespace CloudAgent.Core.Surfaces;
 /// <param name="SenderDisplay">A human-readable sender name, if known.</param>
 /// <param name="Text">The message text.</param>
 /// <param name="ReceivedAt">When it arrived.</param>
+/// <param name="Addressed">Whether the message speaks to the agent (a mention, a reply to it). Only
+/// matters in a group; a surface that cannot tell leaves it true.</param>
+/// <param name="Overheard">Earlier unaddressed messages from the same group, attached when a message
+/// that does address the agent arrives so it can read them as context.</param>
 public sealed record InboundMessage(
     string Surface,
     string ConversationId,
@@ -20,7 +25,9 @@ public sealed record InboundMessage(
     string SenderId,
     string? SenderDisplay,
     string Text,
-    DateTimeOffset ReceivedAt);
+    DateTimeOffset ReceivedAt,
+    bool Addressed = true,
+    IReadOnlyList<InboundMessage>? Overheard = null);
 
 /// <summary>Who a conversation is with: decided by the channel, not by how many people are in it now.</summary>
 public enum ConversationKind
