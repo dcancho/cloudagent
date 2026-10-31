@@ -31,6 +31,7 @@ Copy-Item (Join-Path $root "docs\consolidation-policy.md") $docs
 Invoke-Native scp @("-r", $output, "${target}:$release")
 
 $remote = @(
+    "chmod -R u=rwX,go=rX $release",
     "chmod +x $release/CloudAgent.Host",
     "ln -sfn $release /opt/cloudagent/current",
     "sudo systemctl restart cloudagent",
