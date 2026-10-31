@@ -50,6 +50,7 @@ public sealed class StateSnapshotter(ILlmProvider provider, string? model = null
                     $"Conversation excerpt being forgotten:\n{transcript}"),
             ],
             Model = model,
+            Purpose = LlmPurpose.Snapshot,
             MaxTokens = 1000,
             Temperature = 0.1,
         };

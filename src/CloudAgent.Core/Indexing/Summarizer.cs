@@ -24,6 +24,7 @@ public sealed class Summarizer(ILlmProvider provider, string? model = null)
             System = "You are a precise summarizer. Produce a compact, faithful summary. No preamble.",
             Messages = [Message.User($"{instruction}\n\n---\n{trimmed}")],
             Model = model,
+            Purpose = LlmPurpose.Summary,
             MaxTokens = 512,
             Temperature = 0.2,
         };

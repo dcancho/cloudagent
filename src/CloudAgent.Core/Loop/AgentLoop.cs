@@ -95,12 +95,16 @@ public sealed class AgentLoop
     /// <summary>Raised when the context router decided how much of the pipeline this turn runs.</summary>
     public event Action<Attention.RoutingDecision>? Routed;
 
+    /// <summary>The id this agent's model calls are accounted to, when it has one.</summary>
+    public string? AgentId { get; init; }
+
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
     /// <see cref="AgentOptions.MaxIterations"/> is reached.
     /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
+        using var usage = Providers.UsageScope.Begin(AgentId);
         var iteration = 0;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -233,6 +237,7 @@ public sealed class AgentLoop
                 EphemeralContext = ephemeral,
                 Messages = _context.Messages,
                 Model = _options.Model,
+                Purpose = LlmPurpose.Turn,
                 MaxTokens = _options.MaxTokens,
                 Temperature = _options.Temperature,
                 Tools = toolDefinitions,

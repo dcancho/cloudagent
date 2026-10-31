@@ -61,6 +61,7 @@ public sealed class UtilityJudge(ILlmProvider provider, string? model = null)
                     Clip(assistantText, MaxTextChars))),
             ],
             Model = model,
+            Purpose = LlmPurpose.Judge,
             MaxTokens = 100,
             Temperature = 0,
         };

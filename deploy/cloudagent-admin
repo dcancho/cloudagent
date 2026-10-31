@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec sudo -u cloudagent env HOME=/var/lib/cloudagent /opt/cloudagent/current/CloudAgent.Host admin "$@"

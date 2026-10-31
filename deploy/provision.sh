@@ -37,6 +37,7 @@ install -d -o root -g cloudagent -m 0750 /etc/cloudagent
 [ -f /var/lib/cloudagent/people.json ] || install -o cloudagent -g cloudagent -m 0640 "$here/people.example.json" /var/lib/cloudagent/people.json
 
 install -o root -g root -m 0755 "$here/backup.sh" /usr/local/sbin/cloudagent-backup
+install -o root -g root -m 0755 "$here/cloudagent-admin" /usr/local/bin/cloudagent-admin
 install -o root -g root -m 0644 "$here/cloudagent.service" "$here/cloudagent-backup.service" "$here/cloudagent-backup.timer" /etc/systemd/system/
 
 sudoers=/etc/sudoers.d/cloudagent-deploy

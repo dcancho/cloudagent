@@ -23,7 +23,11 @@ using CloudAgent.Core.Todos;
 using CloudAgent.Core.Workspaces;
 using CloudAgent.Core.Attention;
 using CloudAgent.Host;
+using CloudAgent.Host.Admin;
 using CloudAgent.Host.Configuration;
+
+if (args is ["admin", ..var adminArgs])
+    Environment.Exit(AdminCommands.Run(adminArgs, Console.Out, Console.Error));
 
 // ---- Wiring -----------------------------------------------------------------
 // All environment resolution lives in HostConfig; the composition root below only constructs.
@@ -44,7 +48,8 @@ Console.SetError(new TeeTextWriter(Console.Error, logFile));
 var providers = new ProviderFactory(config.Llm);
 var rawProvider = providers.CreateLlm();
 var isEcho = rawProvider is EchoLlmProvider;
-var meter = new MeteredLlmProvider(rawProvider);
+var usageLedger = new UsageLedger(Path.Combine(config.WorkspaceRoot, ".agent", "usage.jsonl"));
+var meter = new MeteredLlmProvider(isEcho ? rawProvider : new LedgeredLlmProvider(rawProvider, usageLedger));
 meter.Completed += (m, r, elapsed) =>
 {
     var total = meter.Usage.First(u => u.Model == m);
@@ -418,7 +423,7 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}", child.Id);
     var loop = new AgentLoop(
         provider, profile.ChildOptions, input, new AgentContext(), childTools, comp, attention, utility,
-        profile.Routed ? BuildRouter(mem) : null);
+        profile.Routed ? BuildRouter(mem) : null) { AgentId = child.Id };
     AttachLogging(loop, $"child {child.Role}");
     new TranscriptRecorder(transcriptDirectory, child.Id).Attach(loop);
     return loop;
@@ -456,6 +461,26 @@ string? PersonalPathFor(InboundMessage first)
     return Path.Combine(config.PersonalMemoryDirectory, $"{person.Id}.db");
 }
 
+AgentOptions InGroup(AgentOptions basis) => new()
+{
+    SystemPrompt = basis.SystemPrompt +
+        " You are in a group conversation with several people; each line starts with who wrote it. You are only " +
+        "sent messages that address you or come from someone you are already talking with. Lines marked [overheard] " +
+        "are earlier messages in the group that were not addressed to you: use them as context, do not answer them " +
+        "or mention that you saw them unless it helps. Answer the person who addressed you, by name when several " +
+        "people are talking.",
+    Model = basis.Model,
+    IterationDelay = basis.IterationDelay,
+    Budget = basis.Budget,
+    WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
+    MaxTokens = basis.MaxTokens,
+    Temperature = basis.Temperature,
+    MaxIterations = basis.MaxIterations,
+    KeepRecentMessages = basis.KeepRecentMessages,
+    MaxToolResultChars = basis.MaxToolResultChars,
+    MaxToolSteps = basis.MaxToolSteps,
+};
+
 AgentConversation CreateConversation(InboundMessage first)
 {
     var (surface, conversationId, kind) = (first.Surface, first.ConversationId, first.Kind);
@@ -484,13 +509,14 @@ AgentConversation CreateConversation(InboundMessage first)
         .Register(new StopAgentTool(bus));
     RegisterColdRecovery(agentTools, mem, handle.Id);
 
-    var attention = BuildAttention(profile.Options.SystemPrompt, retriever, handle.Id, handle.Id);
+    var agentOptions = kind == ConversationKind.Group ? InGroup(profile.Options) : profile.Options;
+    var attention = BuildAttention(agentOptions.SystemPrompt, retriever, handle.Id, handle.Id);
     var context = contexts.Load(handle.Id);
     if (context is not null)
         Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
     var loop = new AgentLoop(
-        provider, profile.Options, input, context ?? new AgentContext(), agentTools, comp, attention, utility,
-        profile.Routed ? BuildRouter(mem) : null);
+        provider, agentOptions, input, context ?? new AgentContext(), agentTools, comp, attention, utility,
+        profile.Routed ? BuildRouter(mem) : null) { AgentId = handle.Id };
     if (!isEcho)
     {
         var learner = new SessionLearner(
@@ -584,7 +610,8 @@ var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
 using var router = new ConversationRouter(
-    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id);
+    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id,
+    new ParticipationGate(new ParticipationOptions { Engagement = TimeSpan.FromSeconds(config.GroupEngagementSeconds) }));
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
@@ -615,6 +642,7 @@ if (!isEcho && sleepMinutes > 0)
                     continue;
                 try
                 {
+                    using var usage = UsageScope.Begin(id);
                     var staged = await learner.LearnAsync(cts.Token);
                     Console.WriteLine($"  🎓 [{id}] learned from a quiet conversation; staged: {staged ?? "nothing"}");
                 }
@@ -628,13 +656,14 @@ if (!isEcho && sleepMinutes > 0)
                 }
             }
 
-            foreach (var job in sleepJobs.Values)
+            foreach (var (id, job) in sleepJobs)
             {
                 if (cts.Token.IsCancellationRequested)
                     break;
 
                 try
                 {
+                    using var usage = UsageScope.Begin(id);
                     var result = await job.RunAsync(cts.Token);
                     if (result.Demoted > 0 || result.Promoted > 0 || result.StagedProposalId is not null)
                         Console.WriteLine(
@@ -680,6 +709,7 @@ Console.WriteLine($"Agent:     remember, search_memory, restore_memory + spawn_a
 Console.WriteLine($"Surfaces:  {string.Join(", ", surfaces.Select(s => s.Name))}");
 Console.WriteLine($"Records:   transcripts in {transcriptDirectory}, host log in {logDirectory}");
 Console.WriteLine($"Routing:   {decisionModel?.Name ?? "off (full pipeline every turn)"}");
+Console.WriteLine($"Groups:    answers when mentioned or replied to, then for {config.GroupEngagementSeconds}s with that person; other messages are kept as context");
 Console.WriteLine($"Turns:     {(config.TurnTakingEnabled ? $"bursts (wait {turnTaking.DefaultWait.TotalSeconds:0.#}s until measured; cli immediate)" : "one message per turn")}");
 
 await router.RunAsync(cts.Token);

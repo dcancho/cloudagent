@@ -87,21 +87,25 @@ Finding ids:
 - Discord: in Discord, User Settings, Advanced, turn on Developer Mode. Right-click a user, Copy User
   ID. The account is `discord:<id>`.
 - Telegram: have the person send any message to the bot. It answers that they are not authorized, and
-  the host log records the refusal with their id:
-
-  ```bash
-  sudo journalctl -u cloudagent | grep refused
-  ```
-
-  The account is `telegram:<id>`. The same line shows Discord ids of people not yet listed.
+  the host log records the refusal with their id. `cloudagent-admin people refused` lists them; the
+  account is `telegram:<id>`. It also shows Discord ids of people not yet listed.
 - Web chat: the tailnet login, for example `webchat:diego@example.com`.
 
-Edit the file, then restart the service (`sudo systemctl restart cloudagent`) since it is read at
-startup:
+Edit the file with the admin commands, then restart the service (`sudo systemctl restart
+cloudagent`) since it is read at startup:
 
 ```bash
-sudo -u cloudagent nano /var/lib/cloudagent/people.json
+cloudagent-admin people add jose
+cloudagent-admin people link jose discord:485305305144754176
+cloudagent-admin people list
 ```
+
+`provision.sh` installs `cloudagent-admin`. On a server provisioned before it existed, copy
+`deploy/cloudagent-admin` to `/usr/local/bin` with mode 0755.
+
+`cloudagent-admin status` shows the provider, surfaces, people, budget, and what the models cost
+today. `cloudagent-admin usage --since 7d` breaks the model calls down by purpose, model, and
+agent; set `MODEL_PRICES` in `/etc/cloudagent/cloudagent.env` to get dollars.
 
 ## 6. First deploy
 
