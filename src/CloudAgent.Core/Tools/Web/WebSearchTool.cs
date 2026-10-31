@@ -9,6 +9,7 @@ namespace CloudAgent.Core.Tools.Web;
 public sealed class WebSearchTool(IWebSearchProvider provider) : ITool
 {
     private const int DefaultMaxResults = 5;
+    private const int SnippetChars = 320;
 
     public string Name => "web_search";
 
@@ -40,9 +41,15 @@ public sealed class WebSearchTool(IWebSearchProvider provider) : ITool
             sb.AppendLine($"{i++}. {hit.Title}");
             sb.AppendLine($"   {hit.Url}");
             if (!string.IsNullOrWhiteSpace(hit.Snippet))
-                sb.AppendLine($"   {hit.Snippet}");
+                sb.AppendLine($"   {Clip(hit.Snippet)}");
         }
 
         return ToolResult.Ok(sb.ToString().TrimEnd());
+    }
+
+    private static string Clip(string snippet)
+    {
+        var flat = string.Join(' ', snippet.Split((char[]?)null, System.StringSplitOptions.RemoveEmptyEntries));
+        return flat.Length <= SnippetChars ? flat : flat[..SnippetChars] + "...";
     }
 }

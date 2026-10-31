@@ -184,6 +184,8 @@ public sealed class AgentLoop
                 // 3.5. Close the feedback loop: did the injected memories influence the reply?
                 await JudgeUtilityAsync(iteration, cancellationToken).ConfigureAwait(false);
 
+                _context.AgeToolResults(_options.KeepToolResultTurns, _options.AgedToolResultChars);
+
                 // 4. Keep working memory under budget; evicted turns become episodic memory.
                 await CompactAsync(cancellationToken).ConfigureAwait(false);
 
@@ -212,18 +214,20 @@ public sealed class AgentLoop
         var allDefinitions = _tools?.GetDefinitions() ?? [];
         var offered = _decision is null ? null : new HashSet<string>(_decision.Categories);
 
+        var points = 0;
         for (var hop = 0; ; hop++)
         {
             var toolDefinitions = SelectTools(allDefinitions, offered);
             var outOfBudget = _options.Budget?.Exhausted == true;
-            var lastStep = hop >= _options.MaxToolSteps || outOfBudget;
+            var outOfPoints = _options.MaxToolPoints > 0 && points >= _options.MaxToolPoints;
+            var lastStep = hop >= _options.MaxToolSteps || outOfPoints || outOfBudget;
             string? limit = null;
             if (lastStep)
             {
                 var reason = outOfBudget
                     ? "This workspace has used its token budget, so you cannot call tools now and will not get another turn until it is raised."
-                    : $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now.";
-                limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
+                    : $"You have used this turn's tool budget ({points} points over {hop} steps), so you cannot call tools now.";
+                limit = reason + " Reply to the person in their language: what you found or did, what is left, and what you need from them to continue.";
             }
             var fit = InputCap.Fit(
                 new LlmRequest
@@ -235,7 +239,7 @@ public sealed class AgentLoop
                     Purpose = LlmPurpose.Turn,
                     MaxTokens = _options.MaxTokens,
                     Temperature = _options.Temperature,
-                    Tools = toolDefinitions,
+                    Tools = lastStep ? [] : toolDefinitions,
                 },
                 _options.MaxInputTokens,
                 limit,
@@ -271,7 +275,7 @@ public sealed class AgentLoop
                     string.IsNullOrWhiteSpace(response.Text)
                         ? outOfBudget
                             ? "I've used this workspace's token budget before finishing, so I'm stopping here."
-                            : $"I used all {_options.MaxToolSteps} tool steps I have for one turn before finishing. Tell me to continue and I will pick up from here."
+                            : $"I used this turn's tool budget before finishing. Tell me to continue and I will pick up from here."
                         : response.Text,
                     response.StopReason, response.InputTokens, response.OutputTokens)
                 {
@@ -292,6 +296,7 @@ public sealed class AgentLoop
             foreach (var call in response.ToolCalls)
             {
                 _turnTools.Add(call.Name);
+                points += ToolWeights.Of(call.Name);
                 var result = call.Name == RequestToolsName && offered is not null
                     ? RequestTools(call, offered)
                     : await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);

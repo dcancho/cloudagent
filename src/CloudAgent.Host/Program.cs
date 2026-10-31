@@ -165,12 +165,14 @@ var options = new AgentOptions
         "agents (spawn_agent / delegate_task) and answer their questions. Never work out numbers in your " +
         "head: compute every figure you report with the calculate tool. Answer simple questions yourself with the tools you have; " +
         "delegate only work that is long or independent. When a child agent reports on something you have already answered, " +
-        "do not repeat the answer. Be concise.",
+        "do not repeat the answer. When you need several independent tool calls, such as a few searches or calculations, " +
+        "request them together in one step instead of one per step. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
     Budget = budget,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
     MaxInputTokens = config.MaxInputTokens,
+    MaxToolPoints = config.MaxToolPoints,
 };
 
 var childOptions = new AgentOptions
@@ -184,6 +186,7 @@ var childOptions = new AgentOptions
     Budget = budget,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
     MaxInputTokens = config.MaxInputTokens,
+    MaxToolPoints = config.MaxToolPoints,
 };
 
 // Attention (eje 5) knobs — recall shape and budget — live with the module, not AgentOptions.
@@ -241,6 +244,7 @@ AgentProfile BuildCodeProfile(string name, string root)
         WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
         MaxInputTokens = basis.MaxInputTokens,
         MaxToolSteps = 40,
+        MaxToolPoints = 80,
     };
     return new AgentProfile(
         name, Coding(options), Coding(childOptions), repoWorkspace, tools, Path.Combine(state, "project.db"), Routed: false);
@@ -496,6 +500,9 @@ AgentOptions WithPrompt(AgentOptions basis, string systemPrompt) => new()
     KeepRecentMessages = basis.KeepRecentMessages,
     MaxToolResultChars = basis.MaxToolResultChars,
     MaxToolSteps = basis.MaxToolSteps,
+    MaxToolPoints = basis.MaxToolPoints,
+    KeepToolResultTurns = basis.KeepToolResultTurns,
+    AgedToolResultChars = basis.AgedToolResultChars,
 };
 
 AgentConversation CreateConversation(InboundMessage first)

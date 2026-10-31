@@ -49,10 +49,25 @@ public sealed class AgentOptions
     public int MaxToolResultChars { get; init; } = 16_000;
 
     /// <summary>
-    /// Rounds of tool calls one turn may take. When they run out, the agent answers with what it
+    /// Rounds of tool calls one turn may take, whatever they cost. When they run out, the agent answers with what it
     /// has instead of calling more tools.
     /// </summary>
-    public int MaxToolSteps { get; init; } = 10;
+    public int MaxToolSteps { get; init; } = 16;
+
+    /// <summary>
+    /// Points the tool calls of one turn may spend, each tool costing what <see cref="Tools.ToolWeights"/> says.
+    /// When they run out, the agent answers with what it has. 0 means no limit beyond <see cref="MaxToolSteps"/>.
+    /// </summary>
+    public int MaxToolPoints { get; init; } = 30;
+
+    /// <summary>
+    /// How many of the latest user turns keep their tool results whole; the results of earlier turns are
+    /// cut to <see cref="AgedToolResultChars"/> once a turn ends. 0 disables aging.
+    /// </summary>
+    public int KeepToolResultTurns { get; init; } = 2;
+
+    /// <summary>Characters an aged tool result keeps.</summary>
+    public int AgedToolResultChars { get; init; } = 500;
 
     /// <summary>
     /// The token budget this agent spends from, if any. Once it is spent, a turn in progress ends in
