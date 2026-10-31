@@ -430,18 +430,18 @@ Person? PersonOf(InboundMessage message) => message.Surface == "cli"
     ? people.Find(message.SenderId)
     : people.Resolve(message.Surface, message.SenderId);
 
-bool MayTalk(InboundMessage message) => message.Surface switch
+bool MayTalk(string surface, string senderId) => surface switch
 {
     "cli" => true,
-    "webchat" when message.SenderId == PeopleRegistry.AnonymousSender => config.WebchatAnonymous,
-    _ => PersonOf(message) is not null,
+    "webchat" when senderId == PeopleRegistry.AnonymousSender => config.WebchatAnonymous,
+    _ => people.Resolve(surface, senderId) is not null,
 };
 
 string? PersonalPathFor(InboundMessage first)
 {
     if (first.Kind != ConversationKind.Direct || PersonOf(first) is not { } person)
         return null;
-    return Path.Combine(config.PersonalMemoryDirectory, $"{TranscriptRecorder.ToFileName(person.Id)}.db");
+    return Path.Combine(config.PersonalMemoryDirectory, $"{person.Id}.db");
 }
 
 AgentConversation CreateConversation(InboundMessage first)
@@ -463,8 +463,8 @@ AgentConversation CreateConversation(InboundMessage first)
         agentTools.Register(tool);
     agentTools
         .Register(new RememberTool(mem))
-        .Register(new ListConsolidationsTool(pendingConsolidations))
-        .Register(new ApplyConsolidationTool(pendingConsolidations, mem, consolidationLedger))
+        .Register(new ListConsolidationsTool(pendingConsolidations, handle.Id))
+        .Register(new ApplyConsolidationTool(pendingConsolidations, handle.Id, mem, consolidationLedger))
         .Register(new SpawnAgentTool(orchestrator, handle))
         .Register(new DelegateTaskTool(orchestrator, handle))
         .Register(new ListAgentsTool(bus, handle))
@@ -560,7 +560,8 @@ if (config.WebchatEnabled)
         new WebchatWorkspaces(
             codeProfiles.Keys.Order().ToList(),
             conversationId => conversationWorkspaces.Of($"webchat:{conversationId}"),
-            (conversationId, name) => conversationWorkspaces.Bind($"webchat:{conversationId}", name)));
+            (conversationId, name) => conversationWorkspaces.Bind($"webchat:{conversationId}", name)),
+        senderId => MayTalk("webchat", senderId));
     surfaces.Add(webchat);
     Console.WriteLine($"Web chat:  {webchat.Url}");
 }
@@ -569,7 +570,7 @@ var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
 using var router = new ConversationRouter(
-    surfaces, CreateConversation, MayTalk, turnTaking, message => PersonOf(message)?.Id);
+    surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId), turnTaking, message => PersonOf(message)?.Id);
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 

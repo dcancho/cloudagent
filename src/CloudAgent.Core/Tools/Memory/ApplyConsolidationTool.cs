@@ -12,8 +12,13 @@ namespace CloudAgent.Core.Tools.Memory;
 /// staged-write design: distilled knowledge only enters long-term memory through here, and
 /// the action lands in the tamper-evident ledger either way.
 /// </summary>
+/// <param name="pending">The staged proposals.</param>
+/// <param name="agentId">The conversation using the tool; it can act only on the proposals learned from it.</param>
+/// <param name="memory">The conversation's memory, where applied facts are written.</param>
+/// <param name="ledger">The ledger every apply, discard and rejection is recorded in.</param>
 public sealed class ApplyConsolidationTool(
     PendingConsolidations pending,
+    string agentId,
     MemoryManager memory,
     ConsolidationLedger ledger) : ITool
 {
@@ -36,7 +41,7 @@ public sealed class ApplyConsolidationTool(
     {
         var id = input.GetString("id");
         var proposal = pending.Get(id);
-        if (proposal is null)
+        if (proposal is null || proposal.AgentId != agentId)
             return ToolResult.Fail($"No pending proposal '{id}'.");
 
         if (input.GetBool("discard"))

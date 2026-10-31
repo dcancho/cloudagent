@@ -115,7 +115,8 @@ The people file lists everyone the agent talks to, all on equal footing, with th
 are theirs as `surface:senderId`. It is the allowlist for Telegram, Discord and an identified web
 chat: a message from any other account is refused in a direct conversation and ignored in a group.
 In a group, every message reaches the agent prefixed with who wrote it: the person's id, or the sender's display name when they are not in the file.
-The file is edited by whoever operates the host; the agent never links accounts itself.
+The file is edited by whoever operates the host; the agent never links accounts itself. Person ids
+use lowercase letters, digits, `-` and `_`, since they name each person's memory file.
 
 ```json
 {
@@ -126,7 +127,12 @@ The file is edited by whoever operates the host; the agent never links accounts 
 
 Behind Tailscale Serve, the web chat speaks as the tailnet login. The console always gets in, since
 whoever uses it already has the machine, and speaks as nobody unless started with `--as <person>`.
-A web chat without Tailscale identity is let in unidentified unless `WEBCHAT_ANONYMOUS=0`.
+A web chat without Tailscale identity is let in unidentified unless `WEBCHAT_ANONYMOUS=0`. A refused
+web chat cannot connect at all, and each web chat conversation belongs to whoever opened it: nobody
+else can list, open or delete it. Each console identity keeps its own conversation.
+
+Consolidation proposals stay with the conversation they were learned from: only that conversation
+can list, apply or discard them.
 
 Personal memory belongs to the person in a direct conversation, one database each in
 `PERSONAL_MEMORY_DIR`. Group conversations, and anyone unidentified, keep no personal memory.

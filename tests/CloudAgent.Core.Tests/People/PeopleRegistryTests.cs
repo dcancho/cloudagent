@@ -53,11 +53,22 @@ public sealed class PeopleRegistryTests : IDisposable
             """));
     }
 
-    [Fact]
-    public void The_anonymous_sender_is_not_a_person()
+    [Theory]
+    [InlineData(PeopleRegistry.AnonymousSender)]
+    [InlineData("Ana")]
+    [InlineData("ana:work")]
+    [InlineData("ana.work")]
+    [InlineData("-ana")]
+    [InlineData("")]
+    public void Ids_that_could_collide_as_file_names_are_rejected(string id)
     {
-        Assert.Throws<ArgumentException>(() => Load($$"""
-            { "{{PeopleRegistry.AnonymousSender}}": { "accounts": [] } }
-            """));
+        Assert.False(PeopleRegistry.IsValidId(id));
+        Assert.Throws<ArgumentException>(() => new PeopleRegistry([new Person(id, [])]));
     }
+
+    [Theory]
+    [InlineData("diego")]
+    [InlineData("ana_work")]
+    [InlineData("jose-2")]
+    public void Plain_ids_are_accepted(string id) => Assert.True(PeopleRegistry.IsValidId(id));
 }

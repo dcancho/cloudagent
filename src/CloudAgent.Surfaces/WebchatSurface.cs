@@ -28,7 +28,7 @@ namespace CloudAgent.Surfaces;
 /// never say hello keep receiving plain text. A hello may carry <c>"conversation"</c> to continue an
 /// earlier conversation; the server answers with <c>welcome</c> (the conversation id to keep) and, when
 /// there is one, <c>history</c> (the messages and tool activity so far). A <c>list</c> frame is answered with
-/// <c>conversations</c>: every web chat conversation, most recent first. A <c>delete</c> frame naming a
+/// <c>conversations</c>: every conversation the sender opened, most recent first. A <c>delete</c> frame naming a
 /// <c>conversation</c> deletes it and is answered with <c>conversations</c>. A hello that starts a new
 /// conversation may name a <c>workspace</c> for it to work in; <c>welcome</c> carries the conversation's
 /// workspace and the ones available, and each listed conversation carries its own. While the agent works,
@@ -37,15 +37,17 @@ namespace CloudAgent.Surfaces;
 /// </summary>
 /// <param name="port">Port to listen on, on localhost.</param>
 /// <param name="history">The messages and tool activity so far in a conversation, by conversation id.</param>
-/// <param name="conversations">Every web chat conversation, most recent first.</param>
+/// <param name="conversations">Every web chat conversation, most recent first; each sender sees only their own.</param>
 /// <param name="delete">Deletes a conversation by id.</param>
 /// <param name="workspaces">The workspaces a conversation can work in, and which one each uses.</param>
+/// <param name="admit">Whether a sender may connect at all; everyone may when null.</param>
 public sealed class WebchatSurface(
     int port = 5080,
     Func<string, IReadOnlyList<ConversationEntry>>? history = null,
     Func<IReadOnlyList<ConversationSummary>>? conversations = null,
     Func<string, Task<bool>>? delete = null,
-    WebchatWorkspaces? workspaces = null) : ITypingSource, ITypingIndicator, IActivityIndicator
+    WebchatWorkspaces? workspaces = null,
+    Func<string, bool>? admit = null) : ITypingSource, ITypingIndicator, IActivityIndicator
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(4);
 
@@ -78,6 +80,12 @@ public sealed class WebchatSurface(
             }
 
             var (senderId, senderName) = Sender(context.Request);
+            if (admit is not null && !admit(senderId))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
             var client = new Client(socket) { SenderId = senderId };
             string? conversationId = null;
@@ -203,10 +211,10 @@ public sealed class WebchatSurface(
                 {
                     client.Typed = true;
                     var requested = json["conversation"]?.GetValue<string>();
-                    if (requested is not null && IsValidId(requested))
+                    if (requested is not null && Owns(client, requested))
                         return (requested, true);
 
-                    var id = NewId();
+                    var id = ConversationOwnership.NewId(client.SenderId);
                     var workspace = json["workspace"]?.GetValue<string>();
                     if (workspaces is not null && workspace is not null && workspaces.Names.Contains(workspace))
                         workspaces.Bind(id, workspace);
@@ -218,7 +226,7 @@ public sealed class WebchatSurface(
             }
         }
 
-        return (NewId(), false);
+        return (ConversationOwnership.NewId(client.SenderId), false);
     }
 
     private async Task WelcomeAsync(Client client, string conversationId, CancellationToken cancellationToken)
@@ -246,7 +254,7 @@ public sealed class WebchatSurface(
 
     private Task SendConversationsAsync(Client client, CancellationToken cancellationToken)
     {
-        var items = new JsonArray((conversations?.Invoke() ?? [])
+        var items = new JsonArray((conversations?.Invoke() ?? []).Where(c => Owns(client, c.Id))
             .Select(c => (JsonNode)new JsonObject
             {
                 ["id"] = c.Id,
@@ -261,7 +269,7 @@ public sealed class WebchatSurface(
     private async Task DeleteAsync(Client client, string frame, CancellationToken cancellationToken)
     {
         var id = (JsonNode.Parse(frame) as JsonObject)?["conversation"]?.GetValue<string>();
-        if (delete is not null && id is not null && IsValidId(id))
+        if (delete is not null && id is not null && Owns(client, id))
         {
             try
             {
@@ -289,7 +297,8 @@ public sealed class WebchatSurface(
         }
     }
 
-    private static string NewId() => Guid.NewGuid().ToString("N")[..12];
+    private static bool Owns(Client client, string id) =>
+        IsValidId(id) && ConversationOwnership.Owns(client.SenderId, id);
 
     private static bool IsValidId(string id) =>
         id.Length is >= 8 and <= 32 && id.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9');

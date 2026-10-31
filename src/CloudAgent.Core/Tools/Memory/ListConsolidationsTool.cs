@@ -12,7 +12,9 @@ namespace CloudAgent.Core.Tools.Memory;
 /// the evidence — so a human (or a deliberate agent turn) can review before anything is
 /// written to long-term memory.
 /// </summary>
-public sealed class ListConsolidationsTool(PendingConsolidations pending) : ITool
+/// <param name="pending">The staged proposals.</param>
+/// <param name="agentId">The conversation using the tool; it sees only the proposals learned from it.</param>
+public sealed class ListConsolidationsTool(PendingConsolidations pending, string agentId) : ITool
 {
     public string Name => "list_consolidations";
 
@@ -24,8 +26,8 @@ public sealed class ListConsolidationsTool(PendingConsolidations pending) : IToo
 
     public Task<ToolResult> InvokeAsync(ToolInput input, CancellationToken cancellationToken = default)
     {
-        var proposals = pending.List();
-        if (proposals.Count == 0)
+        var proposals = pending.List().Where(p => p.AgentId == agentId).ToArray();
+        if (proposals.Length == 0)
             return Task.FromResult(ToolResult.Ok("No pending consolidation proposals."));
 
         var sb = new StringBuilder();

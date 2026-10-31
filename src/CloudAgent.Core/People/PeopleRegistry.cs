@@ -31,8 +31,9 @@ public sealed class PeopleRegistry
         _byAccount = new Dictionary<string, Person>(StringComparer.Ordinal);
         foreach (var person in People)
         {
-            if (person.Id == AnonymousSender)
-                throw new ArgumentException($"'{AnonymousSender}' is not a person id.", nameof(people));
+            if (!IsValidId(person.Id))
+                throw new ArgumentException(
+                    $"'{person.Id}' is not a valid person id: use lowercase letters, digits, '-' and '_', up to 32.", nameof(people));
             if (!_byId.TryAdd(person.Id, person))
                 throw new ArgumentException($"Person '{person.Id}' appears more than once.", nameof(people));
             foreach (var account in person.Accounts)
@@ -64,6 +65,16 @@ public sealed class PeopleRegistry
                 : []));
         return new PeopleRegistry(people);
     }
+
+    /// <summary>
+    /// Whether <paramref name="id"/> can name a person. Ids name files and conversations as they are,
+    /// so they are kept to characters that mean the same on every file system.
+    /// </summary>
+    public static bool IsValidId(string id) =>
+        id.Length is >= 1 and <= 32
+        && id != AnonymousSender
+        && (char.IsAsciiLetterLower(id[0]) || char.IsAsciiDigit(id[0]))
+        && id.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c is '-' or '_');
 
     /// <summary>The person with this id, or null when there is none.</summary>
     public Person? Find(string id) => _byId.GetValueOrDefault(id);

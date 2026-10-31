@@ -7,7 +7,8 @@ using CloudAgent.Core.Surfaces;
 namespace CloudAgent.Host;
 
 /// <summary>
-/// The console as a surface: stdin is one conversation ("cli"), replies print to stdout.
+/// The console as a surface: stdin is one conversation per identity ("cli", or "cli-diego" when
+/// started with --as diego), replies print to stdout.
 /// Typing "exit" or "quit" stops the whole host. This unifies the terminal with every other
 /// channel — the CLI is no longer special, just the surface you happen to be sitting at.
 /// </summary>
@@ -15,7 +16,6 @@ namespace CloudAgent.Host;
 /// <param name="personId">The person the console speaks as; null speaks as nobody in particular.</param>
 public sealed class CliSurface(CancellationTokenSource stopSignal, string? personId = null) : ISurface
 {
-    private const string ConversationId = "cli";
 
     public string Name => "cli";
 
@@ -49,7 +49,7 @@ public sealed class CliSurface(CancellationTokenSource stopSignal, string? perso
 
             await onMessage(
                 new InboundMessage(
-                    Name, ConversationId, ConversationKind.Direct,
+                    Name, personId is null ? Name : $"{Name}-{personId}", ConversationKind.Direct,
                     personId ?? PeopleRegistry.AnonymousSender, personId ?? "you", line, DateTimeOffset.Now),
                 cancellationToken).ConfigureAwait(false);
         }
