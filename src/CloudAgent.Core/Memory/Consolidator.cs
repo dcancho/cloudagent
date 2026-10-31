@@ -56,6 +56,8 @@ public sealed class Consolidator(
                 continue;
             if (!Enum.TryParse<MemoryScope>(candidate.Scope, ignoreCase: true, out var scope))
                 scope = MemoryScope.Project;
+            if (!memory.Holds(scope))
+                continue;
             if (await IsDuplicateAsync(candidate.Fact, scope, cancellationToken).ConfigureAwait(false))
                 continue;
 
@@ -85,6 +87,8 @@ public sealed class Consolidator(
             if (string.IsNullOrWhiteSpace(candidate.Fact))
                 continue;
             var scope = Enum.TryParse<MemoryScope>(candidate.Scope, ignoreCase: true, out var parsed) ? parsed : MemoryScope.Project;
+            if (!memory.Holds(scope))
+                continue;
             if (await IsDuplicateAsync(candidate.Fact, scope, cancellationToken).ConfigureAwait(false))
                 continue;
             proposed.Add(new DistilledFact(

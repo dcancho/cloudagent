@@ -82,6 +82,8 @@ public sealed class PendingConsolidations(string directory)
                 continue;
             if (!Enum.TryParse<MemoryScope>(fact.Scope, ignoreCase: true, out var scope))
                 scope = MemoryScope.Project;
+            if (!memory.Holds(scope))
+                continue;
 
             await memory.RememberAsync(
                 fact.Fact, scope, Math.Clamp(fact.Importance, 0, 1), source: "distillation",

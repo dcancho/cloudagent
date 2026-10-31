@@ -6,10 +6,13 @@ namespace CloudAgent.Core.Workspaces;
 /// <summary>
 /// A local-filesystem workspace rooted at a directory on this machine. Created on first
 /// use if it doesn't exist. Path resolution is hardened against traversal: anything that
-/// would land outside the root is rejected.
+/// would land outside the root is rejected, and so is the host's own state folder inside it.
 /// </summary>
 public sealed class Workspace : IWorkspace
 {
+    /// <summary>The folder under the root where the host keeps memory, transcripts and logs.</summary>
+    public const string StateDirectory = ".agent";
+
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -38,7 +41,17 @@ public sealed class Workspace : IWorkspace
         if (!IsUnderRoot(full))
             throw new WorkspaceAccessException(path, Root);
 
+        if (IsState(full))
+            throw new WorkspaceAccessException(path, Root, $"Path '{path}' is the host's private state.");
+
         return full;
+    }
+
+    public bool IsState(string fullPath)
+    {
+        var state = Path.Combine(Root, StateDirectory);
+        return string.Equals(fullPath, state, PathComparison)
+            || fullPath.StartsWith(state + Path.DirectorySeparatorChar, PathComparison);
     }
 
     public string ToRelative(string absolutePath)

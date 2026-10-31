@@ -34,6 +34,8 @@ public sealed class FileMemoryStore : IMemoryStore
             _byScope[scope] = Load(path);
     }
 
+    public IReadOnlyCollection<MemoryScope> Scopes => _paths.Keys;
+
     public int Count => _byScope.Values.Sum(list => list.Count);
 
     public Task AddAsync(MemoryEntry entry, CancellationToken cancellationToken = default)

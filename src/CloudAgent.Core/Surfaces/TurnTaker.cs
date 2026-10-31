@@ -11,6 +11,16 @@ public sealed record Burst(string Surface, string ConversationId, IReadOnlyList<
 {
     /// <summary>The burst as the agent reads it: the messages in order, one per line.</summary>
     public string Text => string.Join('\n', Messages.Select(m => m.Text));
+
+    /// <summary>
+    /// The burst as the agent reads it when it must tell speakers apart: in a group every message
+    /// is prefixed <c>name: </c>, using <paramref name="nameOf"/> when it knows the sender and the
+    /// sender's display name or id otherwise. A direct conversation reads as plain <see cref="Text"/>.
+    /// </summary>
+    public string TextAttributed(Func<InboundMessage, string?> nameOf) =>
+        string.Join('\n', Messages.Select(m => m.Kind == ConversationKind.Group
+            ? $"{nameOf(m) ?? (string.IsNullOrWhiteSpace(m.SenderDisplay) ? m.SenderId : m.SenderDisplay)}: {m.Text}"
+            : m.Text));
 }
 
 /// <summary>Knobs for end-of-turn detection.</summary>

@@ -72,6 +72,8 @@ public sealed class SqliteMemoryStore : IMemoryStore, IDisposable
         }
     }
 
+    public IReadOnlyCollection<MemoryScope> Scopes => _connections.Keys;
+
     public int Count => _connections.Values.Sum(c => Convert.ToInt32(Scalar(c, "SELECT COUNT(*) FROM memories")));
 
     public Task AddAsync(MemoryEntry entry, CancellationToken cancellationToken = default)

@@ -15,6 +15,7 @@ if (Test-Path $secrets) {
 # Local web chat UI on by default.
 if (-not $env:WEBCHAT)      { $env:WEBCHAT = "1" }
 if (-not $env:WEBCHAT_PORT) { $env:WEBCHAT_PORT = "5080" }
+if (-not $env:WEBCHAT_ANONYMOUS) { $env:WEBCHAT_ANONYMOUS = "1" }
 
 Write-Host "CloudAgent starting - web chat at http://localhost:$($env:WEBCHAT_PORT)/" -ForegroundColor Cyan
-dotnet run --project src/CloudAgent.Host -c Release
+dotnet run --project src/CloudAgent.Host -c Release -- @args

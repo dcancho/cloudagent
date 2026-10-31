@@ -37,4 +37,7 @@ public interface IMemoryStore
     Task UpdateAsync(MemoryEntry entry, CancellationToken cancellationToken = default);
 
     int Count { get; }
+
+    /// <summary>The scopes this store has storage for; writes to any other scope fail.</summary>
+    IReadOnlyCollection<MemoryScope> Scopes { get; }
 }

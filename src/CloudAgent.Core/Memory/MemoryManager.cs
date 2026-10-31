@@ -21,6 +21,9 @@ public sealed class MemoryManager(
 {
     public IMemoryStore Store => store;
 
+    /// <summary>Whether this agent keeps memory in <paramref name="scope"/> at all.</summary>
+    public bool Holds(MemoryScope scope) => store.Scopes.Contains(scope);
+
     /// <summary>Persist a curated general fact. <paramref name="source"/> records its origin
     /// (e.g. "remember" for the explicit tool, "consolidation" for the learned pass);
     /// <paramref name="metadata"/> adds per-fact keys on top of the ambient ones.</summary>

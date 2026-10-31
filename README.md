@@ -94,9 +94,11 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `AGENT_WORKSPACE` | Directory the agent may act within | `./workspace` |
 | `AGENT_MEMORY_BUDGET_TOKENS` | Working-memory budget before compaction | 8000 |
 | `SLEEP_INTERVAL_MIN` | Minutes between consolidation passes, 0 or less disables | 30 |
-| `PERSONAL_MEMORY_PATH` | The personal memory database, shared across workspaces | `~/.cloudagent/memory/personal.db` |
+| `PERSONAL_MEMORY_DIR` | Where each person's personal memory database lives, shared across workspaces | `~/.cloudagent/memory/people` |
+| `PEOPLE_FILE` | Who may talk to the agent, and which surface accounts belong to whom (see below) | `~/.cloudagent/people.json` |
 | `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
+| `WEBCHAT_ANONYMOUS` | `1` lets web chat connections without Tailscale identity in, all as the same nobody sharing their conversations. Only for a web chat no one else can reach; `run.ps1` sets it | off |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
@@ -106,6 +108,35 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `CODE_REPOS` | Repositories a coding agent may work on, as `name=path` pairs separated by `;` | none |
 | `CODE_COMMANDS` | Programs a coding agent may run in them, comma separated | `dotnet,git,npm,node` |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
+
+### People
+
+The people file lists everyone the agent talks to, all on equal footing, with the accounts that
+are theirs as `surface:senderId`. It is the allowlist for Telegram, Discord and an identified web
+chat: a message from any other account is refused in a direct conversation and ignored in a group.
+In a group, every message reaches the agent prefixed with who wrote it: the person's id, or the sender's display name when they are not in the file.
+The file is edited by whoever operates the host; the agent never links accounts itself. Person ids
+use lowercase letters, digits, `-` and `_`, since they name each person's memory file.
+
+```json
+{
+  "diego": { "accounts": ["webchat:diego@example.com", "telegram:123456", "discord:789012"] },
+  "jose": { "accounts": ["discord:345678"] }
+}
+```
+
+Behind Tailscale Serve, the web chat speaks as the tailnet login. The console always gets in, since
+whoever uses it already has the machine, and speaks as nobody unless started with `--as <person>`.
+A web chat without Tailscale identity is refused unless `WEBCHAT_ANONYMOUS=1`. A refused web chat
+cannot connect at all, and each web chat conversation belongs to whoever opened it: nobody else can
+list, open or delete it. Each console identity keeps its own conversation.
+
+Consolidation proposals stay with the conversation they were learned from: only that conversation
+can list, apply or discard them. The workspace's `.agent` folder, where memory, transcripts and
+proposals live, is out of reach of the agent's file tools.
+
+Personal memory belongs to the person in a direct conversation, one database each in
+`PERSONAL_MEMORY_DIR`. Group conversations, and anyone unidentified, keep no personal memory.
 
 ### Records
 

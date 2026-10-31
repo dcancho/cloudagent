@@ -8,8 +8,9 @@ using Discord.WebSocket;
 namespace CloudAgent.Surfaces;
 
 /// <summary>
-/// Discord via Discord.Net's gateway client. Each channel (or DM) is a conversation. Requires a
-/// bot token and the Message Content intent enabled in the Discord developer portal.
+/// Discord via Discord.Net's gateway client. Each channel, thread or DM is a conversation; only a
+/// one-to-one DM is direct. Requires a bot token and the Message Content intent enabled in the
+/// Discord developer portal.
 /// </summary>
 public sealed class DiscordSurface : ITypingSource, ITypingIndicator
 {
@@ -97,6 +98,7 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator
             new InboundMessage(
                 "discord",
                 message.Channel.Id.ToString(),
+                message.Channel is IDMChannel ? ConversationKind.Direct : ConversationKind.Group,
                 message.Author.Id.ToString(),
                 message.Author.Username,
                 message.Content,
