@@ -1,0 +1,4 @@
+{
+  "diego": { "accounts": ["webchat:diego@example.com", "telegram:123456789", "discord:123456789012345678"] },
+  "jose": { "accounts": ["discord:234567890123456789"] }
+}

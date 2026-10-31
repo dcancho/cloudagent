@@ -87,6 +87,8 @@ Provider precedence is `CLAUDE_CLI`, then `FOUNDRY_ENDPOINT`, then `ANTHROPIC_AP
 For local use on Windows, copy `agent.secrets.example.ps1` to `agent.secrets.ps1` (gitignored),
 fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 
+To run it on a server, see [deploying to a VPS](docs/deploy.md).
+
 ### Configuration
 
 | Variable | Purpose | Default |
@@ -99,6 +101,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
 | `WEBCHAT_ANONYMOUS` | `1` lets web chat connections without Tailscale identity in, all as the same nobody sharing their conversations. Only for a web chat no one else can reach; `run.ps1` sets it | off |
+| `CLI` | `0` leaves the console surface out, for a host with no terminal such as a systemd service | on |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
