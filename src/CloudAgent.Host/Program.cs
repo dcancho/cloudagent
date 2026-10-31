@@ -44,7 +44,8 @@ Console.SetError(new TeeTextWriter(Console.Error, logFile));
 var providers = new ProviderFactory(config.Llm);
 var rawProvider = providers.CreateLlm();
 var isEcho = rawProvider is EchoLlmProvider;
-var meter = new MeteredLlmProvider(rawProvider);
+var usageLedger = new UsageLedger(Path.Combine(config.WorkspaceRoot, ".agent", "usage.jsonl"));
+var meter = new MeteredLlmProvider(isEcho ? rawProvider : new LedgeredLlmProvider(rawProvider, usageLedger));
 meter.Completed += (m, r, elapsed) =>
 {
     var total = meter.Usage.First(u => u.Model == m);
@@ -418,7 +419,7 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
     var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}", child.Id);
     var loop = new AgentLoop(
         provider, profile.ChildOptions, input, new AgentContext(), childTools, comp, attention, utility,
-        profile.Routed ? BuildRouter(mem) : null);
+        profile.Routed ? BuildRouter(mem) : null) { AgentId = child.Id };
     AttachLogging(loop, $"child {child.Role}");
     new TranscriptRecorder(transcriptDirectory, child.Id).Attach(loop);
     return loop;
@@ -490,7 +491,7 @@ AgentConversation CreateConversation(InboundMessage first)
         Console.WriteLine($"  ↻ resumed {handle.Id} with {context.Messages.Count} message(s)");
     var loop = new AgentLoop(
         provider, profile.Options, input, context ?? new AgentContext(), agentTools, comp, attention, utility,
-        profile.Routed ? BuildRouter(mem) : null);
+        profile.Routed ? BuildRouter(mem) : null) { AgentId = handle.Id };
     if (!isEcho)
     {
         var learner = new SessionLearner(
@@ -615,6 +616,7 @@ if (!isEcho && sleepMinutes > 0)
                     continue;
                 try
                 {
+                    using var usage = UsageScope.Begin(id);
                     var staged = await learner.LearnAsync(cts.Token);
                     Console.WriteLine($"  🎓 [{id}] learned from a quiet conversation; staged: {staged ?? "nothing"}");
                 }
@@ -628,13 +630,14 @@ if (!isEcho && sleepMinutes > 0)
                 }
             }
 
-            foreach (var job in sleepJobs.Values)
+            foreach (var (id, job) in sleepJobs)
             {
                 if (cts.Token.IsCancellationRequested)
                     break;
 
                 try
                 {
+                    using var usage = UsageScope.Begin(id);
                     var result = await job.RunAsync(cts.Token);
                     if (result.Demoted > 0 || result.Promoted > 0 || result.StagedProposalId is not null)
                         Console.WriteLine(

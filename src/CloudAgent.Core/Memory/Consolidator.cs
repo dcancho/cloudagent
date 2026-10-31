@@ -105,6 +105,7 @@ public sealed class Consolidator(
             System = "You extract durable facts from a conversation. Output only a JSON array, no prose.",
             Messages = [Message.User($"{Instruction}\n\n---\n{transcript}")],
             Model = model,
+            Purpose = LlmPurpose.Consolidation,
             MaxTokens = 800,
             Temperature = 0.1,
         };

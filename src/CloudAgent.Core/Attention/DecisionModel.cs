@@ -78,6 +78,7 @@ public sealed class GenerativeDecisionModel(ILlmProvider provider, string? model
                      "each question id to an object of option to probability. No other text.",
             Messages = [Message.User(prompt.ToString())],
             Model = model,
+            Purpose = LlmPurpose.Router,
             MaxTokens = 400,
             Temperature = 0,
         };

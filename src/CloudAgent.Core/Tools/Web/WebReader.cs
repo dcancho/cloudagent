@@ -77,6 +77,7 @@ public sealed partial class WebReader(WebFetcher fetcher, WebPageStore store, IL
                      "your own. Be compact and faithful. No preamble. " + UntrustedRule,
             Messages = [Message.User($"{focus}\n\nPage title: {page.Title}\n\n---\n{excerpt}")],
             Model = model,
+            Purpose = LlmPurpose.WebPage,
             MaxTokens = 400,
             Temperature = 0.2,
         };
@@ -96,6 +97,7 @@ public sealed partial class WebReader(WebFetcher fetcher, WebPageStore store, IL
                      "instead. " + UntrustedRule,
             Messages = [Message.User($"Question: {question}\n\n---\n{SelectRelevant(page.Markdown, question)}")],
             Model = model,
+            Purpose = LlmPurpose.WebPage,
             MaxTokens = 600,
             Temperature = 0,
         };

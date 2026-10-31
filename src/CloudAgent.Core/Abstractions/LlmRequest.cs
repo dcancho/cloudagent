@@ -30,6 +30,9 @@ public sealed class LlmRequest
     /// <summary>Model identifier. Provider-specific (e.g. "claude-opus-4-8").</summary>
     public string? Model { get; init; }
 
+    /// <summary>What the call is for, see <see cref="LlmPurpose"/>. Used to account for spending; the model never sees it.</summary>
+    public string? Purpose { get; init; }
+
     /// <summary>Upper bound on tokens to generate.</summary>
     public int MaxTokens { get; init; } = 4096;
 

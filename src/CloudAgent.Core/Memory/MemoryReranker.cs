@@ -53,6 +53,7 @@ public sealed class MemoryReranker(ILlmProvider provider, string? model = null)
                      "Output only a JSON array of integers, no prose.",
             Messages = [Message.User(string.Format(Instruction, Clip(query, MaxQueryChars), numbered, keep))],
             Model = model,
+            Purpose = LlmPurpose.Rerank,
             MaxTokens = 100,
             Temperature = 0,
         };

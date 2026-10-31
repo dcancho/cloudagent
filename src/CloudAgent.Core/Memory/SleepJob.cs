@@ -212,6 +212,7 @@ public sealed class SleepJob(
                     "\"summary\":\"...\",\"replaces\":[numbers]}\n\n" + numbered),
             ],
             Model = model,
+            Purpose = LlmPurpose.Sleep,
             MaxTokens = 1500,
             Temperature = 0.1,
         };

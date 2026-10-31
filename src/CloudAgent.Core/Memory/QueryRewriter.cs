@@ -31,6 +31,7 @@ public sealed class QueryRewriter(ILlmProvider provider, string? model = null)
             System = "You rewrite conversational turns into search queries. Output only the query, no prose.",
             Messages = [Message.User(Instruction + clipped)],
             Model = model,
+            Purpose = LlmPurpose.Rewrite,
             MaxTokens = 100,
             Temperature = 0,
         };
