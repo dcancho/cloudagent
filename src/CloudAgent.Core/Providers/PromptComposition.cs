@@ -66,10 +66,15 @@ public static class PromptComposition
         return parts;
     }
 
-    private static void MeasureEphemeral(string ephemeral, Action<string, int> add)
+    /// <summary>
+    /// The ephemeral context split into its sections, each with the part it counts as and its text up to
+    /// the start of the next section. Text before the first section is returned as <see cref="PromptPart.Other"/>.
+    /// </summary>
+    public static List<(string Part, string Text)> Sections(string ephemeral)
     {
+        var sections = new List<(string, string)>();
         if (ephemeral.Length == 0)
-            return;
+            return sections;
 
         var starts = new List<int>();
         if (ephemeral.StartsWith("## ", StringComparison.Ordinal))
@@ -78,18 +83,25 @@ public static class PromptComposition
             starts.Add(i + 2);
 
         if (starts.Count == 0 || starts[0] > 0)
-            add(PromptPart.Other, starts.Count == 0 ? ephemeral.Length : starts[0]);
+            sections.Add((PromptPart.Other, starts.Count == 0 ? ephemeral : ephemeral[..starts[0]]));
 
         for (var i = 0; i < starts.Count; i++)
         {
             var end = i + 1 < starts.Count ? starts[i + 1] : ephemeral.Length;
-            var section = ephemeral.AsSpan(starts[i], end - starts[i]);
-            var part = section.StartsWith(AttentionRendering.StateHeader, StringComparison.Ordinal) ? PromptPart.State
-                : section.StartsWith(AttentionRendering.SummaryHeader, StringComparison.Ordinal) ? PromptPart.Summary
-                : section.StartsWith(AttentionRendering.RecalledHeader, StringComparison.Ordinal) ? PromptPart.Recalled
-                : section.StartsWith(AttentionRendering.StubsHeader, StringComparison.Ordinal) ? PromptPart.Stubs
+            var text = ephemeral[starts[i]..end];
+            var part = text.StartsWith(AttentionRendering.StateHeader, StringComparison.Ordinal) ? PromptPart.State
+                : text.StartsWith(AttentionRendering.SummaryHeader, StringComparison.Ordinal) ? PromptPart.Summary
+                : text.StartsWith(AttentionRendering.RecalledHeader, StringComparison.Ordinal) ? PromptPart.Recalled
+                : text.StartsWith(AttentionRendering.StubsHeader, StringComparison.Ordinal) ? PromptPart.Stubs
                 : PromptPart.Other;
-            add(part, section.Length);
+            sections.Add((part, text));
         }
+        return sections;
+    }
+
+    private static void MeasureEphemeral(string ephemeral, Action<string, int> add)
+    {
+        foreach (var (part, text) in Sections(ephemeral))
+            add(part, text.Length);
     }
 }

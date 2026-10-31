@@ -222,26 +222,28 @@ public sealed class AgentLoop
             var toolDefinitions = SelectTools(allDefinitions, offered);
             var outOfBudget = _options.Budget?.Exhausted == true;
             var lastStep = hop >= _options.MaxToolSteps || outOfBudget;
-            var ephemeral = _assembled!.EphemeralContext;
+            string? limit = null;
             if (lastStep)
             {
                 var reason = outOfBudget
                     ? "This workspace has used its token budget, so you cannot call tools now and will not get another turn until it is raised."
                     : $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now.";
-                var limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
-                ephemeral = string.IsNullOrWhiteSpace(ephemeral) ? limit : $"{ephemeral}\n\n{limit}";
+                limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
             }
-            var request = new LlmRequest
-            {
-                System = _assembled.System,
-                EphemeralContext = ephemeral,
-                Messages = _context.Messages,
-                Model = _options.Model,
-                Purpose = LlmPurpose.Turn,
-                MaxTokens = _options.MaxTokens,
-                Temperature = _options.Temperature,
-                Tools = toolDefinitions,
-            };
+            var request = InputCap.Fit(
+                new LlmRequest
+                {
+                    System = _assembled!.System,
+                    EphemeralContext = _assembled.EphemeralContext,
+                    Messages = _context.Messages,
+                    Model = _options.Model,
+                    Purpose = LlmPurpose.Turn,
+                    MaxTokens = _options.MaxTokens,
+                    Temperature = _options.Temperature,
+                    Tools = toolDefinitions,
+                },
+                _options.MaxInputTokens,
+                limit);
 
             LlmResponse response;
             try

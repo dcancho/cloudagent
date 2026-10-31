@@ -52,13 +52,15 @@ public sealed class UsageReport
         IReadOnlyList<UsageGroup> byPurpose,
         IReadOnlyList<UsageGroup> byModel,
         IReadOnlyList<UsageGroup> byAgent,
-        IReadOnlyList<UsagePart> byPart)
+        IReadOnlyList<UsagePart> byPart,
+        int trimmed)
     {
         Total = total;
         ByPurpose = byPurpose;
         ByModel = byModel;
         ByAgent = byAgent;
         ByPart = byPart;
+        Trimmed = trimmed;
     }
 
     public UsageTotals Total { get; }
@@ -73,6 +75,9 @@ public sealed class UsageReport
     /// <summary>Where the input tokens of calls that recorded their composition went, largest first.</summary>
     public IReadOnlyList<UsagePart> ByPart { get; }
 
+    /// <summary>Calls whose prompt the input cap had to cut.</summary>
+    public int Trimmed { get; }
+
     public const string NoAgent = "(no agent)";
 
     public static UsageReport Build(IEnumerable<UsageRecord> records, IReadOnlyDictionary<string, ModelPrice> prices)
@@ -83,7 +88,8 @@ public sealed class UsageReport
             Group(all, r => r.Purpose, prices),
             Group(all, r => r.Model, prices),
             Group(all, r => r.Agent ?? NoAgent, prices),
-            Compose(all));
+            Compose(all),
+            all.Count(r => r.Trimmed is not null));
     }
 
 

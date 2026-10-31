@@ -167,6 +167,7 @@ var options = new AgentOptions
     IterationDelay = TimeSpan.Zero,
     Budget = budget,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
+    MaxInputTokens = config.MaxInputTokens,
 };
 
 var childOptions = new AgentOptions
@@ -179,6 +180,7 @@ var childOptions = new AgentOptions
     IterationDelay = TimeSpan.Zero,
     Budget = budget,
     WorkingMemoryBudgetTokens = config.MemoryBudgetTokens,
+    MaxInputTokens = config.MaxInputTokens,
 };
 
 // Attention (eje 5) knobs — recall shape and budget — live with the module, not AgentOptions.
@@ -234,6 +236,7 @@ AgentProfile BuildCodeProfile(string name, string root)
         IterationDelay = basis.IterationDelay,
         Budget = basis.Budget,
         WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
+        MaxInputTokens = basis.MaxInputTokens,
         MaxToolSteps = 40,
     };
     return new AgentProfile(
@@ -473,6 +476,7 @@ AgentOptions InGroup(AgentOptions basis) => new()
     IterationDelay = basis.IterationDelay,
     Budget = basis.Budget,
     WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
+    MaxInputTokens = basis.MaxInputTokens,
     MaxTokens = basis.MaxTokens,
     Temperature = basis.Temperature,
     MaxIterations = basis.MaxIterations,

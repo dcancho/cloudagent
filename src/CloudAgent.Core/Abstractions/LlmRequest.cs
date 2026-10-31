@@ -39,6 +39,9 @@ public sealed class LlmRequest
     /// <summary>Sampling temperature, 0..1.</summary>
     public double Temperature { get; init; } = 1.0;
 
+    /// <summary>What the input cap dropped to fit this request, for the usage ledger; the model never sees it.</summary>
+    public string? Trimmed { get; init; }
+
     /// <summary>Tools the model may call this turn. Empty means a plain completion.</summary>
     public IReadOnlyList<ToolDefinition> Tools { get; init; } = [];
 }

@@ -183,6 +183,9 @@ public static class AdminCommands
                 output.WriteLine($"  {part.Part,-35}{part.Tokens,12:N0} in{part.Share,9:P1}");
         }
 
+        if (report.Trimmed > 0)
+            output.WriteLine($"\nThe input cap cut the prompt of {report.Trimmed:N0} call(s).");
+
         var unpriced = report.ByModel.Where(m => m.Totals.Unpriced).Select(m => m.Key).ToList();
         if (unpriced.Count > 0)
             output.WriteLine($"\nNo price for {string.Join(", ", unpriced.Select(m => $"'{m}'"))}: costs are a floor. " +

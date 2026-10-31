@@ -29,6 +29,12 @@ public sealed class AgentOptions
     /// <summary>Compact working memory once its estimated tokens exceed this. User-tunable.</summary>
     public int WorkingMemoryBudgetTokens { get; init; } = 8000;
 
+    /// <summary>
+    /// Most input tokens, estimated at about 4 characters each, one model call may carry. Past it the
+    /// least useful context is dropped before the call (see <see cref="InputCap"/>). 0 means no cap.
+    /// </summary>
+    public int MaxInputTokens { get; init; } = 32_000;
+
     /// <summary>How many recent messages to keep verbatim when compacting.</summary>
     public int KeepRecentMessages { get; init; } = 12;
 

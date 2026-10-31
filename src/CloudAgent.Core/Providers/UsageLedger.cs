@@ -44,6 +44,7 @@ public static class UsageScope
 /// <param name="Elapsed">Wall-clock time of the call.</param>
 /// <param name="Failed">The call threw; the tokens are unknown and the call may still have been billed.</param>
 /// <param name="Chars">Characters each part of the prompt took (see <see cref="PromptPart"/>); estimates how the input tokens divide.</param>
+/// <param name="Trimmed">What the input cap dropped from the prompt to fit it, when it had to.</param>
 public sealed record UsageRecord(
     DateTimeOffset At,
     string Purpose,
@@ -55,7 +56,8 @@ public sealed record UsageRecord(
     int? CacheWriteTokens,
     TimeSpan Elapsed,
     bool Failed,
-    IReadOnlyDictionary<string, int>? Chars = null);
+    IReadOnlyDictionary<string, int>? Chars = null,
+    string? Trimmed = null);
 
 /// <summary>
 /// Every model call, one JSON line each, append-only. Tokens are the raw measurement; cost is
@@ -148,5 +150,6 @@ public sealed class LedgeredLlmProvider(ILlmProvider inner, UsageLedger ledger) 
             response?.CacheWriteTokens,
             System.Diagnostics.Stopwatch.GetElapsedTime(started),
             failed,
-            PromptComposition.Measure(request)));
+            PromptComposition.Measure(request),
+            request.Trimmed));
 }
