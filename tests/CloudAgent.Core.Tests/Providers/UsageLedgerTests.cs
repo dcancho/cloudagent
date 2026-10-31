@@ -115,6 +115,23 @@ public sealed class UsageLedgerTests : IDisposable
     }
 
     [Fact]
+    public void Lines_are_read_whatever_their_property_case_and_incomplete_ones_are_skipped()
+    {
+        File.WriteAllLines(Path.Combine(_directory, "usage.jsonl"),
+        [
+            """{"Purpose":"turn","Model":"m","Agent":"a","InputTokens":3,"OutputTokens":4,"Elapsed":"00:00:01","Failed":false}""",
+            """{"purpose":"judge","model":"m","inputTokens":5}""",
+            """{"inputTokens":9}""",
+        ]);
+
+        var records = _ledger.Read();
+
+        Assert.Equal([LlmPurpose.Turn, LlmPurpose.Judge], records.Select(r => r.Purpose));
+        Assert.Equal(3, records[0].InputTokens);
+        Assert.Equal(5, records[1].InputTokens);
+    }
+
+    [Fact]
     public async Task Concurrent_calls_each_leave_one_whole_line()
     {
         var provider = new LedgeredLlmProvider(new ScriptedLlmProvider().Otherwise("ok"), _ledger);

@@ -23,7 +23,11 @@ using CloudAgent.Core.Todos;
 using CloudAgent.Core.Workspaces;
 using CloudAgent.Core.Attention;
 using CloudAgent.Host;
+using CloudAgent.Host.Admin;
 using CloudAgent.Host.Configuration;
+
+if (args is ["admin", ..var adminArgs])
+    Environment.Exit(AdminCommands.Run(adminArgs, Console.Out, Console.Error));
 
 // ---- Wiring -----------------------------------------------------------------
 // All environment resolution lives in HostConfig; the composition root below only constructs.

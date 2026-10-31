@@ -61,7 +61,7 @@ public sealed record UsageRecord(
 /// </summary>
 public sealed class UsageLedger
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -100,7 +100,7 @@ public sealed class UsageLedger
         {
             try
             {
-                if (JsonSerializer.Deserialize<UsageRecord>(line, JsonOptions) is { } record)
+                if (JsonSerializer.Deserialize<UsageRecord>(line, JsonOptions) is { Purpose: not null, Model: not null } record)
                     records.Add(record);
             }
             catch (JsonException)
