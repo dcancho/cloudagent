@@ -12,7 +12,7 @@ namespace CloudAgent.Core.Surfaces;
 /// The conversation id is the Telegram chat id, plus the topic id for a forum topic in a supergroup
 /// (<c>chatId#topicId</c>), so each topic is its own conversation.
 /// </summary>
-public sealed class TelegramSurface : ITypingIndicator
+public sealed class TelegramSurface : ITypingIndicator, IHandleSource
 {
     private const char TopicSeparator = '#';
 
@@ -23,6 +23,7 @@ public sealed class TelegramSurface : ITypingIndicator
 
     private readonly HttpClient _http;
     private readonly string _baseUrl;
+    private string? _botUsername;
 
     public TelegramSurface(string botToken, HttpClient? http = null)
     {
@@ -35,11 +36,14 @@ public sealed class TelegramSurface : ITypingIndicator
 
     public string Name => "telegram";
 
+    public string? Handle => _botUsername is null ? null : "@" + _botUsername;
+
     public async Task StartAsync(
         Func<InboundMessage, CancellationToken, Task> onMessage, CancellationToken cancellationToken)
     {
         long offset = 0;
         var (botId, botUsername) = await ReadBotAsync(cancellationToken).ConfigureAwait(false);
+        _botUsername = botUsername;
 
         while (!cancellationToken.IsCancellationRequested)
         {

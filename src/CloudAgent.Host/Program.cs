@@ -162,7 +162,9 @@ var options = new AgentOptions
         "You are an autonomous agent running on your own machine with a persistent workspace. " +
         "Operate with the initiative of a capable colleague. You can delegate scoped work to child " +
         "agents (spawn_agent / delegate_task) and answer their questions. Never work out numbers in your " +
-        "head: compute every figure you report with the calculate tool. Be concise.",
+        "head: compute every figure you report with the calculate tool. Answer simple questions yourself with the tools you have; " +
+        "delegate only work that is long or independent. When a child agent reports on something you have already answered, " +
+        "do not repeat the answer. Be concise.",
     Model = model,
     IterationDelay = TimeSpan.Zero,
     Budget = budget,
@@ -464,14 +466,23 @@ string? PersonalPathFor(InboundMessage first)
     return Path.Combine(config.PersonalMemoryDirectory, $"{person.Id}.db");
 }
 
-AgentOptions InGroup(AgentOptions basis) => new()
+IReadOnlyList<ISurface> liveSurfaces = [];
+
+string? HandleOf(string surface) => liveSurfaces.OfType<IHandleSource>().FirstOrDefault(s => s.Name == surface)?.Handle;
+
+AgentOptions Identified(AgentOptions basis, InboundMessage first)
 {
-    SystemPrompt = basis.SystemPrompt +
-        " You are in a group conversation with several people; each line starts with who wrote it. You are only " +
-        "sent messages that address you or come from someone you are already talking with. Lines marked [overheard] " +
-        "are earlier messages in the group that were not addressed to you: use them as context, do not answer them " +
-        "or mention that you saw them unless it helps. Answer the person who addressed you, by name when several " +
-        "people are talking.",
+    var handle = HandleOf(first.Surface);
+    var person = first.Kind == ConversationKind.Direct
+        ? PersonOf(first)?.Id ?? first.SenderDisplay
+        : null;
+    return WithPrompt(basis, basis.SystemPrompt +
+        AgentIdentity.Describe(AgentIdentity.NameOf(config.AgentName, handle), handle, first.Surface, first.Kind, person));
+}
+
+AgentOptions WithPrompt(AgentOptions basis, string systemPrompt) => new()
+{
+    SystemPrompt = systemPrompt,
     Model = basis.Model,
     IterationDelay = basis.IterationDelay,
     Budget = basis.Budget,
@@ -513,7 +524,7 @@ AgentConversation CreateConversation(InboundMessage first)
         .Register(new StopAgentTool(bus));
     RegisterColdRecovery(agentTools, mem, handle.Id);
 
-    var agentOptions = kind == ConversationKind.Group ? InGroup(profile.Options) : profile.Options;
+    var agentOptions = Identified(profile.Options, first);
     var attention = BuildAttention(agentOptions.SystemPrompt, retriever, handle.Id, handle.Id);
     var context = contexts.Load(handle.Id);
     if (context is not null)
@@ -613,6 +624,7 @@ if (config.WebchatEnabled)
 var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
+liveSurfaces = surfaces;
 using var router = new ConversationRouter(
     surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id,
     new ParticipationGate(new ParticipationOptions { Engagement = TimeSpan.FromSeconds(config.GroupEngagementSeconds) }));
