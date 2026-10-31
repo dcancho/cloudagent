@@ -34,8 +34,8 @@ public static class AgentIdentity
         if (kind == ConversationKind.Direct)
         {
             text.Append($" This is a direct conversation on {surface}")
-                .Append(string.IsNullOrWhiteSpace(person) ? "." : $" with {person}.")
-                .Append(" Only that person can read it.");
+                .Append(string.IsNullOrWhiteSpace(person) ? "." : $" with {person}.");
+
             return text.ToString();
         }
 

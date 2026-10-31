@@ -13,13 +13,14 @@ public sealed class AgentIdentityTests
     }
 
     [Fact]
-    public void A_direct_conversation_names_the_person_and_says_nobody_else_reads_it()
+    public void A_direct_conversation_names_the_person_without_promising_privacy()
     {
         var text = AgentIdentity.Describe("CloudAgentBeta", "@CloudAgentBeta", "discord", ConversationKind.Direct, "jose");
 
         Assert.Contains("Your name is CloudAgentBeta.", text);
         Assert.Contains("direct conversation on discord with jose", text);
         Assert.DoesNotContain("@CloudAgentBeta", text);
+        Assert.DoesNotContain("Only that person", text);
         Assert.DoesNotContain("[overheard]", text);
     }
 
