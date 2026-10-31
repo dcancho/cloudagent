@@ -108,8 +108,12 @@ workspaceTools
 
 // Memory paths: Personal is user-global, Project is shared; each agent gets its OWN session
 // store, so children do not share the parent's memory.
-var personalMemoryPath = config.PersonalMemoryPath;
 var people = PeopleRegistry.Load(config.PeoplePath);
+var asIndex = Array.IndexOf(args, "--as");
+var cliPerson = asIndex >= 0 && asIndex + 1 < args.Length
+    ? people.Find(args[asIndex + 1])
+        ?? throw new ArgumentException($"--as: nobody called '{args[asIndex + 1]}' in {config.PeoplePath}.")
+    : null;
 var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.db");
 
 // Utility feedback loop: a shared append-only ledger of which injected memories actually
@@ -420,13 +424,24 @@ var orchestrator = new AgentOrchestrator(bus, parentId => ProfileOf(parentId).To
 // surface queue) and its children (its mailbox) through a composite input.
 // Personal memory belongs to the one person in a direct conversation; a group keeps none, so
 // nothing personal is recalled in front of others or learned about someone there.
+// The console speaks as the person named with --as, or as nobody; anyone at it already has the
+// machine. An unidentified web chat gets in only when WEBCHAT_ANONYMOUS allows it.
+Person? PersonOf(InboundMessage message) => message.Surface == "cli"
+    ? people.Find(message.SenderId)
+    : people.Resolve(message.Surface, message.SenderId);
+
+bool MayTalk(InboundMessage message) => message.Surface switch
+{
+    "cli" => true,
+    "webchat" when message.SenderId == PeopleRegistry.AnonymousSender => config.WebchatAnonymous,
+    _ => PersonOf(message) is not null,
+};
+
 string? PersonalPathFor(InboundMessage first)
 {
-    if (first.Kind != ConversationKind.Direct || people.Resolve(first.Surface, first.SenderId) is not { } person)
+    if (first.Kind != ConversationKind.Direct || PersonOf(first) is not { } person)
         return null;
-    return person.Owner
-        ? personalMemoryPath
-        : Path.Combine(Path.GetDirectoryName(personalMemoryPath)!, $"personal-{TranscriptRecorder.ToFileName(person.Id)}.db");
+    return Path.Combine(config.PersonalMemoryDirectory, $"{TranscriptRecorder.ToFileName(person.Id)}.db");
 }
 
 AgentConversation CreateConversation(InboundMessage first)
@@ -524,7 +539,7 @@ async Task<bool> DeleteConversationAsync(ConversationRouter router, string surfa
 }
 
 // Surfaces: the console is always on; others join when configured.
-var surfaces = new List<ISurface> { new CliSurface(cts) };
+var surfaces = new List<ISurface> { new CliSurface(cts, cliPerson?.Id) };
 
 if (!string.IsNullOrWhiteSpace(config.TelegramBotToken))
     surfaces.Add(new TelegramSurface(config.TelegramBotToken));
@@ -554,7 +569,7 @@ var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
 using var router = new ConversationRouter(
-    surfaces, CreateConversation, m => people.Resolve(m.Surface, m.SenderId) is not null, turnTaking);
+    surfaces, CreateConversation, MayTalk, turnTaking);
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
@@ -629,10 +644,9 @@ Console.WriteLine($"CloudAgent harness — provider: {provider.Name}");
 Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
-Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok; personal {personalMemoryPath}");
-Console.WriteLine(File.Exists(config.PeoplePath)
-    ? $"People:    {people.People.Count} from {config.PeoplePath}; only their accounts get in"
-    : $"People:    no {config.PeoplePath}; only the local console and web chat get in");
+Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok; personal in {config.PersonalMemoryDirectory}");
+Console.WriteLine($"People:    {people.People.Count} from {config.PeoplePath}; console as {cliPerson?.Id ?? "nobody"}; " +
+    $"web chat without identity {(config.WebchatAnonymous ? "allowed" : "refused")}");
 Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {attentionOptions.RecallBudgetTokens} tok");
 Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");

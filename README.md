@@ -94,10 +94,11 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `AGENT_WORKSPACE` | Directory the agent may act within | `./workspace` |
 | `AGENT_MEMORY_BUDGET_TOKENS` | Working-memory budget before compaction | 8000 |
 | `SLEEP_INTERVAL_MIN` | Minutes between consolidation passes, 0 or less disables | 30 |
-| `PERSONAL_MEMORY_PATH` | The personal memory database, shared across workspaces | `~/.cloudagent/memory/personal.db` |
+| `PERSONAL_MEMORY_DIR` | Where each person's personal memory database lives, shared across workspaces | `~/.cloudagent/memory/people` |
 | `PEOPLE_FILE` | Who may talk to the agent, and which surface accounts belong to whom (see below) | `~/.cloudagent/people.json` |
 | `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
+| `WEBCHAT_ANONYMOUS` | `0` refuses web chat connections without Tailscale identity. Set it on any shared host | on |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
@@ -110,21 +111,24 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 
 ### People
 
-The people file is the allowlist. Each person has an id and the accounts that are theirs, as
-`surface:senderId`; a message from any other account is refused in a direct conversation and
-ignored in a group. Without the file, only the local console and web chat get in.
+The people file lists everyone the agent talks to, all on equal footing, with the accounts that
+are theirs as `surface:senderId`. It is the allowlist for Telegram, Discord and an identified web
+chat: a message from any other account is refused in a direct conversation and ignored in a group.
+The file is edited by whoever operates the host; the agent never links accounts itself.
 
 ```json
 {
-  "diego": { "owner": true, "accounts": ["cli:local", "webchat:local", "telegram:123456", "discord:789012"] },
-  "ana": { "accounts": ["discord:345678"] }
+  "diego": { "accounts": ["webchat:diego@example.com", "telegram:123456", "discord:789012"] },
+  "jose": { "accounts": ["discord:345678"] }
 }
 ```
 
-The console and a local web chat speak as `local`. Behind Tailscale Serve, the web chat speaks as
-the tailnet login (`webchat:diego@example.com`). Personal memory belongs to the person in a direct
-conversation: the owner's is `PERSONAL_MEMORY_PATH`, anyone else's sits beside it. Group
-conversations keep no personal memory.
+Behind Tailscale Serve, the web chat speaks as the tailnet login. The console always gets in, since
+whoever uses it already has the machine, and speaks as nobody unless started with `--as <person>`.
+A web chat without Tailscale identity is let in unidentified unless `WEBCHAT_ANONYMOUS=0`.
+
+Personal memory belongs to the person in a direct conversation, one database each in
+`PERSONAL_MEMORY_DIR`. Group conversations, and anyone unidentified, keep no personal memory.
 
 ### Records
 

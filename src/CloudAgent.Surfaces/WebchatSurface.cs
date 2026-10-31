@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using CloudAgent.Core.People;
 using CloudAgent.Core.Surfaces;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -345,14 +346,14 @@ public sealed class WebchatSurface(
 
     /// <summary>
     /// Who is on the other end. Behind Tailscale Serve the tailnet user arrives in identity headers
-    /// that Serve sets and strips from incoming requests; a direct local connection is the machine's
-    /// own user, <c>local</c>.
+    /// that Serve sets and strips from incoming requests; a direct connection is unidentified
+    /// (<see cref="PeopleRegistry.AnonymousSender"/>).
     /// </summary>
     private static (string Id, string Name) Sender(HttpRequest request)
     {
         var login = request.Headers["Tailscale-User-Login"].ToString();
         if (string.IsNullOrWhiteSpace(login))
-            return ("local", "web");
+            return (PeopleRegistry.AnonymousSender, "web");
 
         var name = request.Headers["Tailscale-User-Name"].ToString();
         return (login, string.IsNullOrWhiteSpace(name) ? login : name);
@@ -364,7 +365,7 @@ public sealed class WebchatSurface(
 
         public bool Typed { get; set; }
 
-        public string SenderId { get; init; } = "local";
+        public string SenderId { get; init; } = PeopleRegistry.AnonymousSender;
 
         public async Task SendAsync(string frame, CancellationToken cancellationToken)
         {

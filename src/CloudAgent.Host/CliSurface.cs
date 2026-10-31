@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using CloudAgent.Core.People;
 using CloudAgent.Core.Surfaces;
 
 namespace CloudAgent.Host;
@@ -10,7 +11,9 @@ namespace CloudAgent.Host;
 /// Typing "exit" or "quit" stops the whole host. This unifies the terminal with every other
 /// channel — the CLI is no longer special, just the surface you happen to be sitting at.
 /// </summary>
-public sealed class CliSurface(CancellationTokenSource stopSignal) : ISurface
+/// <param name="stopSignal">Cancelled when the console asks to stop the host.</param>
+/// <param name="personId">The person the console speaks as; null speaks as nobody in particular.</param>
+public sealed class CliSurface(CancellationTokenSource stopSignal, string? personId = null) : ISurface
 {
     private const string ConversationId = "cli";
 
@@ -45,7 +48,9 @@ public sealed class CliSurface(CancellationTokenSource stopSignal) : ISurface
                 continue;
 
             await onMessage(
-                new InboundMessage(Name, ConversationId, ConversationKind.Direct, "local", "you", line, DateTimeOffset.Now),
+                new InboundMessage(
+                    Name, ConversationId, ConversationKind.Direct,
+                    personId ?? PeopleRegistry.AnonymousSender, personId ?? "you", line, DateTimeOffset.Now),
                 cancellationToken).ConfigureAwait(false);
         }
     }

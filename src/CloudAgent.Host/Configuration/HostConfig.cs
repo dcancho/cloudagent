@@ -14,10 +14,10 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="Llm">Provider/model configuration (see <see cref="LlmConfig"/>).</param>
 /// <param name="WorkspaceRoot">Rooted area the agent may act within (<c>AGENT_WORKSPACE</c>).</param>
 /// <param name="TavilyApiKey">Web-search key; null leaves search unconfigured.</param>
-/// <param name="PersonalMemoryPath">The personal memory database, shared by every workspace of this user
-/// (<c>PERSONAL_MEMORY_PATH</c>).</param>
+/// <param name="PersonalMemoryDirectory">Where each person's personal memory database lives, one file per
+/// person, shared by every workspace (<c>PERSONAL_MEMORY_DIR</c>).</param>
 /// <param name="PeoplePath">The people the agent talks to and their linked accounts, which is also the
-/// allowlist (<c>PEOPLE_FILE</c>); without the file only the local console and web chat get in.</param>
+/// allowlist for remote surfaces (<c>PEOPLE_FILE</c>).</param>
 /// <param name="ConsolidationPolicyPath">Resolved path to the consolidation policy doc
 /// (<c>CONSOLIDATION_POLICY</c>); the host reads it with a built-in fallback if absent.</param>
 /// <param name="MemoryBudgetTokens">Working-memory compaction budget (<c>AGENT_MEMORY_BUDGET_TOKENS</c>).</param>
@@ -26,6 +26,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="DiscordBotToken">Discord surface token; null skips the surface.</param>
 /// <param name="WebchatEnabled">Whether to start the web-chat surface (<c>WEBCHAT=1</c>).</param>
 /// <param name="WebchatPort">Web-chat port (<c>WEBCHAT_PORT</c>) when enabled.</param>
+/// <param name="WebchatAnonymous">Whether a web-chat connection without Tailscale identity gets in, unidentified
+/// (<c>WEBCHAT_ANONYMOUS</c>, on unless <c>0</c>).</param>
 /// <param name="TurnTakingEnabled">Group messages into bursts before the agent answers (<c>TURN_TAKING</c>, on unless <c>0</c>).</param>
 /// <param name="ContextRouting">How each turn's pipeline is chosen (<c>CONTEXT_ROUTING</c>): <c>off</c> runs all of it,
 /// <c>decision</c> asks the Foundry decision model, <c>generative</c> asks the background chat model. Defaults to
@@ -43,7 +45,7 @@ public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
     string? TavilyApiKey,
-    string PersonalMemoryPath,
+    string PersonalMemoryDirectory,
     string PeoplePath,
     string ConsolidationPolicyPath,
     int MemoryBudgetTokens,
@@ -52,6 +54,7 @@ public sealed record HostConfig(
     string? DiscordBotToken,
     bool WebchatEnabled,
     int WebchatPort,
+    bool WebchatAnonymous,
     bool TurnTakingEnabled,
     string ContextRouting,
     Uri? DecisionsEndpoint,
@@ -101,9 +104,9 @@ public sealed record HostConfig(
             LlmConfig.FromEnvironment(),
             workspaceRoot,
             Environment.GetEnvironmentVariable("TAVILY_API_KEY"),
-            Environment.GetEnvironmentVariable("PERSONAL_MEMORY_PATH")
+            Environment.GetEnvironmentVariable("PERSONAL_MEMORY_DIR")
                 ?? Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudagent", "memory", "personal.db"),
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudagent", "memory", "people"),
             Environment.GetEnvironmentVariable("PEOPLE_FILE")
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudagent", "people.json"),
             policyPath,
@@ -113,6 +116,7 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN"),
             webchatEnabled,
             webchatPort,
+            !string.Equals(Environment.GetEnvironmentVariable("WEBCHAT_ANONYMOUS"), "0", StringComparison.Ordinal),
             !string.Equals(Environment.GetEnvironmentVariable("TURN_TAKING"), "0", StringComparison.Ordinal),
             routing,
             decisionsEndpoint,

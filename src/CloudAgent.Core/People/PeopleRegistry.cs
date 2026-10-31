@@ -8,63 +8,65 @@ namespace CloudAgent.Core.People;
 
 /// <summary>A known person and the surface accounts that are theirs.</summary>
 /// <param name="Id">Stable person id, the same on every surface.</param>
-/// <param name="Owner">Whether this is the person the agent works for.</param>
 /// <param name="Accounts">Linked accounts, each <c>surface:senderId</c>.</param>
-public sealed record Person(string Id, bool Owner, IReadOnlyList<string> Accounts);
+public sealed record Person(string Id, IReadOnlyList<string> Accounts);
 
 /// <summary>
-/// The people the agent talks to, and the allowlist: a sender is let in only if one of these
-/// people holds their account. Accounts are linked here explicitly, never inferred from names.
+/// The people the agent talks to, all on equal footing, and the allowlist for remote surfaces:
+/// a sender is let in only if one of these people holds their account. Accounts are linked here
+/// explicitly, by whoever operates the host, never inferred from names.
 /// </summary>
 public sealed class PeopleRegistry
 {
-    /// <summary>The account the console and an unproxied local web chat speak from.</summary>
-    public const string LocalSender = "local";
+    /// <summary>The sender of a surface that cannot tell who is on the other end.</summary>
+    public const string AnonymousSender = "local";
 
+    private readonly Dictionary<string, Person> _byId;
     private readonly Dictionary<string, Person> _byAccount;
 
     public PeopleRegistry(IEnumerable<Person> people)
     {
         People = people.ToArray();
-        if (People.Count(p => p.Owner) > 1)
-            throw new ArgumentException("Only one person can be the owner.", nameof(people));
-
+        _byId = new Dictionary<string, Person>(StringComparer.Ordinal);
         _byAccount = new Dictionary<string, Person>(StringComparer.Ordinal);
         foreach (var person in People)
-        foreach (var account in person.Accounts)
         {
-            if (!_byAccount.TryAdd(account, person))
-                throw new ArgumentException($"Account '{account}' is linked to more than one person.", nameof(people));
+            if (person.Id == AnonymousSender)
+                throw new ArgumentException($"'{AnonymousSender}' is not a person id.", nameof(people));
+            if (!_byId.TryAdd(person.Id, person))
+                throw new ArgumentException($"Person '{person.Id}' appears more than once.", nameof(people));
+            foreach (var account in person.Accounts)
+            {
+                if (!_byAccount.TryAdd(account, person))
+                    throw new ArgumentException($"Account '{account}' is linked to more than one person.", nameof(people));
+            }
         }
     }
 
     public IReadOnlyList<Person> People { get; }
 
-    /// <summary>
-    /// The registry used when no file exists: an owner reachable only from this machine, so local
-    /// development keeps working and no remote surface lets anyone in.
-    /// </summary>
-    public static PeopleRegistry LocalOnly() =>
-        new([new Person("owner", Owner: true, [$"cli:{LocalSender}", $"webchat:{LocalSender}"])]);
+    public static PeopleRegistry Empty { get; } = new([]);
 
     /// <summary>
-    /// Read a registry from JSON: an object keyed by person id, each with <c>accounts</c> and an
-    /// optional <c>owner</c> flag. A missing file gives <see cref="LocalOnly"/>.
+    /// Read a registry from JSON: an object keyed by person id, each with its <c>accounts</c>.
+    /// A missing file gives <see cref="Empty"/>.
     /// </summary>
     public static PeopleRegistry Load(string path)
     {
         if (!File.Exists(path))
-            return LocalOnly();
+            return Empty;
 
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var people = document.RootElement.EnumerateObject().Select(entry => new Person(
             entry.Name,
-            entry.Value.TryGetProperty("owner", out var owner) && owner.ValueKind == JsonValueKind.True,
             entry.Value.TryGetProperty("accounts", out var accounts)
                 ? accounts.EnumerateArray().Select(a => a.GetString() ?? string.Empty).Where(a => a.Length > 0).ToArray()
                 : []));
         return new PeopleRegistry(people);
     }
+
+    /// <summary>The person with this id, or null when there is none.</summary>
+    public Person? Find(string id) => _byId.GetValueOrDefault(id);
 
     /// <summary>The person who holds this account, or null when nobody does.</summary>
     public Person? Resolve(string surface, string senderId) =>
