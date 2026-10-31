@@ -10,7 +10,6 @@ Group=cloudagent
 WorkingDirectory=/opt/cloudagent/current
 EnvironmentFile=/etc/cloudagent/cloudagent.env
 Environment=HOME=/var/lib/cloudagent
-Environment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
 ExecStart=/opt/cloudagent/current/CloudAgent.Host
 Restart=on-failure

@@ -34,6 +34,7 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator
                 | GatewayIntents.MessageContent
                 | GatewayIntents.GuildMessageTyping
                 | GatewayIntents.DirectMessageTyping,
+            LogLevel = LogSeverity.Info,
         });
     }
 
@@ -45,6 +46,11 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator
         Func<InboundMessage, CancellationToken, Task> onMessage, CancellationToken cancellationToken)
     {
         _onMessage = onMessage;
+        _client.Log += message =>
+        {
+            Console.WriteLine($"  [discord] {message}");
+            return Task.CompletedTask;
+        };
         _client.MessageReceived += HandleMessageAsync;
         _client.UserIsTyping += HandleTypingAsync;
 
