@@ -108,6 +108,7 @@ To run it on a server, see [deploying to a VPS](docs/deploy.md).
 | `CONTEXT_ROUTING` | Who chooses per turn how much memory to recall and which tool categories to offer (see [context routing](docs/design/proposals/context-routing.md)): `decision` for the Foundry decision model, `generative` for the background chat model, `off` for the full pipeline every turn. Decisions go to `.agent/routing.jsonl` | `decision` when the two variables below are set, else `off` |
 | `LEARN_IDLE_MIN` | Minutes a conversation must be quiet before the sleep timer learns from it: what was said since the last pass (not tool output) is archived as episodes, and its durable facts are staged for review | 2 |
 | `TOKEN_BUDGET` | Tokens, input and output together, the workspace's agents may spend. Once spent, a turn in progress ends in a reply without more tools, later messages get a fixed reply without calling the model, and consolidation stops. A 5% reserve allows the closing replies; past it every call is refused. Spending is kept in `.agent/usage.json` across restarts | no limit |
+| `MODEL_PRICES` | What each model charges, as `model=input/output` dollars per million tokens separated by `;`, for example `gpt-6-luna=0.10/0.25`. Only `admin usage` reads it; a model without a price is counted in tokens and flagged | none |
 | `CODE_REPOS` | Repositories a coding agent may work on, as `name=path` pairs separated by `;` | none |
 | `CODE_COMMANDS` | Programs a coding agent may run in them, comma separated | `dotnet,git,npm,node` |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
@@ -156,6 +157,27 @@ Everything the agent does is kept under the workspace's `.agent` folder, which i
 
 Deleting a web chat conversation ends its session and removes its transcript, saved context, and
 session memory. What it added to personal and project memory stays, and so do the ledgers.
+
+## Administration
+
+Operating the host is done on its own machine, outside any conversation: whoever can run these
+already has access to the machine, and the agent has no way to reach them.
+
+```bash
+CloudAgent.Host admin people list
+CloudAgent.Host admin people add jose
+CloudAgent.Host admin people link jose discord:485305305144754176
+CloudAgent.Host admin people refused
+CloudAgent.Host admin status
+CloudAgent.Host admin usage --since 7d
+```
+
+`people` edits the people file, checks that the result loads, and keeps the previous file as
+`.bak`; the running host reads the file at startup, so restart it after a change. `people refused`
+lists the accounts the host turned away, read from its log, so an id can be linked without
+searching for it. `usage` groups the model calls in `usage.jsonl` by purpose, model, and agent, with
+cost from `MODEL_PRICES`. `--env-file <path>` reads a systemd-style environment file; without it
+`/etc/cloudagent/cloudagent.env` is used when present.
 
 ## The loop
 
