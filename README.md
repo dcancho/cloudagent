@@ -95,6 +95,7 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `AGENT_MEMORY_BUDGET_TOKENS` | Working-memory budget before compaction | 8000 |
 | `SLEEP_INTERVAL_MIN` | Minutes between consolidation passes, 0 or less disables | 30 |
 | `PERSONAL_MEMORY_PATH` | The personal memory database, shared across workspaces | `~/.cloudagent/memory/personal.db` |
+| `PEOPLE_FILE` | Who may talk to the agent, and which surface accounts belong to whom (see below) | `~/.cloudagent/people.json` |
 | `CONSOLIDATION_POLICY` | Path to the consolidation policy document | `./docs/consolidation-policy.md` |
 | `WEBCHAT`, `WEBCHAT_PORT` | Enable the web chat surface and set its port | off, 5080 |
 | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | Enable those surfaces | off |
@@ -106,6 +107,24 @@ fill it in, and run `./run.ps1`. The web chat is then at http://localhost:5080/.
 | `CODE_REPOS` | Repositories a coding agent may work on, as `name=path` pairs separated by `;` | none |
 | `CODE_COMMANDS` | Programs a coding agent may run in them, comma separated | `dotnet,git,npm,node` |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
+
+### People
+
+The people file is the allowlist. Each person has an id and the accounts that are theirs, as
+`surface:senderId`; a message from any other account is refused in a direct conversation and
+ignored in a group. Without the file, only the local console and web chat get in.
+
+```json
+{
+  "diego": { "owner": true, "accounts": ["cli:local", "webchat:local", "telegram:123456", "discord:789012"] },
+  "ana": { "accounts": ["discord:345678"] }
+}
+```
+
+The console and a local web chat speak as `local`. Behind Tailscale Serve, the web chat speaks as
+the tailnet login (`webchat:diego@example.com`). Personal memory belongs to the person in a direct
+conversation: the owner's is `PERSONAL_MEMORY_PATH`, anyone else's sits beside it. Group
+conversations keep no personal memory.
 
 ### Records
 

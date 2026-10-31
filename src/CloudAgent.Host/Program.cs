@@ -8,6 +8,7 @@ using CloudAgent.Core.Agents;
 using CloudAgent.Core.Loop;
 using CloudAgent.Core.Indexing;
 using CloudAgent.Core.Memory;
+using CloudAgent.Core.People;
 using CloudAgent.Core.Providers;
 using CloudAgent.Core.Surfaces;
 using CloudAgent.Surfaces;
@@ -108,6 +109,7 @@ workspaceTools
 // Memory paths: Personal is user-global, Project is shared; each agent gets its OWN session
 // store, so children do not share the parent's memory.
 var personalMemoryPath = config.PersonalMemoryPath;
+var people = PeopleRegistry.Load(config.PeoplePath);
 var projectMemoryPath = Path.Combine(workspace.Root, ".agent", "memory", "project.db");
 
 // Utility feedback loop: a shared append-only ledger of which injected memories actually
@@ -231,6 +233,7 @@ AgentProfile BuildCodeProfile(string name, string root)
 
 // The profile each running agent was built with, so its subagents inherit it.
 var agentProfiles = new System.Collections.Concurrent.ConcurrentDictionary<string, AgentProfile>();
+var personalPaths = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>();
 AgentProfile ProfileOf(string? agentId) =>
     agentId is not null && agentProfiles.TryGetValue(agentId, out var profile) ? profile : generalProfile;
 
@@ -253,14 +256,16 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
 // SQLite store (FTS5 + vector, RRF-fused) replaces the JSON files; memory embeddings use the
 // same backend as the index (Foundry when configured — pennies — else the offline hash).
 (MemoryManager Memory, ContextCompactor Compactor, UtilityTracker Utility, MemoryRetriever Retriever)
-    BuildMemoryStack(string agentId, string projectPath, ConversationKind? kind = null)
+    BuildMemoryStack(string agentId, string projectPath, string? personalPath, ConversationKind? kind = null)
 {
-    var store = new SqliteMemoryStore(new Dictionary<MemoryScope, string>
+    var scopes = new Dictionary<MemoryScope, string>
     {
-        [MemoryScope.Personal] = personalMemoryPath,
         [MemoryScope.Project] = projectPath,
         [MemoryScope.Session] = SessionMemoryPath(agentId),
-    });
+    };
+    if (personalPath is not null)
+        scopes[MemoryScope.Personal] = personalPath;
+    var store = new SqliteMemoryStore(scopes);
 
     // Ambient metadata stamped on every write: who was writing, where, in which conversation.
     var separator = agentId.IndexOf(':');
@@ -395,7 +400,9 @@ SubagentLoopBuilder buildChild = (child, input, childTools) =>
 {
     var profile = ProfileOf(child.ParentId);
     agentProfiles[child.Id] = profile;
-    var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id, profile.ProjectMemoryPath);
+    var personalPath = personalPaths.GetValueOrDefault(child.ParentId ?? "");
+    personalPaths[child.Id] = personalPath;
+    var (mem, comp, utility, retriever) = BuildMemoryStack(child.Id, profile.ProjectMemoryPath, personalPath);
     childTools.Register(new RememberTool(mem));
     RegisterColdRecovery(childTools, mem, child.Id);
     var attention = BuildAttention(profile.ChildOptions.SystemPrompt, retriever, $"child {child.Role}", child.Id);
@@ -411,8 +418,20 @@ var orchestrator = new AgentOrchestrator(bus, parentId => ProfileOf(parentId).To
 
 // Each conversation is a root agent that can spawn children. It perceives the human (its
 // surface queue) and its children (its mailbox) through a composite input.
-AgentConversation CreateConversation(string surface, string conversationId, ConversationKind kind)
+// Personal memory belongs to the one person in a direct conversation; a group keeps none, so
+// nothing personal is recalled in front of others or learned about someone there.
+string? PersonalPathFor(InboundMessage first)
 {
+    if (first.Kind != ConversationKind.Direct || people.Resolve(first.Surface, first.SenderId) is not { } person)
+        return null;
+    return person.Owner
+        ? personalMemoryPath
+        : Path.Combine(Path.GetDirectoryName(personalMemoryPath)!, $"personal-{TranscriptRecorder.ToFileName(person.Id)}.db");
+}
+
+AgentConversation CreateConversation(InboundMessage first)
+{
+    var (surface, conversationId, kind) = (first.Surface, first.ConversationId, first.Kind);
     var handle = bus.Register(role: surface, id: $"{surface}:{conversationId}");
     var queue = new QueueInputSource();
     var input = new CompositeInputSource(queue, bus.InputFor(handle));
@@ -420,7 +439,9 @@ AgentConversation CreateConversation(string surface, string conversationId, Conv
         ? code
         : generalProfile;
     agentProfiles[handle.Id] = profile;
-    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id, profile.ProjectMemoryPath, kind);
+    var personalPath = PersonalPathFor(first);
+    personalPaths[handle.Id] = personalPath;
+    var (mem, comp, utility, retriever) = BuildMemoryStack(handle.Id, profile.ProjectMemoryPath, personalPath, kind);
 
     var agentTools = new ToolRegistry();
     foreach (var tool in profile.Tools.All)
@@ -470,6 +491,7 @@ AgentConversation CreateConversation(string surface, string conversationId, Conv
         sleepJobs.TryRemove(handle.Id, out _);
         learners.TryRemove(handle.Id, out _);
         agentProfiles.TryRemove(handle.Id, out _);
+        personalPaths.TryRemove(handle.Id, out _);
         bus.Remove(handle.Id);
         (mem.Store as IDisposable)?.Dispose();
     });
@@ -531,7 +553,8 @@ if (config.WebchatEnabled)
 var turnTaking = config.TurnTakingEnabled
     ? new TurnTakingOptions()
     : new TurnTakingOptions { ImmediateSurfaces = surfaces.Select(s => s.Name).ToHashSet() };
-using var router = new ConversationRouter(surfaces, CreateConversation, turnTaking: turnTaking);
+using var router = new ConversationRouter(
+    surfaces, CreateConversation, m => people.Resolve(m.Surface, m.SenderId) is not null, turnTaking);
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
@@ -607,6 +630,9 @@ Console.WriteLine($"Workspace: {workspace.Root}");
 Console.WriteLine($"Search:    {search.Name}");
 Console.WriteLine($"Embeddings:{embeddings.Name} (index: {index.Count} chunk(s))");
 Console.WriteLine($"Memory:    sqlite hybrid (FTS5 + vector, RRF); budget {options.WorkingMemoryBudgetTokens} tok; personal {personalMemoryPath}");
+Console.WriteLine(File.Exists(config.PeoplePath)
+    ? $"People:    {people.People.Count} from {config.PeoplePath}; only their accounts get in"
+    : $"People:    no {config.PeoplePath}; only the local console and web chat get in");
 Console.WriteLine($"Recall:    rewrite {(queryRewriter is null ? "off" : "on")}, rerank {(reranker is null ? "off" : "on")}, budget {attentionOptions.RecallBudgetTokens} tok");
 Console.WriteLine($"Metacog:   {(attentionOptions.MetacognitionEnabled ? $"on (suppress after {attentionOptions.MetacognitionMinInjections} injections at ≤{attentionOptions.MetacognitionMaxUsefulRate:0.##} useful rate)" : "off")}");
 Console.WriteLine($"Utility:   ledger with {utilityLedger.Count} event(s); judge {(utilityJudge is null ? "off (echo provider)" : "on")}");

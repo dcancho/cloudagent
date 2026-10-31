@@ -76,8 +76,9 @@ public sealed class WebchatSurface(
                 return;
             }
 
+            var (senderId, senderName) = Sender(context.Request);
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
-            var client = new Client(socket);
+            var client = new Client(socket) { SenderId = senderId };
             string? conversationId = null;
 
             try
@@ -116,7 +117,7 @@ public sealed class WebchatSurface(
                     if (!string.IsNullOrWhiteSpace(text))
                     {
                         await onMessage(
-                            new InboundMessage("webchat", conversationId, ConversationKind.Direct, conversationId, "web", text, DateTimeOffset.UtcNow),
+                            new InboundMessage("webchat", conversationId, ConversationKind.Direct, senderId, senderName, text, DateTimeOffset.UtcNow),
                             cancellationToken);
                     }
                 }
@@ -315,7 +316,7 @@ public sealed class WebchatSurface(
                 return null;
             case "typing":
                 TypingReceived?.Invoke(new InboundTyping(
-                    "webchat", conversationId, conversationId, DateTimeOffset.UtcNow + TypingLifetime));
+                    "webchat", conversationId, client.SenderId, DateTimeOffset.UtcNow + TypingLifetime));
                 return null;
             case "message":
                 return json["text"]?.GetValue<string>();
@@ -342,11 +343,28 @@ public sealed class WebchatSurface(
         }
     }
 
+    /// <summary>
+    /// Who is on the other end. Behind Tailscale Serve the tailnet user arrives in identity headers
+    /// that Serve sets and strips from incoming requests; a direct local connection is the machine's
+    /// own user, <c>local</c>.
+    /// </summary>
+    private static (string Id, string Name) Sender(HttpRequest request)
+    {
+        var login = request.Headers["Tailscale-User-Login"].ToString();
+        if (string.IsNullOrWhiteSpace(login))
+            return ("local", "web");
+
+        var name = request.Headers["Tailscale-User-Name"].ToString();
+        return (login, string.IsNullOrWhiteSpace(name) ? login : name);
+    }
+
     private sealed class Client(WebSocket socket)
     {
         private readonly SemaphoreSlim _send = new(1, 1);
 
         public bool Typed { get; set; }
+
+        public string SenderId { get; init; } = "local";
 
         public async Task SendAsync(string frame, CancellationToken cancellationToken)
         {

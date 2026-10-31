@@ -23,7 +23,7 @@ public sealed class ConversationRouter : IDisposable
     private static readonly TimeSpan TypingLimit = TimeSpan.FromSeconds(90);
 
     private readonly IReadOnlyDictionary<string, ISurface> _surfaces;
-    private readonly Func<string, string, ConversationKind, AgentConversation> _sessionFactory;
+    private readonly Func<InboundMessage, AgentConversation> _sessionFactory;
     private readonly Func<InboundMessage, bool>? _authorize;
     private readonly TurnTaker _turns;
     private CancellationToken _runToken;
@@ -31,12 +31,13 @@ public sealed class ConversationRouter : IDisposable
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
 
     /// <param name="surfaces">The channels to listen on.</param>
-    /// <param name="sessionFactory">Builds a conversation given (surface, conversationId, kind).</param>
-    /// <param name="authorize">Optional allowlist check; unauthorized messages get a refusal.</param>
+    /// <param name="sessionFactory">Builds the conversation that a first message opens.</param>
+    /// <param name="authorize">Optional allowlist check. Unauthorized messages get a refusal in a direct
+    /// conversation and are ignored in a group, where a refusal would only be noise.</param>
     /// <param name="turnTaking">End-of-turn detection settings; defaults apply when null.</param>
     public ConversationRouter(
         IEnumerable<ISurface> surfaces,
-        Func<string, string, ConversationKind, AgentConversation> sessionFactory,
+        Func<InboundMessage, AgentConversation> sessionFactory,
         Func<InboundMessage, bool>? authorize = null,
         TurnTakingOptions? turnTaking = null)
     {
@@ -102,6 +103,9 @@ public sealed class ConversationRouter : IDisposable
     {
         if (_authorize is not null && !_authorize(message))
         {
+            if (message.Kind == ConversationKind.Group)
+                return;
+
             await surface
                 .SendAsync(new OutboundMessage(message.ConversationId, "Sorry, you're not authorized to talk to me."), cancellationToken)
                 .ConfigureAwait(false);
@@ -115,7 +119,7 @@ public sealed class ConversationRouter : IDisposable
     {
         var surface = _surfaces[burst.Surface];
         var key = $"{burst.Surface}:{burst.ConversationId}";
-        var session = _sessions.GetOrAdd(key, _ => OpenSession(surface, burst.ConversationId, burst.Messages[0].Kind));
+        var session = _sessions.GetOrAdd(key, _ => OpenSession(surface, burst.Messages[0]));
 
         if (surface is ITypingIndicator indicator)
             session.StartTyping(indicator, _runToken);
@@ -123,9 +127,10 @@ public sealed class ConversationRouter : IDisposable
         await session.Conversation.PostAsync(burst.Text, _runToken).ConfigureAwait(false);
     }
 
-    private Session OpenSession(ISurface surface, string conversationId, ConversationKind kind)
+    private Session OpenSession(ISurface surface, InboundMessage first)
     {
-        var conversation = _sessionFactory(surface.Name, conversationId, kind);
+        var conversationId = first.ConversationId;
+        var conversation = _sessionFactory(first);
         var session = new Session(conversation, conversationId, CancellationTokenSource.CreateLinkedTokenSource(_runToken));
 
         conversation.Responded += text =>

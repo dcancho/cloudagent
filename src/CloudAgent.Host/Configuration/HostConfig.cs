@@ -16,6 +16,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="TavilyApiKey">Web-search key; null leaves search unconfigured.</param>
 /// <param name="PersonalMemoryPath">The personal memory database, shared by every workspace of this user
 /// (<c>PERSONAL_MEMORY_PATH</c>).</param>
+/// <param name="PeoplePath">The people the agent talks to and their linked accounts, which is also the
+/// allowlist (<c>PEOPLE_FILE</c>); without the file only the local console and web chat get in.</param>
 /// <param name="ConsolidationPolicyPath">Resolved path to the consolidation policy doc
 /// (<c>CONSOLIDATION_POLICY</c>); the host reads it with a built-in fallback if absent.</param>
 /// <param name="MemoryBudgetTokens">Working-memory compaction budget (<c>AGENT_MEMORY_BUDGET_TOKENS</c>).</param>
@@ -42,6 +44,7 @@ public sealed record HostConfig(
     string WorkspaceRoot,
     string? TavilyApiKey,
     string PersonalMemoryPath,
+    string PeoplePath,
     string ConsolidationPolicyPath,
     int MemoryBudgetTokens,
     int SleepIntervalMinutes,
@@ -101,6 +104,8 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("PERSONAL_MEMORY_PATH")
                 ?? Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudagent", "memory", "personal.db"),
+            Environment.GetEnvironmentVariable("PEOPLE_FILE")
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudagent", "people.json"),
             policyPath,
             budget,
             sleep,

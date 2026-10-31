@@ -32,6 +32,8 @@ public sealed class RememberTool(MemoryManager memory) : ITool
         var scopeText = input.GetStringOrNull("scope") ?? "project";
         if (!Enum.TryParse<MemoryScope>(scopeText, ignoreCase: true, out var scope))
             return ToolResult.Fail($"Unknown scope '{scopeText}'. Use personal, project, or session.");
+        if (!memory.Holds(scope))
+            return ToolResult.Fail($"This conversation keeps no {scopeText.ToLowerInvariant()} memory.");
 
         var importance = Math.Clamp(input.GetInt("importance", 50), 0, 100) / 100.0;
 
