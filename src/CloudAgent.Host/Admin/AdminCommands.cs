@@ -26,6 +26,10 @@ public static class AdminCommands
           people remove <id>               Take a person out; their memory and conversations stay
           people who <account>             Who holds this account
           people refused [--days <n>]      Accounts turned away in the last n days (default 7)
+          proposals                       Memory proposals waiting for a decision
+          proposals show <id>              The facts, evidence and summary of one proposal
+          proposals approve <id>           Have the host apply it; it does within a minute if its conversation is open
+          proposals discard <id>           Have the host discard it within a minute
           status                           Provider, surfaces, people, budget, ledger, spending today
           usage [--since 24h|7d|all]       Model calls by purpose, model and agent, with cost
         """;
@@ -49,6 +53,10 @@ public static class AdminCommands
                 ["people", "remove", var id] => Edit(config, output, f => { f.Remove(id); return $"Removed {id}."; }),
                 ["people", "who", var account] => PeopleWho(config, account, output),
                 ["people", "refused", ..var options] => PeopleRefused(config, options, output),
+                ["proposals"] => ProposalsList(config, output),
+                ["proposals", "show", var id] => ProposalShow(config, id, output),
+                ["proposals", "approve", var id] => ProposalDecide(config, id, PendingConsolidations.Decision.Approve, output),
+                ["proposals", "discard", var id] => ProposalDecide(config, id, PendingConsolidations.Decision.Discard, output),
                 ["status"] => Status(config, output),
                 ["usage", ..var options] => UsageCommand(config, options, output),
                 _ => Fail(error, Usage, 2),
@@ -155,6 +163,59 @@ public static class AdminCommands
         var recent = ReadUsage(config, since);
         var report = Core.Providers.UsageReport.Build(recent, ModelPrices.Parse(config.ModelPrices));
         output.WriteLine($"Last 24h:   {Describe(report.Total)}");
+        return 0;
+    }
+
+    private static PendingConsolidations Pending(HostConfig config) =>
+        new(Path.Combine(config.WorkspaceRoot, ".agent", "memory", "pending"));
+
+    private static int ProposalsList(HostConfig config, TextWriter output)
+    {
+        var pending = Pending(config);
+        var proposals = pending.List();
+        if (proposals.Count == 0)
+        {
+            output.WriteLine("No proposals waiting.");
+            return 0;
+        }
+
+        var decisions = pending.Decisions();
+        foreach (var p in proposals)
+        {
+            var decision = decisions.TryGetValue(p.Id, out var d) ? $"  {d.ToString().ToLowerInvariant()} requested" : "";
+            output.WriteLine(
+                $"{p.Id}  {p.At.UtcDateTime:yyyy-MM-dd HH:mm}  {Clip(p.AgentId, 34),-35}" +
+                $"{p.Facts.Count} fact(s), {(p.EpisodeSummary is null ? "no summary" : "summary")}, replaces {p.Replaces.Count}{decision}");
+        }
+        return 0;
+    }
+
+    private static int ProposalShow(HostConfig config, string id, TextWriter output)
+    {
+        var proposal = Pending(config).Get(id);
+        if (proposal is null)
+        {
+            output.WriteLine($"No pending proposal '{id}'.");
+            return 1;
+        }
+
+        output.WriteLine($"{proposal.Id}  {proposal.At.UtcDateTime:yyyy-MM-dd HH:mm}  {proposal.AgentId}");
+        for (var i = 0; i < proposal.Facts.Count; i++)
+        {
+            var fact = proposal.Facts[i];
+            output.WriteLine($"\n{i + 1}. [{fact.Scope}, importance {fact.Importance.ToString("0.##", CultureInfo.InvariantCulture)}] {fact.Fact}");
+            output.WriteLine($"   evidence: {fact.Evidence}");
+        }
+        if (!string.IsNullOrWhiteSpace(proposal.EpisodeSummary))
+            output.WriteLine($"\nSummary that replaces {proposal.Replaces.Count} episode(s):\n{proposal.EpisodeSummary}");
+        return 0;
+    }
+
+    private static int ProposalDecide(HostConfig config, string id, PendingConsolidations.Decision decision, TextWriter output)
+    {
+        Pending(config).Decide(id, decision);
+        output.WriteLine($"{decision} requested for {id}. The running host carries it out within a minute" +
+                         (decision == PendingConsolidations.Decision.Approve ? ", once the conversation it came from is open." : "."));
         return 0;
     }
 

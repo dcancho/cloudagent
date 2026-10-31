@@ -151,6 +151,7 @@ var consolidationPolicy = File.Exists(policyPath)
       "well-grounded facts over many speculative ones.";
 
 var sleepJobs = new System.Collections.Concurrent.ConcurrentDictionary<string, SleepJob>();
+var memories = new System.Collections.Concurrent.ConcurrentDictionary<string, MemoryManager>();
 
 // Conversations that never compact would leave nothing in memory; a learner per conversation
 // archives and stages what was said once the conversation goes quiet.
@@ -293,6 +294,7 @@ IAttentionManager BuildAttention(string persona, MemoryRetriever retriever, stri
         ambient["kind"] = kind == ConversationKind.Direct ? "direct" : "group";
 
     var mem = new MemoryManager(store, embeddings, ambientMetadata: ambient);
+    memories[agentId] = mem;
     var comp = new ContextCompactor(summarizer, options, mem, new Consolidator(provider, mem, smallModel), snapshotter);
     var utility = new UtilityTracker(utilityLedger, utilityJudge, agentId);
     var retriever = new MemoryRetriever(mem, queryRewriter, reranker);
@@ -681,18 +683,65 @@ if (!isEcho && sleepMinutes > 0)
                 {
                     using var usage = UsageScope.Begin(id);
                     var result = await job.RunAsync(cts.Token);
-                    if (result.Demoted > 0 || result.Promoted > 0 || result.StagedProposalId is not null)
-                        Console.WriteLine(
-                            $"  😴 sleep: {result.Demoted} demoted, {result.Promoted} strata move(s), " +
-                            $"staged: {result.StagedProposalId ?? "none"}");
+                    Console.WriteLine(
+                        $"  😴 [{id}] sleep: {result.Demoted} demoted, {result.Promoted} strata move(s), " +
+                        $"staged: {result.StagedProposalId ?? "none"}");
                 }
                 catch (OperationCanceledException)
                 {
                     break;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // sleep is best-effort; it gets another chance next interval
+                    Console.Error.WriteLine($"  ✖ [{id}] sleep failed: {ex.Message}");
+                }
+            }
+        }
+    });
+
+    _ = Task.Run(async () =>
+    {
+        while (!cts.Token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            foreach (var (id, decision) in pendingConsolidations.Decisions())
+            {
+                try
+                {
+                    var proposal = pendingConsolidations.Get(id);
+                    if (proposal is null)
+                    {
+                        pendingConsolidations.ClearDecision(id);
+                    }
+                    else if (decision == PendingConsolidations.Decision.Discard)
+                    {
+                        pendingConsolidations.Remove(id);
+                        await consolidationLedger.AppendAsync("discard", $"proposal {id} discarded by the operator", cts.Token);
+                        pendingConsolidations.ClearDecision(id);
+                        Console.WriteLine($"  📝 proposal {id} discarded by the operator");
+                    }
+                    else if (memories.TryGetValue(proposal.AgentId, out var memory))
+                    {
+                        var outcome = await pendingConsolidations.ApplyAsync(proposal, memory, consolidationLedger, cts.Token);
+                        pendingConsolidations.ClearDecision(id);
+                        Console.WriteLine($"  📝 {outcome}, approved by the operator");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  ✖ proposal {id}: could not carry out the operator's decision: {ex.Message}");
                 }
             }
         }

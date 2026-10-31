@@ -173,6 +173,9 @@ CloudAgent.Host admin people link jose discord:485305305144754176
 CloudAgent.Host admin people refused
 CloudAgent.Host admin status
 CloudAgent.Host admin usage --since 7d
+CloudAgent.Host admin proposals
+CloudAgent.Host admin proposals show <id>
+CloudAgent.Host admin proposals approve <id>
 ```
 
 `people` edits the people file, checks that the result loads, and keeps the previous file as
@@ -181,6 +184,10 @@ lists the accounts the host turned away, read from its log, so an id can be link
 searching for it. `usage` groups the model calls in `usage.jsonl` by purpose, model, and agent, with
 cost from `MODEL_PRICES`. `--env-file <path>` reads a systemd-style environment file; without it
 `/etc/cloudagent/cloudagent.env` is used when present.
+
+`proposals` lists what the sleep pass staged for review and `show` prints its facts with their evidence. `approve` and
+`discard` leave a decision file that the running host carries out within a minute, since it owns the memory and the
+ledger; an approval waits until the conversation it came from is open.
 
 ## The loop
 

@@ -65,6 +65,48 @@ public sealed class PendingConsolidations(string directory)
             File.Delete(path);
     }
 
+    /// <summary>An operator's decision on a staged proposal, left for the host to carry out.</summary>
+    public enum Decision
+    {
+        Approve,
+        Discard,
+    }
+
+    /// <summary>
+    /// Record a decision on a staged proposal without applying it. The host that owns the memory and the
+    /// ledger carries it out, so a second process never writes either.
+    /// </summary>
+    public void Decide(string id, Decision decision)
+    {
+        if (Get(id) is null)
+            throw new InvalidOperationException($"No pending proposal '{id}'.");
+
+        File.WriteAllText(Path.Combine(directory, $"{id}.decision"), decision.ToString().ToLowerInvariant());
+    }
+
+    /// <summary>The decisions waiting to be carried out, by proposal id.</summary>
+    public IReadOnlyDictionary<string, Decision> Decisions()
+    {
+        var decisions = new Dictionary<string, Decision>();
+        if (!Directory.Exists(directory))
+            return decisions;
+
+        foreach (var path in Directory.EnumerateFiles(directory, "*.decision"))
+        {
+            if (Enum.TryParse<Decision>(File.ReadAllText(path).Trim(), ignoreCase: true, out var decision))
+                decisions[Path.GetFileNameWithoutExtension(path)] = decision;
+        }
+        return decisions;
+    }
+
+    /// <summary>Forget a decision once it has been carried out.</summary>
+    public void ClearDecision(string id)
+    {
+        var path = Path.Combine(directory, $"{id}.decision");
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
     /// <summary>
     /// Apply a staged proposal: write its facts (source "distillation"), store the dense
     /// summary, and demote the episodes it replaces to Cold — condensed, never destroyed.
