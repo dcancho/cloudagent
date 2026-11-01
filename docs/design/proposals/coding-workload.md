@@ -51,9 +51,10 @@ person (Discord) -> conversation agent (host) -> coding session (one container) 
 
 ### The sandbox
 
-One container per coding session, not one per command and not one per tool. A conversation enters the
-coding workload when it first needs to run something; the host then starts a session container and
-keeps it until the conversation is idle for a while, ends, or the host stops. Inside it:
+One container per coding session, not one per command and not one per tool. A session belongs to a
+repository. A conversation enters the coding workload when it first needs to run something; the host
+then starts the repository's session container, or joins the one that is running, and keeps it until
+nobody has used it for a while or the host stops. Inside it:
 
 - the conversation agent acts through `run_command`, which executes in the running container, so
   restored packages, build output, and installed tools persist across commands;
@@ -61,7 +62,8 @@ keeps it until the conversation is idle for a while, ends, or the host stops. In
   same container. There is at most one coding agent running per session, and it cannot start
   another; a second request while one runs is refused. Allowing more is a later decision, not a
   property of the design;
-- there is at most one session at a time on the pilot machine, a setting that can grow later.
+- there is at most one session at a time on the pilot machine, a setting that can grow later; see
+  below for what that means for several projects.
 
 The session container has:
 
@@ -76,6 +78,29 @@ The session container has:
   limit, after which the container is removed and its directory kept for inspection.
 
 The host keeps running under systemd. Only code execution moves into the container.
+
+### Several changes, several projects, and capacity
+
+Several changes to the same repository are git worktrees inside its session. The session directory
+holds the clone and one worktree per change, each on its own branch, created by the host before
+anything runs in it. The changes share one object store and one restored package cache, and one
+cannot overwrite another's files by accident. Several conversations working on the same repository
+share its session, each in its own worktree, and closing a conversation does not stop a session others
+are using.
+
+A different repository needs a different session. With one session at a time, starting it first
+removes the idle one; if a command or a coding agent is still running there, the request is refused
+with that reason. A queue is a later decision. Removing a session keeps the directory. A worktree is
+deleted and its branch pruned once its pull request is closed or after 14 days, and build output
+is the largest thing on disk.
+
+The pilot machine has 2 vCPUs, 3.8 GB of memory, and 38 GB of disk with 35 free. One 2 GB session
+fits beside the service; two do not. That is why a session is per repository and not per task, and
+why capacity, not design, is what limits parallel work.
+
+The host never runs git inside a repository the container can write: its hooks, configuration, and
+references are under the container's control. The session produces a bundle or a patch series, and the
+host applies it in its own clone with hooks disabled before it pushes.
 
 ### The coding agent as a tool
 
