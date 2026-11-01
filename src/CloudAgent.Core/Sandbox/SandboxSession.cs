@@ -3,7 +3,7 @@ using System.Globalization;
 namespace CloudAgent.Core.Sandbox;
 
 /// <summary>
-/// One conversation's container. It starts on the first command, serves commands one at a time so installed
+/// One repository's container, shared by the conversations working on it. It starts on the first command, serves commands one at a time so installed
 /// packages and build output persist, and is removed when it has been idle too long, has lived too long, or
 /// is stopped. The task directory is never removed.
 /// </summary>
@@ -23,6 +23,12 @@ public sealed class SandboxSession : ISandboxSession
         _repository = repository;
         _directory = taskDirectory;
     }
+
+    /// <summary>The repository this session works on.</summary>
+    public string Repository => _repository;
+
+    /// <summary>Whether a command is running or waiting to start.</summary>
+    public bool IsBusy => _gate.CurrentCount == 0;
 
     /// <summary>Whether a container is currently held for this session.</summary>
     public bool IsRunning => _id is not null;
@@ -98,6 +104,21 @@ public sealed class SandboxSession : ISandboxSession
         }
     }
 
+    internal async Task<bool> TryStopIfIdleAsync()
+    {
+        if (!await _gate.WaitAsync(0).ConfigureAwait(false))
+            return false;
+        try
+        {
+            await StopAsync().ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private bool Expired() =>
         _host.Now - _lastUsed >= _host.Options.IdleLimit || _host.Now - _started >= _host.Options.LifeLimit;
 
@@ -113,7 +134,7 @@ public sealed class SandboxSession : ISandboxSession
         if (_id is not null)
             return;
 
-        _host.Claim(this);
+        await _host.ClaimAsync(this).ConfigureAwait(false);
         var id = "s-" + Guid.NewGuid().ToString("N")[..12];
         ProcessOutcome outcome;
         try

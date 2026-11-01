@@ -73,7 +73,7 @@ public sealed class SandboxHostTests : IDisposable
     {
         var (host, runner, _) = Create();
 
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
 
         Assert.Empty(runner.Calls);
         Assert.False(session.IsRunning);
@@ -88,7 +88,7 @@ public sealed class SandboxHostTests : IDisposable
     public async Task Later_commands_reuse_the_same_container()
     {
         var (host, runner, _) = Create();
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
 
         await session.ExecAsync(Exec());
         await session.ExecAsync(Exec("git", "status"));
@@ -101,7 +101,7 @@ public sealed class SandboxHostTests : IDisposable
     public async Task The_wrapper_is_called_through_sudo_as_the_sandbox_user_with_validated_parts()
     {
         var (host, runner, _) = Create();
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
 
         await session.ExecAsync(Exec("dotnet", "test") with { WorkingDirectory = "src", TimeoutSeconds = 300 });
 
@@ -122,7 +122,7 @@ public sealed class SandboxHostTests : IDisposable
         var (host, runner, _) = Create();
         runner.Handler = call => Task.FromResult(FakeRunner.ModeOf(call) == "exec" ? new ProcessOutcome(3, "out", "err", false) : new ProcessOutcome(0, "", "", false));
 
-        var result = await host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec());
+        var result = await host.SessionFor("cloudagent", _directory).ExecAsync(Exec());
 
         Assert.Equal(3, result.ExitCode);
         Assert.Equal("out", result.Output);
@@ -134,7 +134,7 @@ public sealed class SandboxHostTests : IDisposable
     public async Task A_session_idle_for_thirty_minutes_is_removed_and_the_next_command_starts_a_new_one()
     {
         var (host, runner, time) = Create();
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
         await session.ExecAsync(Exec());
 
         time.Advance(TimeSpan.FromMinutes(29));
@@ -154,7 +154,7 @@ public sealed class SandboxHostTests : IDisposable
     public async Task A_session_is_removed_after_four_hours_even_if_it_is_in_use()
     {
         var (host, runner, time) = Create();
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
         await session.ExecAsync(Exec());
 
         for (var i = 0; i < 11; i++)
@@ -175,7 +175,7 @@ public sealed class SandboxHostTests : IDisposable
     public async Task A_command_after_the_life_limit_gets_a_fresh_container()
     {
         var (host, runner, time) = Create(Options with { IdleTimeout = TimeSpan.FromHours(10) });
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
         await session.ExecAsync(Exec());
 
         time.Advance(TimeSpan.FromHours(4));
@@ -185,29 +185,84 @@ public sealed class SandboxHostTests : IDisposable
     }
 
     [Fact]
-    public async Task A_second_conversation_is_refused_while_the_first_holds_the_sandbox()
+    public async Task Conversations_on_the_same_repository_share_one_session()
     {
         var (host, runner, _) = Create();
-        var first = host.SessionFor("web:1", "cloudagent", _directory);
-        var second = host.SessionFor("web:2", "cloudagent", _directory);
+        var first = host.SessionFor("cloudagent", _directory);
+        var second = host.SessionFor("cloudagent", _directory);
+
+        await first.ExecAsync(Exec());
+        await second.ExecAsync(Exec("git", "status"));
+
+        Assert.Same(first, second);
+        Assert.Equal(["start", "exec", "exec"], runner.Modes());
+    }
+
+    [Fact]
+    public async Task Nothing_but_idleness_life_or_shutdown_ends_a_shared_session()
+    {
+        var (host, runner, time) = Create();
+        var session = host.SessionFor("cloudagent", _directory);
+        await session.ExecAsync(Exec());
+
+        time.Advance(TimeSpan.FromMinutes(5));
+        await host.ExpireAsync();
+        await host.SessionFor("cloudagent", _directory).ExecAsync(Exec());
+
+        Assert.True(session.IsRunning);
+        Assert.DoesNotContain("stop", runner.Modes());
+        await host.DisposeAsync();
+        Assert.Equal("stop", runner.Modes().Last());
+    }
+
+    [Fact]
+    public async Task A_different_repository_removes_an_idle_session_and_takes_its_place()
+    {
+        var (host, runner, _) = Create();
+        var first = host.SessionFor("cloudagent", _directory);
+        var second = host.SessionFor("other", _directory);
         await first.ExecAsync(Exec());
 
-        await Assert.ThrowsAsync<SandboxBusyException>(() => second.ExecAsync(Exec()));
-
-        Assert.Equal(["start", "exec"], runner.Modes());
-        await host.ReleaseAsync("web:1");
         await second.ExecAsync(Exec());
+
+        Assert.False(first.IsRunning);
+        Assert.True(second.IsRunning);
         Assert.Equal(["start", "exec", "stop", "start", "exec"], runner.Modes());
+    }
+
+    [Fact]
+    public async Task A_different_repository_is_refused_while_a_command_runs_and_the_message_names_the_busy_one()
+    {
+        var (host, runner, _) = Create();
+        var release = new TaskCompletionSource();
+        runner.Handler = async call =>
+        {
+            if (FakeRunner.ModeOf(call) == "exec")
+                await release.Task;
+            return new ProcessOutcome(0, "", "", false);
+        };
+        var running = host.SessionFor("cloudagent", _directory).ExecAsync(Exec());
+        while (!runner.Modes().Contains("exec"))
+            await Task.Delay(10);
+
+        var error = await Assert.ThrowsAsync<SandboxBusyException>(() => host.SessionFor("other", _directory).ExecAsync(Exec()));
+
+        Assert.Contains("'cloudagent'", error.Message);
+        Assert.DoesNotContain("stop", runner.Modes());
+        release.SetResult();
+        await running;
+        await host.SessionFor("other", _directory).ExecAsync(Exec());
     }
 
     [Fact]
     public async Task More_sessions_may_run_when_the_limit_allows()
     {
-        var (host, _, _) = Create(Options with { MaxSessions = 2 });
+        var (host, runner, _) = Create(Options with { MaxSessions = 2 });
 
-        await host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec());
-        await host.SessionFor("web:2", "cloudagent", _directory).ExecAsync(Exec());
-        await Assert.ThrowsAsync<SandboxBusyException>(() => host.SessionFor("web:3", "cloudagent", _directory).ExecAsync(Exec()));
+        await host.SessionFor("cloudagent", _directory).ExecAsync(Exec());
+        await host.SessionFor("other", _directory).ExecAsync(Exec());
+
+        Assert.DoesNotContain("stop", runner.Modes());
     }
 
     [Fact]
@@ -217,11 +272,11 @@ public sealed class SandboxHostTests : IDisposable
         runner.Handler = call => Task.FromResult(FakeRunner.ModeOf(call) == "start" ? new ProcessOutcome(2, "", "image not allowed", false) : new ProcessOutcome(0, "", "", false));
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec()));
+            () => host.SessionFor("cloudagent", _directory).ExecAsync(Exec()));
         Assert.Contains("image not allowed", error.Message);
 
         runner.Handler = _ => Task.FromResult(new ProcessOutcome(0, "", "", false));
-        await host.SessionFor("web:2", "cloudagent", _directory).ExecAsync(Exec());
+        await host.SessionFor("other", _directory).ExecAsync(Exec());
     }
 
     [Fact]
@@ -242,7 +297,7 @@ public sealed class SandboxHostTests : IDisposable
             }
             return new ProcessOutcome(0, "", "", false);
         };
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
 
         var first = session.ExecAsync(Exec());
         var second = session.ExecAsync(Exec());
@@ -259,26 +314,12 @@ public sealed class SandboxHostTests : IDisposable
     public async Task Disposing_the_host_stops_every_running_session()
     {
         var (host, runner, _) = Create(Options with { MaxSessions = 2 });
-        await host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec());
-        await host.SessionFor("web:2", "cloudagent", _directory).ExecAsync(Exec());
+        await host.SessionFor("cloudagent", _directory).ExecAsync(Exec());
+        await host.SessionFor("other", _directory).ExecAsync(Exec());
 
         await host.DisposeAsync();
 
         Assert.Equal(2, runner.Modes().Count(m => m == "stop"));
-    }
-
-    [Fact]
-    public async Task Closing_a_conversation_stops_its_session_and_keeps_the_directory()
-    {
-        var (host, runner, _) = Create();
-        var marker = Path.Combine(_directory, "work.txt");
-        File.WriteAllText(marker, "kept");
-        await host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec());
-
-        await host.ReleaseAsync("web:1");
-
-        Assert.Equal("stop", runner.Modes().Last());
-        Assert.Equal("kept", File.ReadAllText(marker));
     }
 
     [Fact]
@@ -296,7 +337,7 @@ public sealed class SandboxHostTests : IDisposable
     {
         var (host, runner, _) = Create();
         runner.Handler = call => Task.FromResult(FakeRunner.ModeOf(call) == "exec" ? new ProcessOutcome(124, "so far", "", false) : new ProcessOutcome(0, "", "", false));
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
 
         var result = await session.ExecAsync(Exec());
 
@@ -310,7 +351,7 @@ public sealed class SandboxHostTests : IDisposable
     {
         var (host, runner, _) = Create();
         runner.Handler = call => Task.FromResult(FakeRunner.ModeOf(call) == "exec" ? new ProcessOutcome(-1, "", "", true) : new ProcessOutcome(0, "", "", false));
-        var session = host.SessionFor("web:1", "cloudagent", _directory);
+        var session = host.SessionFor("cloudagent", _directory);
 
         var result = await session.ExecAsync(Exec());
 
@@ -331,7 +372,7 @@ public sealed class SandboxHostTests : IDisposable
             return Task.FromResult(new ProcessOutcome(0, "ok", "", false));
         };
 
-        var result = await host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec());
+        var result = await host.SessionFor("cloudagent", _directory).ExecAsync(Exec());
 
         Assert.Equal("ok", result.Output);
         Assert.Equal(["start", "exec", "stop", "start", "exec"], runner.Modes());
@@ -342,7 +383,7 @@ public sealed class SandboxHostTests : IDisposable
     {
         var (host, runner, _) = Create();
 
-        await host.SessionFor("web:1", "cloudagent", _directory).ExecAsync(Exec() with { TimeoutSeconds = 100 });
+        await host.SessionFor("cloudagent", _directory).ExecAsync(Exec() with { TimeoutSeconds = 100 });
 
         var index = runner.Calls.FindIndex(c => FakeRunner.ModeOf(c) == "exec");
         Assert.True(runner.Timeouts[index] > TimeSpan.FromSeconds(100));
@@ -355,7 +396,7 @@ public sealed class SandboxHostTests : IDisposable
         runner.Handler = call => Task.FromResult(FakeRunner.ModeOf(call) == "exec" ? new ProcessOutcome(0, "Passed!", "warning", false) : new ProcessOutcome(0, "", "", false));
         var workspace = new Workspace(_directory, ExecutionPolicy.Allow(["dotnet"]));
         Directory.CreateDirectory(Path.Combine(_directory, "src"));
-        var tool = new RunCommandTool(workspace, sandbox: host.SessionFor("web:1", "cloudagent", workspace.Root));
+        var tool = new RunCommandTool(workspace, sandbox: host.SessionFor("cloudagent", workspace.Root));
 
         var result = await tool.InvokeAsync(Input(("command", "dotnet test"), ("directory", "src")));
 
@@ -372,7 +413,7 @@ public sealed class SandboxHostTests : IDisposable
         var (host, runner, _) = Create();
         runner.Handler = call => Task.FromResult(FakeRunner.ModeOf(call) == "exec" ? new ProcessOutcome(124, "so far", "", false) : new ProcessOutcome(0, "", "", false));
         var workspace = new Workspace(_directory, ExecutionPolicy.Allow(["dotnet"]));
-        var tool = new RunCommandTool(workspace, sandbox: host.SessionFor("web:1", "cloudagent", workspace.Root));
+        var tool = new RunCommandTool(workspace, sandbox: host.SessionFor("cloudagent", workspace.Root));
 
         var result = await tool.InvokeAsync(Input(("command", "dotnet test")));
 
@@ -381,18 +422,29 @@ public sealed class SandboxHostTests : IDisposable
     }
 
     [Fact]
-    public async Task Run_command_tells_a_second_conversation_the_sandbox_is_in_use()
+    public async Task Run_command_names_the_busy_repository_when_the_sandbox_is_taken()
     {
-        var (host, _, _) = Create();
+        var (host, runner, _) = Create();
+        var release = new TaskCompletionSource();
+        runner.Handler = async call =>
+        {
+            if (FakeRunner.ModeOf(call) == "exec")
+                await release.Task;
+            return new ProcessOutcome(0, "", "", false);
+        };
         var workspace = new Workspace(_directory, ExecutionPolicy.Allow(["dotnet"]));
-        var first = new RunCommandTool(workspace, sandbox: host.SessionFor("web:1", "cloudagent", workspace.Root));
-        var second = new RunCommandTool(workspace, sandbox: host.SessionFor("web:2", "cloudagent", workspace.Root));
-        await first.InvokeAsync(Input(("command", "dotnet --version")));
+        var first = new RunCommandTool(workspace, sandbox: host.SessionFor("cloudagent", workspace.Root));
+        var second = new RunCommandTool(workspace, sandbox: host.SessionFor("other", workspace.Root));
+        var running = first.InvokeAsync(Input(("command", "dotnet --version")));
+        while (!runner.Modes().Contains("exec"))
+            await Task.Delay(10);
 
         var result = await second.InvokeAsync(Input(("command", "dotnet --version")));
 
         Assert.False(result.Success);
-        Assert.Contains("in use", result.Error);
+        Assert.Contains("'cloudagent'", result.Error);
+        release.SetResult();
+        await running;
     }
 
     [Fact]
@@ -400,7 +452,7 @@ public sealed class SandboxHostTests : IDisposable
     {
         var (host, runner, _) = Create();
         var workspace = new Workspace(_directory, ExecutionPolicy.Allow(["dotnet"]));
-        var tool = new RunCommandTool(workspace, sandbox: host.SessionFor("web:1", "cloudagent", workspace.Root));
+        var tool = new RunCommandTool(workspace, sandbox: host.SessionFor("cloudagent", workspace.Root));
 
         var result = await tool.InvokeAsync(Input(("command", "rm -rf /")));
 

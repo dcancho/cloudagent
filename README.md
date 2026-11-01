@@ -123,7 +123,7 @@ To run it on a server, see [deploying to a VPS](docs/deploy.md).
 | `SANDBOX_MEMORY` | Memory limit of the session container, such as `2g` or `512m` | `2g` |
 | `SANDBOX_CPUS` | CPU limit of the session container | `1.5` |
 | `SANDBOX_TMP_SIZE` | Size of the container's `/tmp`, which holds the package cache and build temp for the session's life | `1g` |
-| `SANDBOX_MAX_SESSIONS` | Sandbox session containers that may run at once; a conversation that needs one while all are taken is told the sandbox is in use | 1 |
+| `SANDBOX_MAX_SESSIONS` | Sandbox session containers that may run at once; a command for another repository removes an idle session, or is refused while a command is running | 1 |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
 
 ### People

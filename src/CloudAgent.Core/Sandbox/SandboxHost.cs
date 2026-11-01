@@ -1,9 +1,9 @@
 namespace CloudAgent.Core.Sandbox;
 
 /// <summary>
-/// Owns the sandbox on this machine: one session per conversation that runs commands, at most
-/// <see cref="SandboxOptions.MaxSessions"/> of them with a container at a time, and the cleanup of
-/// containers left behind by an earlier run of the host.
+/// Owns the sandbox on this machine: one session per repository, shared by every conversation working on it,
+/// at most <see cref="SandboxOptions.MaxSessions"/> of them with a container at a time (an idle one makes room
+/// for another repository, a busy one does not), and the cleanup of containers left behind by an earlier run.
 /// </summary>
 public sealed class SandboxHost(ISandboxProcessRunner runner, SandboxOptions options, TimeProvider? time = null) : IAsyncDisposable
 {
@@ -11,7 +11,7 @@ public sealed class SandboxHost(ISandboxProcessRunner runner, SandboxOptions opt
 
     private readonly SandboxWrapperClient _client = new(runner, options);
     private readonly TimeProvider _time = time ?? TimeProvider.System;
-    private readonly Dictionary<string, SandboxSession> _sessions = [];
+    private readonly Dictionary<string, SandboxSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<SandboxSession> _running = [];
     private readonly object _gate = new();
 
@@ -21,13 +21,13 @@ public sealed class SandboxHost(ISandboxProcessRunner runner, SandboxOptions opt
 
     internal DateTimeOffset Now => _time.GetUtcNow();
 
-    /// <summary>The session of a conversation, created on first use; its container starts with its first command.</summary>
-    public SandboxSession SessionFor(string conversationId, string repository, string taskDirectory)
+    /// <summary>The session of a repository, created on first use; its container starts with its first command.</summary>
+    public SandboxSession SessionFor(string repository, string taskDirectory)
     {
         lock (_gate)
         {
-            if (!_sessions.TryGetValue(conversationId, out var session))
-                _sessions[conversationId] = session = new SandboxSession(this, repository, taskDirectory);
+            if (!_sessions.TryGetValue(repository, out var session))
+                _sessions[repository] = session = new SandboxSession(this, repository, taskDirectory);
             return session;
         }
     }
@@ -43,18 +43,6 @@ public sealed class SandboxHost(ISandboxProcessRunner runner, SandboxOptions opt
         {
             Console.Error.WriteLine($"[sandbox] could not remove leftover containers: {ex.Message}");
         }
-    }
-
-    /// <summary>End a conversation's session and remove its container.</summary>
-    public async Task ReleaseAsync(string conversationId)
-    {
-        SandboxSession? session;
-        lock (_gate)
-        {
-            if (!_sessions.Remove(conversationId, out session))
-                return;
-        }
-        await session.StopAsync().ConfigureAwait(false);
     }
 
     /// <summary>Remove the containers of sessions that have been idle or alive too long.</summary>
@@ -93,13 +81,24 @@ public sealed class SandboxHost(ISandboxProcessRunner runner, SandboxOptions opt
             await session.StopAsync().ConfigureAwait(false);
     }
 
-    internal void Claim(SandboxSession session)
+    internal async Task ClaimAsync(SandboxSession session)
     {
-        lock (_gate)
+        while (true)
         {
-            if (!_running.Contains(session) && _running.Count >= options.MaxSessions)
-                throw new SandboxBusyException();
-            _running.Add(session);
+            SandboxSession? idle;
+            lock (_gate)
+            {
+                if (_running.Contains(session) || _running.Count < options.MaxSessions)
+                {
+                    _running.Add(session);
+                    return;
+                }
+                idle = _running.FirstOrDefault(s => !s.IsBusy);
+                if (idle is null)
+                    throw new SandboxBusyException(_running.Select(s => s.Repository));
+            }
+            if (!await idle.TryStopIfIdleAsync().ConfigureAwait(false))
+                throw new SandboxBusyException([idle.Repository]);
         }
     }
 

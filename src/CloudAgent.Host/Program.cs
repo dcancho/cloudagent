@@ -576,7 +576,7 @@ AgentConversation CreateConversation(InboundMessage first)
         agentTools.Register(tool);
     if (sandboxHost is not null && !ReferenceEquals(profile, generalProfile))
         agentTools.Register(new RunCommandTool(
-            profile.Workspace, sandbox: sandboxHost.SessionFor(handle.Id, profile.Name, profile.Workspace.Root)));
+            profile.Workspace, sandbox: sandboxHost.SessionFor(profile.Name, profile.Workspace.Root)));
     agentTools
         .Register(new RememberTool(mem))
         .Register(new ListConsolidationsTool(pendingConsolidations, handle.Id))
@@ -627,8 +627,6 @@ AgentConversation CreateConversation(InboundMessage first)
         agentProfiles.TryRemove(handle.Id, out _);
         personalPaths.TryRemove(handle.Id, out _);
         bus.Remove(handle.Id);
-        if (sandboxHost is not null)
-            _ = sandboxHost.ReleaseAsync(handle.Id);
         (mem.Store as IDisposable)?.Dispose();
     });
 }

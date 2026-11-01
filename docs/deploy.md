@@ -155,12 +155,13 @@ yourself out, the OVHcloud KVM console from the control panel still reaches the 
 ## Sandbox for coding commands (optional)
 
 `CODE_REPOS` stays unset until this is in place, because `run_command` would otherwise execute on the
-server as `cloudagent`. With the sandbox, a conversation that runs commands gets one session container
-under a separate user, `cloudagent-sandbox`, in rootless Docker. It starts with the conversation's first
-command and serves the later ones, so restored packages and build output persist. There is one session
-at a time (`SANDBOX_MAX_SESSIONS`); a second conversation is told the sandbox is in use. A session is
-removed after 30 minutes without commands, after 4 hours, when its conversation is deleted, and when
-the host stops; leftovers from a crashed host are removed at the next start. Its directory is kept.
+server as `cloudagent`. With the sandbox, each repository gets one session container under a separate user,
+`cloudagent-sandbox`, in rootless Docker. It starts with the first command and serves the later ones from
+any conversation on that repository, so restored packages and build output persist. There is one session
+at a time (`SANDBOX_MAX_SESSIONS`): a command for another repository removes the idle session and starts
+its own, or is refused, naming the busy repository, while a command is running. A session is removed
+after 30 minutes without commands, after 4 hours, and when the host stops, never because a conversation
+ends; leftovers from a crashed host are removed at the next start. Its directory is kept.
 
 ```bash
 cd ~/deploy/sandbox

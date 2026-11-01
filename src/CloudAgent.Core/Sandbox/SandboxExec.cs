@@ -40,10 +40,12 @@ public sealed record SandboxResult(int ExitCode, string Output, string Error, bo
 /// <summary>Runs commands in a sandbox session; the seam step 2 extends with another user.</summary>
 public interface ISandboxSession
 {
-    /// <exception cref="SandboxBusyException">Another conversation holds the sandbox.</exception>
+    /// <exception cref="SandboxBusyException">A command is running for another repository.</exception>
     Task<SandboxResult> ExecAsync(SandboxExec exec, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The sandbox has no room for another session.</summary>
-public sealed class SandboxBusyException()
-    : Exception("The sandbox is in use by another conversation. Try again when that one has finished.");
+/// <summary>The sandbox has no room for another session because a command is running in another repository.</summary>
+public sealed class SandboxBusyException(IEnumerable<string> repositories)
+    : Exception(
+        $"The sandbox is busy running a command for {string.Join(", ", repositories.Select(r => $"'{r}'"))}. " +
+        "Try again when it has finished.");
