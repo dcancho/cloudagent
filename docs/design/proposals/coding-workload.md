@@ -43,25 +43,37 @@ and its context grows with every tool result.
 ## Proposal
 
 ```
-person (Discord) -> conversation agent (host) -> sandbox container -> pull request -> review
-                                                  |  coding agent (claude -p)
+person (Discord) -> conversation agent (host) -> coding session (one container) -> pull request -> review
+                                                  |  commands the conversation agent runs
+                                                  |  one coding agent (claude -p), if it asks
                                                   |  clone on its own branch
-                                                  |  test commands
 ```
 
 ### The sandbox
 
-A disposable container per task, started by the host:
+One container per coding session, not one per command and not one per tool. A conversation enters the
+coding workload when it first needs to run something; the host then starts a session container and
+keeps it until the conversation is idle for a while, ends, or the host stops. Inside it:
+
+- the conversation agent acts through `run_command`, which executes in the running container, so
+  restored packages, build output, and installed tools persist across commands;
+- when the conversation agent asks, a coding agent (`claude -p` or `codex exec`) is started in the
+  same container. There is at most one coding agent running per session, and it cannot start
+  another; a second request while one runs is refused. Allowing more is a later decision, not a
+  property of the design;
+- there is at most one session at a time on the pilot machine, a setting that can grow later.
+
+The session container has:
 
 - the repository cloned onto a new branch, never the default branch;
-- a network allowlist: the git host, the package registries the project uses, and the coding agent's
-  API; nothing else;
+- a network allowlist: the package registries the project uses and, once the coding agent exists, its
+  API and sign-in hosts; nothing else;
 - no volume from the host except the task's own working directory, so the workspace, memory
   databases, and people file are out of reach;
-- a token for the git host that can push branches and open pull requests on that one repository, and
-  nothing else;
-- a wall-clock limit and a memory limit, after which the container is killed and its directory kept for
-  inspection.
+- no credential for the git host: the host clones before the session and pushes after it;
+- a wall-clock limit for every command, enforced inside the container because killing the client of
+  a `docker exec` does not stop the process it started, a limit on the session's life, and a memory
+  limit, after which the container is removed and its directory kept for inspection.
 
 The host keeps running under systemd. Only code execution moves into the container.
 
@@ -105,8 +117,9 @@ worker needs go in the spec or in `--append-system-prompt`.
 1. The conversation agent turns the request into a spec: the goal, the files in scope, and acceptance
    commands that fail now and should pass after (a test, a build, a linter). If it cannot write a
    command that tells done from not done, it asks the person instead of delegating.
-2. `code_task` runs the coding agent in a fresh sandbox.
-3. The host runs the acceptance commands and inspects the diff.
+2. `code_task` starts the coding agent in the conversation's session container.
+3. The host runs the acceptance commands in the same container, as the user without the agent's
+   credential, and inspects the diff.
 4. If a check fails, one retry: the same session is resumed with the failing output. A second
    failure ends the task and reports what was tried.
 5. If the checks pass and nothing outside scope changed, the branch is pushed and a pull request
@@ -170,9 +183,10 @@ in `CODE_PEOPLE` (a list of person ids, `diego` for the pilot). A group never of
 a group has several readers and several senders and the login is one person's.
 
 **Isolation.** Rootless Docker runs under its own unprivileged user, not the service user. The host
-starts a task through one wrapper that sudo allows for that single command, takes validated
-arguments (task id, repository name, image), and refuses anything else. A container escape then
-lands in a user that owns nothing the host owns.
+drives a session through one wrapper that sudo allows for that single command. The wrapper has a
+few modes (`start`, `exec`, `stop`, and one that removes leftovers when the host starts), takes
+validated arguments (session id, repository name, image, user, working directory, program), and
+refuses anything else. A container escape then lands in a user that owns nothing the host owns.
 
 **Image.** The .NET 10 SDK image plus the Claude Code binary, installed at build time and pinned to a
 version, so a run does not depend on a download. One image per repository, named in the repository
@@ -184,20 +198,28 @@ directory. The coding agent can commit but cannot push. When the task ends, the 
 from the task directory into its own clone and pushes it with a token that can push branches and open
 pull requests on that repository only.
 
-**Network.** The container joins a Docker network with no route out except an allowlisting proxy:
-the git host, the NuGet feeds, and the coding agent's API and sign-in endpoints. Telemetry and update
-checks are switched off. Acceptance commands run in a second container with no network and no
-credentials, so repository test code never runs next to the login.
+**Network.** The container joins a Docker network with no route out except an allowlisting proxy. The
+first step allows the NuGet feeds and nothing else; the coding agent's API and sign-in endpoints are
+added with the coding agent, because the host does every git operation and the sandbox needs no git
+host. Telemetry and update checks are switched off.
+
+**Two users in one container.** Commands run as `runner` (uid 1000). The coding agent runs as
+`coder` (uid 1001), and only `coder` can read the directory that holds the login. The repository
+is shared between them through the directory's ACL. Test code, which runs as `runner`, therefore
+never runs next to the login, without needing a second container. This rests on the container
+having no capabilities and no new privileges, so `runner` cannot become `coder`.
 
 **The login.** The first sign-in is done once by hand inside the sandbox image, with the unmodified
-binary and its own flow. The credential lives in a volume that only the coding agent's container
-mounts. Our code never reads it. The risk that remains is that the coding agent's own shell can read
-it, so a prompt injection could try to send it to an allowed host. The blast radius is one revocable
+binary and its own flow. The credential lives in a volume that the session mounts for `coder` only.
+Our code never reads it. The risk that remains is that the coding agent's own shell can read it, so
+a prompt injection could try to send it to an allowed host. The blast radius is one revocable
 login, which is accepted for the pilot and removed by moving to an API key with a spend cap.
 
-**Limits.** One task at a time on the pilot machine, 20 minutes of wall clock, 2 GB of memory, 1.5
-CPUs, and `--max-budget-usd` per task. After a timeout the container is killed and its directory
-kept.
+**Limits.** One session at a time on the pilot machine and one coding agent per session. A session
+lives at most four hours and is removed after 30 minutes without commands. Every command has a limit
+(20 minutes at most) enforced inside the container with `timeout`. The container has 2 GB of memory
+and 1.5 CPUs, and `--max-budget-usd` bounds each coding agent run. After a timeout the command is
+stopped, not the session; when the session is removed its directory is kept.
 
 **Task record.** What `code_task` returns to the conversation:
 
@@ -226,9 +248,6 @@ request unchanged.
 
 - Which acceptance commands can the conversation agent write reliably from a request, and what
   fraction of requests have none?
-- One container per task, or one per conversation with the clone kept between tasks. Reuse saves
-  clone and install time and carries state between tasks.
-- Whether the coding agent's transcript should enter memory at all, or only the outcome the
   conversation agent saw.
 - How to give the coding agent project knowledge that lives in our memory without handing it the
   memory database: a generated brief per task, or a read-only tool.
@@ -236,7 +255,7 @@ request unchanged.
 
 ## Order of work
 
-1. The sandbox: the unprivileged user, rootless Docker, the wrapper, the image, and a container
+1. The sandbox: the unprivileged user, rootless Docker, the wrapper with its session modes, the image, and a session container
    runner for the existing `run_command`, with the network allowlist and
    limits. Useful on its own and prerequisite to everything else.
 2. `ICodingAgentRunner` with the `claude -p` implementation, the structured record, and the ledger
