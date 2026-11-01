@@ -152,6 +152,76 @@ The runner takes its credentials from the environment so that the choice is conf
    authorized users" when the usage is billed to the key owner. The runner keeps authentication in
    configuration so that a change in the terms costs a setting, not code.
 
+## Decisions for the pilot
+
+Taken 2026-10-31.
+
+- **Credentials:** the account holder's subscription login, for the account holder's own tasks only.
+  Nobody else can start a coding task until an API key or a cloud provider is configured.
+- **Sandbox:** rootless Docker on the VM.
+- **First repository:** CloudAgent itself, a .NET solution with a light image and fast tests, to prove
+  the loop before paying for the heavy toolchain of a repository that mixes C++ with Emscripten,
+  TypeScript, Angular, and .NET.
+
+## Pilot definition
+
+**Who and where.** A coding task starts only in a direct conversation, and only for the people listed
+in `CODE_PEOPLE` (a list of person ids, `diego` for the pilot). A group never offers the tool, because
+a group has several readers and several senders and the login is one person's.
+
+**Isolation.** Rootless Docker runs under its own unprivileged user, not the service user. The host
+starts a task through one wrapper that sudo allows for that single command, takes validated
+arguments (task id, repository name, image), and refuses anything else. A container escape then
+lands in a user that owns nothing the host owns.
+
+**Image.** The .NET 10 SDK image plus the Claude Code binary, installed at build time and pinned to a
+version, so a run does not depend on a download. One image per repository, named in the repository
+configuration next to its path.
+
+**Git without credentials in the sandbox.** The host clones the repository into the task directory
+with its own read token, removes the credentials from the clone's configuration, and mounts only that
+directory. The coding agent can commit but cannot push. When the task ends, the host fetches the branch
+from the task directory into its own clone and pushes it with a token that can push branches and open
+pull requests on that repository only.
+
+**Network.** The container joins a Docker network with no route out except an allowlisting proxy:
+the git host, the NuGet feeds, and the coding agent's API and sign-in endpoints. Telemetry and update
+checks are switched off. Acceptance commands run in a second container with no network and no
+credentials, so repository test code never runs next to the login.
+
+**The login.** The first sign-in is done once by hand inside the sandbox image, with the unmodified
+binary and its own flow. The credential lives in a volume that only the coding agent's container
+mounts. Our code never reads it. The risk that remains is that the coding agent's own shell can read
+it, so a prompt injection could try to send it to an allowed host. The blast radius is one revocable
+login, which is accepted for the pilot and removed by moving to an API key with a spend cap.
+
+**Limits.** One task at a time on the pilot machine, 20 minutes of wall clock, 2 GB of memory, 1.5
+CPUs, and `--max-budget-usd` per task. After a timeout the container is killed and its directory
+kept.
+
+**Task record.** What `code_task` returns to the conversation:
+
+```json
+{
+  "status": "passed | failed | timed_out | out_of_scope",
+  "branch": "task/2f9c1a",
+  "commits": 2,
+  "files_changed": ["src/..."],
+  "files_outside_scope": [],
+  "acceptance": [{ "command": "dotnet test ...", "exit": 0, "output_ref": "result id" }],
+  "cost_usd": 0.42,
+  "agent_summary": "what the coding agent says it did"
+}
+```
+
+The agent's summary is shown as its claim. The status and the acceptance results are what the
+host measured.
+
+**First tasks.** Small changes where done is a command: add a test for an existing behavior, fix a
+failing test, rename a type across the solution. The pilot is judged by how often a task passes
+the acceptance commands on the first try and how often a reviewer would have merged the pull
+request unchanged.
+
 ## Open questions
 
 - Which acceptance commands can the conversation agent write reliably from a request, and what
@@ -166,7 +236,8 @@ The runner takes its credentials from the environment so that the choice is conf
 
 ## Order of work
 
-1. The sandbox: a container runner for the existing `run_command`, with the network allowlist and
+1. The sandbox: the unprivileged user, rootless Docker, the wrapper, the image, and a container
+   runner for the existing `run_command`, with the network allowlist and
    limits. Useful on its own and prerequisite to everything else.
 2. `ICodingAgentRunner` with the `claude -p` implementation, the structured record, and the ledger
    purpose. Behind a configuration flag, off by default.
