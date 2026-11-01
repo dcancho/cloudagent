@@ -14,7 +14,7 @@ Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
 ExecStart=/opt/cloudagent/current/CloudAgent.Host
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=30
+TimeoutStopSec=40
 MemoryMax=3G
 
 NoNewPrivileges=true

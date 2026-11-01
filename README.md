@@ -106,6 +106,7 @@ To run it on a server, see [deploying to a VPS](docs/deploy.md).
 | `TAVILY_API_KEY` | Real web search | no-op search |
 | `TURN_TAKING` | `0` answers every message on its own instead of waiting for the end of a burst | on |
 | `GROUP_ENGAGEMENT_SEC` | Seconds a person the agent is talking with in a group can keep going without mentioning it again; `0` needs a mention or reply every time | 90 |
+| `SHUTDOWN_DRAIN_SEC` | Seconds a stopping host (SIGTERM or Ctrl+C) lets running turns finish before cancelling them; new messages are only written down meanwhile. `0` cancels at once. Keep the service's `TimeoutStopSec` above it | 25 |
 | `MAX_INPUT_TOKENS` | Most input tokens (estimated, about 4 characters each) one model call may carry; past it stubs, recalled memories, the summary and old tool results are dropped in that order. `0` for no cap | 32000 |
 | `TOOL_POINTS` | Points the tool calls of one turn may spend before the agent must answer: a calculation costs 1, a web search or page fetch 3, most others 1 to 2. `0` for no limit beyond the 16 steps | 30 |
 | `TOOL_RESULT_INLINE_CHARS` | Characters of a tool result that enter the conversation (about 4 per token); a longer result is stored whole and the agent reads the rest with `read_result`. `0` keeps results inline | 3000 |

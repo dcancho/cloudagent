@@ -47,7 +47,7 @@ public sealed class WebchatSurface(
     Func<IReadOnlyList<ConversationSummary>>? conversations = null,
     Func<string, Task<bool>>? delete = null,
     WebchatWorkspaces? workspaces = null,
-    Func<string, bool>? admit = null) : ITypingSource, ITypingIndicator, IActivityIndicator
+    Func<string, bool>? admit = null) : ITypingSource, ITypingIndicator, IActivityIndicator, IReadinessSource
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(4);
 
@@ -157,6 +157,12 @@ public sealed class WebchatSurface(
         }
         catch (OperationCanceledException) { }
         await app.StopAsync(CancellationToken.None);
+    }
+
+    public async Task WaitUntilReadyAsync(string conversationId, CancellationToken cancellationToken = default)
+    {
+        while (!_clients.ContainsKey(conversationId))
+            await Task.Delay(500, cancellationToken);
     }
 
     public Task SendAsync(OutboundMessage message, CancellationToken cancellationToken = default)

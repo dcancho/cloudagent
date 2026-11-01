@@ -13,12 +13,13 @@ namespace CloudAgent.Surfaces;
 /// one-to-one DM is direct. Requires a bot token and the Message Content intent enabled in the
 /// Discord developer portal.
 /// </summary>
-public sealed class DiscordSurface : ITypingSource, ITypingIndicator, IHandleSource
+public sealed class DiscordSurface : ITypingSource, ITypingIndicator, IHandleSource, IReadinessSource
 {
     private static readonly TimeSpan TypingLifetime = TimeSpan.FromSeconds(10);
 
     private readonly DiscordSocketClient _client;
     private readonly string _token;
+    private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Func<InboundMessage, CancellationToken, Task>? _onMessage;
 
     public DiscordSurface(string token)
@@ -56,6 +57,11 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator, IHandleSou
         };
         _client.MessageReceived += HandleMessageAsync;
         _client.UserIsTyping += HandleTypingAsync;
+        _client.Ready += () =>
+        {
+            _ready.TrySetResult();
+            return Task.CompletedTask;
+        };
 
         await _client.LoginAsync(TokenType.Bot, _token);
         await _client.StartAsync();
@@ -68,6 +74,9 @@ public sealed class DiscordSurface : ITypingSource, ITypingIndicator, IHandleSou
 
         await _client.StopAsync();
     }
+
+    public Task WaitUntilReadyAsync(string conversationId, CancellationToken cancellationToken = default) =>
+        _ready.Task.WaitAsync(cancellationToken);
 
     public async Task SendAsync(OutboundMessage message, CancellationToken cancellationToken = default)
     {

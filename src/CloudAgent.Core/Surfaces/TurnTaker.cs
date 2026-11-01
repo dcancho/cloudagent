@@ -183,6 +183,24 @@ public sealed class TurnTaker : IDisposable
         return trimmed[^1] is '?' ? MessageShape.Complete : MessageShape.Neutral;
     }
 
+    /// <summary>Hand over every waiting burst now, without waiting for the people to finish.</summary>
+    public void Flush()
+    {
+        List<Burst> bursts;
+        lock (_gate)
+        {
+            bursts = _pending.Values
+                .Select(p => new Burst(p.Surface, p.ConversationId, p.Messages.ToList()))
+                .ToList();
+            foreach (var pending in _pending.Values)
+                pending.Timer?.Dispose();
+            _pending.Clear();
+        }
+
+        foreach (var burst in bursts)
+            Deliver(burst);
+    }
+
     /// <summary>Drop a conversation's waiting messages without delivering them.</summary>
     public void Discard(string surface, string conversationId)
     {
