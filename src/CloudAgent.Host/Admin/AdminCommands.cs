@@ -233,6 +233,8 @@ public static class AdminCommands
         }
 
         output.WriteLine($"Total       {Describe(report.Total)}");
+        if (report.Total.CachedTokens > 0)
+            output.WriteLine($"Cached      {report.Total.CachedTokens:N0} of {report.Total.InputTokens:N0} input tokens ({(double)report.Total.CachedTokens / report.Total.InputTokens:P1})");
         Table(output, "By purpose", report.ByPurpose);
         Table(output, "By model", report.ByModel);
         Table(output, "By agent", report.ByAgent);

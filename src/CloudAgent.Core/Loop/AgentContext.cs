@@ -40,6 +40,7 @@ public sealed class AgentContext
     /// <summary>The most recent message, or null if the context is empty.</summary>
     public Message? Last => _messages.Count == 0 ? null : _messages[^1];
 
+
     /// <summary>
     /// Remove the oldest messages, keeping roughly the most recent <paramref name="keepRecent"/>.
     /// The kept window is snapped forward to start on a user turn, which upholds two

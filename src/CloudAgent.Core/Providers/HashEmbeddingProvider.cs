@@ -35,7 +35,7 @@ public sealed class HashEmbeddingProvider(int dimensions = 256) : IEmbeddingProv
 
         foreach (var token in Tokenize(text))
         {
-            var hash = (uint)token.GetHashCode();
+            var hash = StableHash(token);
             var bucket = (int)(hash % (uint)_dimensions);
             // Signed contribution keeps buckets from only ever growing.
             vector[bucket] += (hash & 1) == 0 ? 1f : -1f;
@@ -43,6 +43,14 @@ public sealed class HashEmbeddingProvider(int dimensions = 256) : IEmbeddingProv
 
         Normalize(vector);
         return vector;
+    }
+
+    private static uint StableHash(string token)
+    {
+        var hash = 2166136261u;
+        foreach (var b in System.Text.Encoding.UTF8.GetBytes(token))
+            hash = (hash ^ b) * 16777619u;
+        return hash;
     }
 
     private static IEnumerable<string> Tokenize(string text)

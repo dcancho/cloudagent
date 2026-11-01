@@ -1,8 +1,10 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudAgent.Core.Abstractions;
 using CloudAgent.Core.Tools;
+using CloudAgent.Core.Tools.Results;
 
 namespace CloudAgent.Core.Loop;
 
@@ -97,6 +99,9 @@ public sealed class AgentLoop
 
     /// <summary>The id this agent's model calls are accounted to, when it has one.</summary>
     public string? AgentId { get; init; }
+
+    /// <summary>Where results too long for the context are kept whole; without it they are cut to <see cref="AgentOptions.MaxToolResultChars"/>.</summary>
+    public Tools.Results.ToolResultStore? Results { get; init; }
 
     /// <summary>
     /// Run the loop until <paramref name="cancellationToken"/> trips or
@@ -212,18 +217,20 @@ public sealed class AgentLoop
         var allDefinitions = _tools?.GetDefinitions() ?? [];
         var offered = _decision is null ? null : new HashSet<string>(_decision.Categories);
 
+        var points = 0;
         for (var hop = 0; ; hop++)
         {
             var toolDefinitions = SelectTools(allDefinitions, offered);
             var outOfBudget = _options.Budget?.Exhausted == true;
-            var lastStep = hop >= _options.MaxToolSteps || outOfBudget;
+            var outOfPoints = _options.MaxToolPoints > 0 && points >= _options.MaxToolPoints;
+            var lastStep = hop >= _options.MaxToolSteps || outOfPoints || outOfBudget;
             string? limit = null;
             if (lastStep)
             {
                 var reason = outOfBudget
                     ? "This workspace has used its token budget, so you cannot call tools now and will not get another turn until it is raised."
-                    : $"You have used all {_options.MaxToolSteps} tool steps for this turn and cannot call tools now.";
-                limit = reason + " Reply to the person: what you did, what is left, and what you need from them to continue.";
+                    : $"You have used this turn's tool budget ({points} points over {hop} steps), so you cannot call tools now.";
+                limit = reason + " Reply to the person in their language: what you found or did, what is left, and what you need from them to continue.";
             }
             var fit = InputCap.Fit(
                 new LlmRequest
@@ -235,7 +242,7 @@ public sealed class AgentLoop
                     Purpose = LlmPurpose.Turn,
                     MaxTokens = _options.MaxTokens,
                     Temperature = _options.Temperature,
-                    Tools = toolDefinitions,
+                    Tools = lastStep ? [] : toolDefinitions,
                 },
                 _options.MaxInputTokens,
                 limit,
@@ -271,7 +278,7 @@ public sealed class AgentLoop
                     string.IsNullOrWhiteSpace(response.Text)
                         ? outOfBudget
                             ? "I've used this workspace's token budget before finishing, so I'm stopping here."
-                            : $"I used all {_options.MaxToolSteps} tool steps I have for one turn before finishing. Tell me to continue and I will pick up from here."
+                            : $"I used this turn's tool budget before finishing. Tell me to continue and I will pick up from here."
                         : response.Text,
                     response.StopReason, response.InputTokens, response.OutputTokens)
                 {
@@ -291,16 +298,49 @@ public sealed class AgentLoop
             // Run each requested tool and feed its result back as a tool message.
             foreach (var call in response.ToolCalls)
             {
+                var weight = ToolWeights.Of(call.Name);
+                if (_options.MaxToolPoints > 0 && points > 0 && points + weight > _options.MaxToolPoints)
+                {
+                    _context.Add(Message.ToolResult(
+                        call.Id, call.Name, "ERROR: not run, this turn's tool budget does not cover it. Answer with what you have."));
+                    continue;
+                }
+
                 _turnTools.Add(call.Name);
+                points += weight;
                 var result = call.Name == RequestToolsName && offered is not null
                     ? RequestTools(call, offered)
                     : await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
                 var content = result.Success ? result.Content : $"ERROR: {result.Error}";
-                content = JsonTruncator.Truncate(content, _options.MaxToolResultChars);
+                content = Inline(call.Name, content);
                 _context.Add(Message.ToolResult(call.Id, call.Name, content));
                 ToolInvoked?.Invoke(call, result);
             }
         }
+    }
+
+    private string Inline(string tool, string content)
+    {
+        var limit = _options.MaxInlineResultChars;
+        if (Results is null || limit <= 0 || tool == ReadResultTool.ToolName || content.Length <= limit)
+            return JsonTruncator.Truncate(content, _options.MaxToolResultChars);
+
+        var head = content[..limit];
+        var boundary = Math.Max(head.LastIndexOf('\n'), head.LastIndexOf(' '));
+        if (boundary > limit * 8 / 10)
+            head = head[..boundary];
+
+        string id;
+        try
+        {
+            id = Results.Save(content);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return JsonTruncator.Truncate(content, _options.MaxToolResultChars);
+        }
+
+        return head + ToolResultStore.Footer(content.Length, head.Length, id);
     }
 
     /// <summary>

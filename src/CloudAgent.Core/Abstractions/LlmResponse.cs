@@ -23,7 +23,7 @@ public enum StopReason
 /// <param name="Text">The assistant's generated text.</param>
 /// <param name="StopReason">Why generation ended.</param>
 /// <param name="InputTokens">Tokens consumed by the prompt, if reported. On providers with
-/// prompt caching this counts only the <em>fresh</em> (uncached) input tokens.</param>
+/// prompt caching this includes the cached ones, so cache reads and writes are always a part of it.</param>
 /// <param name="OutputTokens">Tokens generated, if reported.</param>
 public sealed record LlmResponse(
     string Text,
