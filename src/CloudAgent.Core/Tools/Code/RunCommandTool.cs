@@ -16,9 +16,9 @@ namespace CloudAgent.Core.Tools.Code;
 /// shell: the command is split into a program and arguments, the program must be allowed by the
 /// workspace's execution policy, standard input is closed so nothing waits for a prompt, and
 /// environment variables that look like secrets are not passed on. With a sandbox launcher the program runs in
-/// a disposable container instead of on this machine, and the allowed programs are those the image has.
+/// the conversation's sandbox container instead of on this machine, and the allowed programs are those the image has.
 /// </summary>
-public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30_000, SandboxLauncher? sandbox = null) : ITool
+public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30_000, ISandboxSession? sandbox = null) : ITool
 {
     private const int DefaultTimeoutSeconds = 120;
     private const int MaxTimeoutSeconds = 600;
@@ -91,10 +91,8 @@ public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30
         string program, IReadOnlyList<string> arguments, string directory, TimeSpan timeout, CancellationToken cancellationToken)
     {
         var relative = Path.GetRelativePath(workspace.Root, directory);
-        var command = new SandboxCommand(
-            "cmd-" + Guid.NewGuid().ToString("N")[..12],
-            sandbox!.Repository,
-            workspace.Root,
+        var exec = new SandboxExec(
+            SandboxUsers.Runner,
             relative == "." ? "" : relative,
             Path.GetFileNameWithoutExtension(program),
             arguments,
@@ -104,10 +102,20 @@ public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30
                 ["GIT_PAGER"] = "cat",
                 ["PAGER"] = "cat",
                 ["MSBUILDDISABLENODEREUSE"] = "1",
-            });
+            },
+            (int)Math.Clamp(timeout.TotalSeconds, 1, SandboxOptions.MaxCommandSeconds));
 
         var watch = Stopwatch.StartNew();
-        var result = await sandbox.RunAsync(command, timeout, cancellationToken).ConfigureAwait(false);
+        SandboxResult result;
+        try
+        {
+            result = await sandbox!.ExecAsync(exec, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is SandboxBusyException or InvalidOperationException)
+        {
+            return ToolResult.Fail(ex.Message);
+        }
+
         var text = Cut(string.Join('\n', new[] { result.Output.TrimEnd(), result.Error.TrimEnd() }.Where(s => s.Length > 0)));
         if (result.TimedOut)
             return ToolResult.Fail($"Stopped after {watch.Elapsed.TotalSeconds:0} s without finishing.\n{text}");

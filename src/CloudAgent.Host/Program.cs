@@ -16,6 +16,7 @@ using CloudAgent.Core.Surfaces;
 using CloudAgent.Surfaces;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Agents;
+using CloudAgent.Core.Tools.Code;
 using CloudAgent.Core.Tools.Compute;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Results;
@@ -206,8 +207,10 @@ var sandboxOptions = config.SandboxRunner is null
     ? null
     : new SandboxOptions(
         config.SandboxRunner, config.SandboxImage ?? "", TimeSpan.FromSeconds(config.SandboxTimeoutSeconds),
-        config.SandboxMemory, config.SandboxCpus);
-var sandboxRunner = new SystemProcessRunner();
+        config.SandboxMemory, config.SandboxCpus, config.SandboxTmpSize, config.SandboxMaxSessions);
+var sandboxHost = sandboxOptions is null ? null : new SandboxHost(new SystemProcessRunner(), sandboxOptions);
+if (sandboxHost is not null)
+    await sandboxHost.ReapAsync();
 foreach (var repo in config.CodeRepos)
 {
     if (sandboxOptions is not null && sandboxOptions.Image.Length == 0)
@@ -238,8 +241,7 @@ AgentProfile BuildCodeProfile(string name, string root)
     var repoIndexPath = Path.Combine(state, "index.json");
     var repoIndex = VectorIndex.Load(repoIndexPath);
 
-    var sandbox = sandboxOptions is null ? null : new SandboxLauncher(sandboxRunner, sandboxOptions, name);
-    var tools = Toolset.CreateCode(repoWorkspace, search, sandbox)
+    var tools = (sandboxHost is null ? Toolset.CreateCode(repoWorkspace, search) : Toolset.CreateCodeWithoutCommands(repoWorkspace, search))
         .Register(new IndexWorkspaceTool(new WorkspaceIndexer(repoWorkspace, embeddings, repoIndex), repoIndex, repoIndexPath))
         .Register(new SearchIndexTool(embeddings, repoIndex))
         .Register(new SummarizeFileTool(repoWorkspace, summarizer));
@@ -572,6 +574,9 @@ AgentConversation CreateConversation(InboundMessage first)
     var agentTools = new ToolRegistry();
     foreach (var tool in profile.Tools.All)
         agentTools.Register(tool);
+    if (sandboxHost is not null && !ReferenceEquals(profile, generalProfile))
+        agentTools.Register(new RunCommandTool(
+            profile.Workspace, sandbox: sandboxHost.SessionFor(handle.Id, profile.Name, profile.Workspace.Root)));
     agentTools
         .Register(new RememberTool(mem))
         .Register(new ListConsolidationsTool(pendingConsolidations, handle.Id))
@@ -622,6 +627,8 @@ AgentConversation CreateConversation(InboundMessage first)
         agentProfiles.TryRemove(handle.Id, out _);
         personalPaths.TryRemove(handle.Id, out _);
         bus.Remove(handle.Id);
+        if (sandboxHost is not null)
+            _ = sandboxHost.ReleaseAsync(handle.Id);
         (mem.Store as IDisposable)?.Dispose();
     });
 }

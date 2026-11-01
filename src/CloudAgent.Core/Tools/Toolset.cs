@@ -1,4 +1,3 @@
-using CloudAgent.Core.Sandbox;
 using CloudAgent.Core.Tools.Code;
 using CloudAgent.Core.Tools.Files;
 using CloudAgent.Core.Tools.Web;
@@ -24,11 +23,17 @@ public static class Toolset
 
     /// <summary>
     /// The default set plus what working on code needs: exact edits, exact search, and running
-    /// the programs <paramref name="workspace"/> allows, in a container when <paramref name="sandbox"/> is given.
+    /// the programs <paramref name="workspace"/> allows on this machine.
     /// </summary>
-    public static ToolRegistry CreateCode(IWorkspace workspace, IWebSearchProvider search, SandboxLauncher? sandbox = null) =>
+    public static ToolRegistry CreateCode(IWorkspace workspace, IWebSearchProvider search) =>
+        CreateCodeWithoutCommands(workspace, search).Register(new RunCommandTool(workspace));
+
+    /// <summary>
+    /// <see cref="CreateCode"/> without <c>run_command</c>, for a workspace whose commands run in a sandbox
+    /// that belongs to each conversation and is registered per conversation.
+    /// </summary>
+    public static ToolRegistry CreateCodeWithoutCommands(IWorkspace workspace, IWebSearchProvider search) =>
         CreateDefault(workspace, search)
             .Register(new EditFileTool(workspace))
-            .Register(new SearchFilesTool(workspace))
-            .Register(new RunCommandTool(workspace, sandbox: sandbox));
+            .Register(new SearchFilesTool(workspace));
 }

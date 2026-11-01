@@ -62,6 +62,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="SandboxTimeoutSeconds">Wall-clock limit of one sandboxed command (<c>SANDBOX_TIMEOUT_SEC</c>).</param>
 /// <param name="SandboxMemory">Memory limit of the container (<c>SANDBOX_MEMORY</c>), such as <c>2g</c>.</param>
 /// <param name="SandboxCpus">CPU limit of the container (<c>SANDBOX_CPUS</c>), such as <c>1.5</c>.</param>
+/// <param name="SandboxTmpSize">Size of the container's <c>/tmp</c> (<c>SANDBOX_TMP_SIZE</c>), such as <c>1g</c>.</param>
+/// <param name="SandboxMaxSessions">How many sandbox sessions may run at once (<c>SANDBOX_MAX_SESSIONS</c>).</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -96,7 +98,9 @@ public sealed record HostConfig(
     string? SandboxImage = null,
     int SandboxTimeoutSeconds = SandboxOptions.DefaultTimeoutSeconds,
     string SandboxMemory = SandboxOptions.DefaultMemory,
-    string SandboxCpus = SandboxOptions.DefaultCpus)
+    string SandboxCpus = SandboxOptions.DefaultCpus,
+    string SandboxTmpSize = SandboxOptions.DefaultTmpSize,
+    int SandboxMaxSessions = SandboxOptions.DefaultMaxSessions)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -184,7 +188,13 @@ public sealed record HostConfig(
                 : SandboxOptions.DefaultMemory,
             Environment.GetEnvironmentVariable("SANDBOX_CPUS") is { } cpus && CpusPattern.IsMatch(cpus)
                 ? cpus
-                : SandboxOptions.DefaultCpus);
+                : SandboxOptions.DefaultCpus,
+            Environment.GetEnvironmentVariable("SANDBOX_TMP_SIZE") is { } tmpSize && MemoryPattern.IsMatch(tmpSize)
+                ? tmpSize
+                : SandboxOptions.DefaultTmpSize,
+            int.TryParse(Environment.GetEnvironmentVariable("SANDBOX_MAX_SESSIONS"), out var sessions) && sessions > 0
+                ? sessions
+                : SandboxOptions.DefaultMaxSessions);
     }
 
     private static readonly System.Text.RegularExpressions.Regex MemoryPattern = new("^[1-9][0-9]*[mg]$");

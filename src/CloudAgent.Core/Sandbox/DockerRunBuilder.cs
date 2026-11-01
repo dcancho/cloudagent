@@ -1,12 +1,13 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace CloudAgent.Core.Sandbox;
 
 /// <summary>
-/// Builds the <c>docker run</c> arguments for one sandboxed command. The container has no capabilities, a
-/// read-only root, one writable mount, and a network whose only exit is the egress proxy. The wrapper
-/// script on the VM rebuilds the same list from validated parts, so this is also the reference the script is
-/// tested against.
+/// Builds the docker arguments that drive a session container. The container has no capabilities, a
+/// read-only root, one writable mount, a limited life, and a network whose only exit is the egress proxy.
+/// The wrapper script on the VM rebuilds the same lists from validated parts, so this is also the
+/// reference the script is tested against.
 /// </summary>
 public static partial class DockerRunBuilder
 {
@@ -31,12 +32,12 @@ public static partial class DockerRunBuilder
     ];
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]{2,39}$")]
-    private static partial Regex TaskIdPattern();
+    private static partial Regex SessionIdPattern();
 
-    public static bool IsValidTaskId(string taskId) => TaskIdPattern().IsMatch(taskId);
+    public static bool IsValidSessionId(string sessionId) => SessionIdPattern().IsMatch(sessionId);
 
-    /// <summary>The container's name, which <c>docker kill</c> uses.</summary>
-    public static string ContainerName(string taskId) => SandboxOptions.NamePrefix + taskId;
+    /// <summary>The container's name, which the other docker commands use.</summary>
+    public static string ContainerName(string sessionId) => SandboxOptions.NamePrefix + sessionId;
 
     /// <summary>The caller's variables that may enter the container, in a fixed order.</summary>
     public static IReadOnlyList<KeyValuePair<string, string>> FilterEnvironment(IReadOnlyDictionary<string, string>? environment) =>
@@ -57,40 +58,64 @@ public static partial class DockerRunBuilder
         return $"{SandboxOptions.MountPoint}/{path}";
     }
 
-    /// <summary>The arguments after <c>docker</c>, starting with <c>run</c>.</summary>
-    /// <exception cref="ArgumentException">The task id or the working directory is not acceptable.</exception>
-    public static IReadOnlyList<string> Build(SandboxCommand command, SandboxOptions options)
+    /// <summary>The arguments after <c>docker</c> that start a session container, detached.</summary>
+    /// <exception cref="ArgumentException">The session id is not acceptable.</exception>
+    public static IReadOnlyList<string> BuildStart(SandboxStart start, SandboxOptions options)
     {
-        if (!IsValidTaskId(command.TaskId))
-            throw new ArgumentException($"'{command.TaskId}' is not a valid task id.", nameof(command));
-
+        RequireValid(start.SessionId);
         var args = new List<string>
         {
-            "run",
-            "--rm",
+            "run", "-d", "--rm", "--init",
             "--pull", "never",
-            "--name", ContainerName(command.TaskId),
+            "--name", ContainerName(start.SessionId),
             "--network", SandboxOptions.Network,
             "--cap-drop=ALL",
             "--security-opt", "no-new-privileges",
-            "--pids-limit", SandboxOptions.PidsLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--pids-limit", SandboxOptions.PidsLimit.ToString(CultureInfo.InvariantCulture),
             "--memory", options.Memory,
             "--cpus", options.Cpus,
             "--read-only",
-            "--tmpfs", "/tmp:rw,exec,nosuid,size=512m",
-            "--user", SandboxOptions.ContainerUser,
-            "-v", $"{command.TaskDirectory}:{SandboxOptions.MountPoint}:rw",
-            "-w", ContainerWorkingDirectory(command.WorkingDirectory),
+            "--tmpfs", $"/tmp:rw,exec,nosuid,size={options.TmpSize}",
+            "--user", SandboxUsers.ContainerUser(SandboxUsers.Runner),
+            "-v", $"{start.TaskDirectory}:{SandboxOptions.MountPoint}:rw",
+            "-w", SandboxOptions.MountPoint,
         };
-
         foreach (var (name, value) in FixedEnvironment)
             args.AddRange(["-e", $"{name}={value}"]);
-        foreach (var (name, value) in FilterEnvironment(command.Environment))
-            args.AddRange(["-e", $"{name}={value}"]);
-
-        args.Add(options.Image);
-        args.Add(command.Program);
-        args.AddRange(command.Arguments);
+        args.AddRange(["--entrypoint", "timeout", options.Image,
+            ((long)options.LifeLimit.TotalSeconds).ToString(CultureInfo.InvariantCulture), "sleep", "infinity"]);
         return args;
+    }
+
+    /// <summary>The arguments after <c>docker</c> that run a command in a session, stopped by <c>timeout</c> inside.</summary>
+    /// <exception cref="ArgumentException">The session id, user or working directory is not acceptable.</exception>
+    public static IReadOnlyList<string> BuildExec(string sessionId, SandboxExec exec)
+    {
+        RequireValid(sessionId);
+        var args = new List<string>
+        {
+            "exec",
+            "-u", SandboxUsers.ContainerUser(exec.User),
+            "-w", ContainerWorkingDirectory(exec.WorkingDirectory),
+        };
+        foreach (var (name, value) in FilterEnvironment(exec.Environment))
+            args.AddRange(["-e", $"{name}={value}"]);
+        args.AddRange([ContainerName(sessionId), "timeout", "-k", "10",
+            exec.TimeoutSeconds.ToString(CultureInfo.InvariantCulture), exec.Program]);
+        args.AddRange(exec.Arguments);
+        return args;
+    }
+
+    /// <summary>The arguments after <c>docker</c> that remove a session container.</summary>
+    public static IReadOnlyList<string> BuildStop(string sessionId)
+    {
+        RequireValid(sessionId);
+        return ["rm", "-f", ContainerName(sessionId)];
+    }
+
+    private static void RequireValid(string sessionId)
+    {
+        if (!IsValidSessionId(sessionId))
+            throw new ArgumentException($"'{sessionId}' is not a valid session id.", nameof(sessionId));
     }
 }
