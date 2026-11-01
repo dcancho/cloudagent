@@ -20,6 +20,13 @@ public interface ITypingSource : ISurface
     event Action<InboundTyping>? TypingReceived;
 }
 
+/// <summary>A surface that cannot send the moment it starts, such as one still connecting.</summary>
+public interface IReadinessSource : ISurface
+{
+    /// <summary>Completes once a message to this conversation can be delivered.</summary>
+    Task WaitUntilReadyAsync(string conversationId, CancellationToken cancellationToken = default);
+}
+
 /// <summary>A surface that can show the agent as typing in a conversation.</summary>
 public interface ITypingIndicator : ISurface
 {

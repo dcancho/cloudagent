@@ -51,6 +51,8 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="MaxInputTokens">Most input tokens, estimated, one model call may carry (<c>MAX_INPUT_TOKENS</c>); the least
 /// useful context is dropped past it. 0 means no cap.</param>
 /// <param name="AgentName">What the agent calls itself (<c>AGENT_NAME</c>); by default its handle on the surface.</param>
+/// <param name="ShutdownDrainSeconds">How long a stopping host lets running turns finish before it cancels them
+/// (<c>SHUTDOWN_DRAIN_SEC</c>); 0 cancels at once.</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -77,7 +79,8 @@ public sealed record HostConfig(
     string? ModelPrices = null,
     int GroupEngagementSeconds = HostConfig.DefaultGroupEngagementSeconds,
     int MaxInputTokens = HostConfig.DefaultMaxInputTokens,
-    string? AgentName = null)
+    string? AgentName = null,
+    int ShutdownDrainSeconds = HostConfig.DefaultShutdownDrainSeconds)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -87,6 +90,7 @@ public sealed record HostConfig(
     public const int DefaultLearnIdleMinutes = 2;
     public const int DefaultGroupEngagementSeconds = 90;
     public const int DefaultMaxInputTokens = 32_000;
+    public const int DefaultShutdownDrainSeconds = 25;
 
     /// <summary>Resolve the full host configuration from environment variables and defaults.</summary>
     public static HostConfig FromEnvironment()
@@ -148,7 +152,8 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("MODEL_PRICES"),
             int.TryParse(Environment.GetEnvironmentVariable("GROUP_ENGAGEMENT_SEC"), out var engagement) && engagement >= 0 ? engagement : DefaultGroupEngagementSeconds,
             int.TryParse(Environment.GetEnvironmentVariable("MAX_INPUT_TOKENS"), out var maxInput) && maxInput >= 0 ? maxInput : DefaultMaxInputTokens,
-            Environment.GetEnvironmentVariable("AGENT_NAME"));
+            Environment.GetEnvironmentVariable("AGENT_NAME"),
+            int.TryParse(Environment.GetEnvironmentVariable("SHUTDOWN_DRAIN_SEC"), out var drain) && drain >= 0 ? drain : DefaultShutdownDrainSeconds);
     }
 }
 

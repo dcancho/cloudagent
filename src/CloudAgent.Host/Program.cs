@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using CloudAgent.Core.Abstractions;
 using CloudAgent.Core.Agents;
@@ -342,18 +343,42 @@ void AttachLogging(AgentLoop loop, string label)
         Console.WriteLine($"  📊 [{label}] memories useful this turn: {useful}/{total}");
 }
 
-// Ctrl+C, SIGTERM or typing "exit" stops everything cleanly.
+// Ctrl+C or SIGTERM lets running turns finish before everything stops; a second one stops at once.
+// Typing "exit" at the console stops at once.
 using var cts = new CancellationTokenSource();
+ConversationRouter? conversationRouter = null;
+var stopRequests = 0;
+void RequestStop()
+{
+    if (Interlocked.Increment(ref stopRequests) > 1 || conversationRouter is null || config.ShutdownDrainSeconds <= 0)
+    {
+        cts.Cancel();
+        return;
+    }
+
+    Console.WriteLine($"  ⏳ stopping: letting running turns finish (up to {config.ShutdownDrainSeconds}s)");
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await conversationRouter.DrainAsync(TimeSpan.FromSeconds(config.ShutdownDrainSeconds));
+        }
+        finally
+        {
+            cts.Cancel();
+        }
+    });
+}
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
-    cts.Cancel();
+    RequestStop();
 };
 using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(
     System.Runtime.InteropServices.PosixSignal.SIGTERM, context =>
     {
         context.Cancel = true;
-        cts.Cancel();
+        RequestStop();
     });
 
 // Every agent's loop is recorded event by event, one JSONL file per agent.
@@ -604,7 +629,6 @@ if (!string.IsNullOrWhiteSpace(config.TelegramBotToken))
 if (!string.IsNullOrWhiteSpace(config.DiscordBotToken))
     surfaces.Add(new DiscordSurface(config.DiscordBotToken));
 
-ConversationRouter? conversationRouter = null;
 if (config.WebchatEnabled)
 {
     var webchat = new WebchatSurface(
@@ -629,7 +653,8 @@ var turnTaking = config.TurnTakingEnabled
 liveSurfaces = surfaces;
 using var router = new ConversationRouter(
     surfaces, CreateConversation, m => MayTalk(m.Surface, m.SenderId, m.SenderDisplay), turnTaking, message => PersonOf(message)?.Id,
-    new ParticipationGate(new ParticipationOptions { Engagement = TimeSpan.FromSeconds(config.GroupEngagementSeconds) }));
+    new ParticipationGate(new ParticipationOptions { Engagement = TimeSpan.FromSeconds(config.GroupEngagementSeconds) }),
+    new InboxStore(Path.Combine(workspace.Root, ".agent", "inbox")));
 conversationRouter = router;
 router.ConversationOpened += (s, c) => Console.WriteLine($"  ✉ conversation opened: {s}:{c}");
 
