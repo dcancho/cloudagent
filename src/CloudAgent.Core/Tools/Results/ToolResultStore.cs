@@ -50,5 +50,24 @@ public sealed partial class ToolResultStore(string directory)
         return old.Count;
     }
 
+    [GeneratedRegex("read_result, id \"([0-9a-f]{12})\"")]
+    private static partial Regex FooterId();
+
+    /// <summary>The note that ends a result shown only in part, telling the agent how to read the rest.</summary>
+    public static string Footer(int total, int shown, string id) =>
+        $"\n[{total:N0} characters in all, the first {shown:N0} shown. Read more with read_result, id \"{id}\", offset {shown}.]";
+
+    /// <summary>The note a shown part is given when it is cut further, so the agent can still read from where it now ends.</summary>
+    public static string CutFooter(string id, int shown) =>
+        $"\n[older tool result cut to fit the input limit. Read more with read_result, id \"{id}\", offset {shown}.]";
+
+    /// <summary>The id a result's note refers to, if it has one.</summary>
+    public static bool TryFindId(string content, out string id)
+    {
+        var match = FooterId().Match(content);
+        id = match.Success ? match.Groups[1].Value : string.Empty;
+        return match.Success;
+    }
+
     private string PathOf(string id) => Path.Combine(directory, id + ".txt");
 }

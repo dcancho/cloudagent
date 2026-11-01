@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudAgent.Core.Abstractions;
@@ -297,8 +298,16 @@ public sealed class AgentLoop
             // Run each requested tool and feed its result back as a tool message.
             foreach (var call in response.ToolCalls)
             {
+                var weight = ToolWeights.Of(call.Name);
+                if (_options.MaxToolPoints > 0 && points > 0 && points + weight > _options.MaxToolPoints)
+                {
+                    _context.Add(Message.ToolResult(
+                        call.Id, call.Name, "ERROR: not run, this turn's tool budget does not cover it. Answer with what you have."));
+                    continue;
+                }
+
                 _turnTools.Add(call.Name);
-                points += ToolWeights.Of(call.Name);
+                points += weight;
                 var result = call.Name == RequestToolsName && offered is not null
                     ? RequestTools(call, offered)
                     : await InvokeToolAsync(call, cancellationToken).ConfigureAwait(false);
@@ -321,9 +330,17 @@ public sealed class AgentLoop
         if (boundary > limit * 8 / 10)
             head = head[..boundary];
 
-        var id = Results.Save(content);
-        return $"{head}\n[{content.Length:N0} characters in all, the first {head.Length:N0} shown. " +
-               $"Read more with read_result, id \"{id}\", offset {head.Length}.]";
+        string id;
+        try
+        {
+            id = Results.Save(content);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return JsonTruncator.Truncate(content, _options.MaxToolResultChars);
+        }
+
+        return head + ToolResultStore.Footer(content.Length, head.Length, id);
     }
 
     /// <summary>

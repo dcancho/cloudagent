@@ -191,14 +191,18 @@ public sealed class FoundryLlmProvider : ILlmProvider
     }
 
     /// <summary>The prompt tokens the service served from its prefix cache, read from the raw usage block; null when absent.</summary>
-    public static int? CachedTokens(Response raw)
+    public static int? CachedTokens(Response raw) => CachedTokens(raw.Content);
+
+    /// <summary>The prompt tokens served from the prefix cache in a raw completion body; null when it does not say.</summary>
+    public static int? CachedTokens(BinaryData content)
     {
         try
         {
-            using var body = System.Text.Json.JsonDocument.Parse(raw.Content.ToMemory());
-            return body.RootElement.TryGetProperty("usage", out var usage)
-                && usage.TryGetProperty("prompt_tokens_details", out var details)
-                && details.TryGetProperty("cached_tokens", out var cached)
+            using var body = System.Text.Json.JsonDocument.Parse(content.ToMemory());
+            return body.RootElement is { ValueKind: System.Text.Json.JsonValueKind.Object } root
+                && root.TryGetProperty("usage", out var usage) && usage.ValueKind == System.Text.Json.JsonValueKind.Object
+                && usage.TryGetProperty("prompt_tokens_details", out var details) && details.ValueKind == System.Text.Json.JsonValueKind.Object
+                && details.TryGetProperty("cached_tokens", out var cached) && cached.ValueKind == System.Text.Json.JsonValueKind.Number
                 && cached.TryGetInt32(out var tokens)
                     ? tokens
                     : null;

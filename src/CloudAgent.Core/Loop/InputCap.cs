@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using CloudAgent.Core.Abstractions;
 using CloudAgent.Core.Providers;
+using CloudAgent.Core.Tools.Results;
 
 namespace CloudAgent.Core.Loop;
 
@@ -23,6 +24,7 @@ public static partial class InputCap
     private const int KeepRecentMessages = 4;
     private const int ToolResultKeepChars = 400;
     private const string ToolResultCut = "\n[older tool result cut to fit the input limit]";
+    private const string CutMarker = "cut to fit the input limit";
 
     [GeneratedRegex(@"^- \([^)/\r\n]*/[^)\r\n]*\) ")]
     private static partial Regex MemoryItem();
@@ -127,14 +129,18 @@ public static partial class InputCap
     private static void ShrinkToolResults(List<Message> messages, List<string> trimmed, Func<bool> over)
     {
         var candidates = Enumerable.Range(0, Math.Max(0, messages.Count - KeepRecentMessages))
-            .Where(i => messages[i].Role == Role.Tool && messages[i].Content.Length > ToolResultKeepChars + ToolResultCut.Length)
+            .Where(i => messages[i].Role == Role.Tool
+                && messages[i].Content.Length > ToolResultKeepChars + ToolResultCut.Length
+                && !messages[i].Content.Contains(CutMarker, StringComparison.Ordinal))
             .OrderByDescending(i => messages[i].Content.Length)
             .ToList();
 
         var count = 0;
         foreach (var index in candidates)
         {
-            messages[index] = messages[index] with { Content = messages[index].Content[..ToolResultKeepChars] + ToolResultCut };
+            var content = messages[index].Content;
+            var tail = ToolResultStore.TryFindId(content, out var id) ? ToolResultStore.CutFooter(id, ToolResultKeepChars) : ToolResultCut;
+            messages[index] = messages[index] with { Content = content[..ToolResultKeepChars] + tail };
             count++;
             if (!over())
                 break;

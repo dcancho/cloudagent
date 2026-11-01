@@ -247,6 +247,7 @@ AgentProfile BuildCodeProfile(string name, string root)
         Budget = basis.Budget,
         WorkingMemoryBudgetTokens = basis.WorkingMemoryBudgetTokens,
         MaxInputTokens = basis.MaxInputTokens,
+        MaxInlineResultChars = basis.MaxInlineResultChars,
         MaxToolSteps = 40,
         MaxToolPoints = 80,
     };
@@ -329,7 +330,7 @@ void AttachLogging(AgentLoop loop, string label)
         if (r.CacheReadTokens is > 0 || r.CacheWriteTokens is > 0)
             Console.WriteLine(
                 $"  💰 [{label}] prompt tokens — {r.CacheReadTokens ?? 0} cached, " +
-                $"{r.CacheWriteTokens ?? 0} written, {r.InputTokens ?? 0} fresh");
+                $"{r.CacheWriteTokens ?? 0} written, {Math.Max(0, (r.InputTokens ?? 0) - (r.CacheReadTokens ?? 0) - (r.CacheWriteTokens ?? 0))} fresh");
     };
     loop.ToolInvoked += (call, result) =>
         Console.WriteLine($"  ⚙ [{label}] {call.Name} -> {(result.Success ? "ok" : "error")}");

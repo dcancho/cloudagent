@@ -68,11 +68,11 @@ public sealed class ToolBudgetTests
     }
 
     [Fact]
-    public async Task Calls_made_together_in_one_step_each_spend_their_points()
+    public async Task Calls_made_together_in_one_step_each_spend_their_points_up_to_the_budget()
     {
         var (_, calls, _) = await RunAsync("web_search", points: 6, callsPerStep: 3);
 
-        Assert.Equal(3, calls);
+        Assert.Equal(2, calls);
     }
 
     [Fact]

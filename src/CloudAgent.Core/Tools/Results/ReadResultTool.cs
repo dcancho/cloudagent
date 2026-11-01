@@ -28,10 +28,11 @@ public sealed class ReadResultTool(ToolResultStore store) : ITool
     public Task<ToolResult> InvokeAsync(ToolInput input, CancellationToken cancellationToken = default)
     {
         var id = input.GetString("id");
-        var offset = input.GetInt("offset", 0);
+        var requested = input.GetInt("offset", 0);
         var length = System.Math.Clamp(input.GetInt("length", DefaultLength), 1, MaxLength);
 
         var total = store.LengthOf(id);
+        var offset = total is { } size ? System.Math.Clamp(requested, 0, size) : 0;
         var text = store.Read(id, offset, length);
         if (total is null || text is null)
             return Task.FromResult(ToolResult.Fail($"No stored result '{id}'."));

@@ -266,6 +266,9 @@ public sealed class AnthropicLlmProvider : ILlmProvider
             if (usage.TryGetProperty("cache_creation_input_tokens", out var cw)) cacheWrite = cw.GetInt32();
         }
 
+        if (cacheRead is not null || cacheWrite is not null)
+            inputTokens = (inputTokens ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0);
+
         return new LlmResponse(text.ToString(), stopReason, inputTokens, outputTokens)
         {
             ToolCalls = toolCalls,
