@@ -841,6 +841,20 @@ Console.WriteLine($"Routing:   {decisionModel?.Name ?? "off (full pipeline every
 Console.WriteLine($"Groups:    answers when mentioned or replied to, then for {config.GroupEngagementSeconds}s with that person; other messages are kept as context");
 Console.WriteLine($"Turns:     {(config.TurnTakingEnabled ? $"bursts (wait {turnTaking.DefaultWait.TotalSeconds:0.#}s until measured; cli immediate)" : "one message per turn")}");
 
-await router.RunAsync(cts.Token);
+if (sandboxHost is not null)
+{
+    Console.WriteLine($"Sandbox:   commands run in {sandboxOptions!.Image} through {sandboxOptions.RunnerPath}; {sandboxOptions.MaxSessions} session(s) at a time");
+    _ = Task.Run(() => sandboxHost.RunMonitorAsync(cts.Token));
+}
+
+try
+{
+    await router.RunAsync(cts.Token);
+}
+finally
+{
+    if (sandboxHost is not null)
+        await sandboxHost.DisposeAsync();
+}
 
 Console.WriteLine("\nAgent stopped.");

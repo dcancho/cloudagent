@@ -53,6 +53,24 @@ public sealed class SandboxHostTests : IDisposable
         public override DateTimeOffset GetUtcNow() => Now;
 
         public void Advance(TimeSpan by) => Now += by;
+
+        public ManualTimer? Timer { get; private set; }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            Timer = new ManualTimer(callback, state);
+    }
+
+    private sealed class ManualTimer(TimerCallback callback, object? state) : ITimer
+    {
+        public void Fire() => callback(state);
+
+        public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static readonly SandboxOptions Options =
@@ -320,6 +338,28 @@ public sealed class SandboxHostTests : IDisposable
         await host.DisposeAsync();
 
         Assert.Equal(2, runner.Modes().Count(m => m == "stop"));
+    }
+
+    [Fact]
+    public async Task The_monitor_removes_an_idle_session_without_a_new_command()
+    {
+        var (host, runner, time) = Create();
+        var session = host.SessionFor("cloudagent", _directory);
+        await session.ExecAsync(Exec());
+        using var stop = new CancellationTokenSource();
+        var monitor = host.RunMonitorAsync(stop.Token);
+        while (time.Timer is null)
+            await Task.Delay(10);
+
+        time.Advance(TimeSpan.FromMinutes(31));
+        time.Timer.Fire();
+        for (var i = 0; i < 200 && session.IsRunning; i++)
+            await Task.Delay(10);
+
+        Assert.False(session.IsRunning);
+        Assert.Equal(["start", "exec", "stop"], runner.Modes());
+        await stop.CancelAsync();
+        await monitor;
     }
 
     [Fact]
