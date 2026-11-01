@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CloudAgent.Core.Sandbox;
 
 namespace CloudAgent.Host.Configuration;
 
@@ -55,6 +56,12 @@ namespace CloudAgent.Host.Configuration;
 /// <param name="MaxInlineResultChars">Characters of a tool result that go into the context (<c>TOOL_RESULT_INLINE_CHARS</c>); a longer one is kept whole and read on demand with <c>read_result</c>. 0 keeps results inline.</param>
 /// <param name="ShutdownDrainSeconds">How long a stopping host lets running turns finish before it cancels them
 /// (<c>SHUTDOWN_DRAIN_SEC</c>); 0 cancels at once.</param>
+/// <param name="SandboxRunner">Path of the wrapper script that runs a coding command in a disposable container
+/// (<c>SANDBOX_RUNNER</c>); when unset, commands run on this machine.</param>
+/// <param name="SandboxImage">The container image those commands run in (<c>SANDBOX_IMAGE</c>).</param>
+/// <param name="SandboxTimeoutSeconds">Wall-clock limit of one sandboxed command (<c>SANDBOX_TIMEOUT_SEC</c>).</param>
+/// <param name="SandboxMemory">Memory limit of the container (<c>SANDBOX_MEMORY</c>), such as <c>2g</c>.</param>
+/// <param name="SandboxCpus">CPU limit of the container (<c>SANDBOX_CPUS</c>), such as <c>1.5</c>.</param>
 public sealed record HostConfig(
     LlmConfig Llm,
     string WorkspaceRoot,
@@ -84,7 +91,12 @@ public sealed record HostConfig(
     string? AgentName = null,
     int MaxToolPoints = HostConfig.DefaultMaxToolPoints,
     int MaxInlineResultChars = HostConfig.DefaultMaxInlineResultChars,
-    int ShutdownDrainSeconds = HostConfig.DefaultShutdownDrainSeconds)
+    int ShutdownDrainSeconds = HostConfig.DefaultShutdownDrainSeconds,
+    string? SandboxRunner = null,
+    string? SandboxImage = null,
+    int SandboxTimeoutSeconds = SandboxOptions.DefaultTimeoutSeconds,
+    string SandboxMemory = SandboxOptions.DefaultMemory,
+    string SandboxCpus = SandboxOptions.DefaultCpus)
 {
     public static readonly IReadOnlyList<string> DefaultCodeCommands = ["dotnet", "git", "npm", "node"];
 
@@ -161,8 +173,22 @@ public sealed record HostConfig(
             Environment.GetEnvironmentVariable("AGENT_NAME"),
             int.TryParse(Environment.GetEnvironmentVariable("TOOL_POINTS"), out var toolPoints) && toolPoints >= 0 ? toolPoints : DefaultMaxToolPoints,
             int.TryParse(Environment.GetEnvironmentVariable("TOOL_RESULT_INLINE_CHARS"), out var inlineChars) && inlineChars >= 0 ? inlineChars : DefaultMaxInlineResultChars,
-            int.TryParse(Environment.GetEnvironmentVariable("SHUTDOWN_DRAIN_SEC"), out var drain) && drain >= 0 ? drain : DefaultShutdownDrainSeconds);
+            int.TryParse(Environment.GetEnvironmentVariable("SHUTDOWN_DRAIN_SEC"), out var drain) && drain >= 0 ? drain : DefaultShutdownDrainSeconds,
+            Environment.GetEnvironmentVariable("SANDBOX_RUNNER") is { Length: > 0 } runner ? runner : null,
+            Environment.GetEnvironmentVariable("SANDBOX_IMAGE") is { Length: > 0 } image ? image : null,
+            int.TryParse(Environment.GetEnvironmentVariable("SANDBOX_TIMEOUT_SEC"), out var sandboxSeconds) && sandboxSeconds > 0
+                ? sandboxSeconds
+                : SandboxOptions.DefaultTimeoutSeconds,
+            Environment.GetEnvironmentVariable("SANDBOX_MEMORY") is { } memory && MemoryPattern.IsMatch(memory)
+                ? memory
+                : SandboxOptions.DefaultMemory,
+            Environment.GetEnvironmentVariable("SANDBOX_CPUS") is { } cpus && CpusPattern.IsMatch(cpus)
+                ? cpus
+                : SandboxOptions.DefaultCpus);
     }
+
+    private static readonly System.Text.RegularExpressions.Regex MemoryPattern = new("^[1-9][0-9]*[mg]$");
+    private static readonly System.Text.RegularExpressions.Regex CpusPattern = new(@"^[0-9]+(\.[0-9]+)?$");
 }
 
 /// <summary>A repository a coding agent may work on, by the name people choose it with.</summary>

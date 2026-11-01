@@ -117,6 +117,11 @@ To run it on a server, see [deploying to a VPS](docs/deploy.md).
 | `MODEL_PRICES` | What each model charges, as `model=input/output` or `model=input/output/cachedInput` dollars per million tokens separated by `;`, for example `gpt-6-luna=0.10/0.50/0.01`. Only `admin usage` reads it; a model without a price is counted in tokens and flagged | none |
 | `CODE_REPOS` | Repositories a coding agent may work on, as `name=path` pairs separated by `;` | none |
 | `CODE_COMMANDS` | Programs a coding agent may run in them, comma separated | `dotnet,git,npm,node` |
+| `SANDBOX_RUNNER` | Path of the wrapper script (`cloudagent-sandbox-run`, see [deploy](docs/deploy.md)) that runs a coding command in a disposable rootless Docker container instead of on the host. When set, every repository in `CODE_REPOS` needs `SANDBOX_IMAGE`; without it the repository is skipped | unset, commands run on the host |
+| `SANDBOX_IMAGE` | The image sandboxed commands run in; it must be listed in `/etc/cloudagent/sandbox-images` | none |
+| `SANDBOX_TIMEOUT_SEC` | Wall-clock limit of one sandboxed command, after which its container is killed | 1200 |
+| `SANDBOX_MEMORY` | Memory limit of the container, such as `2g` or `512m` | `2g` |
+| `SANDBOX_CPUS` | CPU limit of the container | `1.5` |
 | `FOUNDRY_DECISIONS_ENDPOINT`, `DECISIONS_MODEL` | The Foundry decision API endpoint (ending in `/providers/microsoft/v1/systemone`) and the deployment name, for example Microsoft-Decision-1. Uses `FOUNDRY_API_KEY`, or Entra ID without it | unset |
 
 ### People

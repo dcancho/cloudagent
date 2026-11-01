@@ -152,6 +152,47 @@ sudo ufw status verbose
 Discord and Telegram only need outbound connections, so no other rule is needed. If you lock
 yourself out, the OVHcloud KVM console from the control panel still reaches the machine.
 
+## Sandbox for coding commands (optional)
+
+`CODE_REPOS` stays unset until this is in place, because `run_command` would otherwise execute on the
+server as `cloudagent`. With the sandbox, each command runs in its own disposable rootless Docker
+container under a separate user, `cloudagent-sandbox`.
+
+```bash
+cd ~/deploy/sandbox
+sudo bash provision-sandbox.sh
+sudo bash build-sandbox.sh
+```
+
+`provision-sandbox.sh` creates the user with subuid and subgid ranges and lingering, installs rootless
+Docker for it, installs `/usr/local/bin/cloudagent-sandbox-run`, creates the two allowlists
+`/etc/cloudagent/sandbox-images` and `/etc/cloudagent/sandbox-repos`, and lets `cloudagent` run only that
+script as `cloudagent-sandbox`. Because `sudo` cannot switch users under `NoNewPrivileges`, it also
+adds a drop-in that turns that setting off for the service. `build-sandbox.sh` builds the .NET image
+and starts the egress proxy; run it again after editing `deploy/sandbox/egress/allowed-domains.txt`.
+
+Then:
+
+1. Add the repository to `/etc/cloudagent/sandbox-repos` as `name=/absolute/path`, the same name and path
+   as in `CODE_REPOS`. This directory is the only thing mounted in the container, as `/work`.
+2. Rootless Docker maps container user 1000 to an unprivileged id of `cloudagent-sandbox`. Give that id
+   write access to the directory, for example with
+   `sudo setfacl -R -m u:$(( 100000 + 999 )):rwX,d:u:$(( 100000 + 999 )):rwX <path>`, using the first id
+   of the range in `/etc/subuid` for `cloudagent-sandbox`.
+3. In `/etc/cloudagent/cloudagent.env` set `CODE_REPOS`, `SANDBOX_RUNNER=/usr/local/bin/cloudagent-sandbox-run`
+   and `SANDBOX_IMAGE=cloudagent-sandbox-dotnet:latest`, then restart the service.
+
+What it protects: a command runs with no capabilities, a read-only root filesystem, no new privileges,
+limits on processes, memory and CPUs, and one writable mount. Its network is internal to Docker; the
+only way out is a Squid proxy that allows the hosts in `allowed-domains.txt` (GitHub, NuGet, the
+Anthropic API and sign-in). The wrapper accepts only a task id, a repository and an image from the
+allowlists, and a command; it builds the `docker run` line itself, never mounts the Docker socket,
+and never uses host networking or `--privileged`. A container escape lands in `cloudagent-sandbox`,
+which owns nothing the host owns. Every command has a time limit, after which its container is killed.
+
+What it does not protect: the mounted repository is writable by the command, and an allowed host can
+still receive whatever the command sends it.
+
 ## Updating and rolling back
 
 Deploy a new version by running `publish.ps1` again.

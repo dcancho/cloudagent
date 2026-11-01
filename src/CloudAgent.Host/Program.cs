@@ -11,6 +11,7 @@ using CloudAgent.Core.Indexing;
 using CloudAgent.Core.Memory;
 using CloudAgent.Core.People;
 using CloudAgent.Core.Providers;
+using CloudAgent.Core.Sandbox;
 using CloudAgent.Core.Surfaces;
 using CloudAgent.Surfaces;
 using CloudAgent.Core.Tools;
@@ -201,8 +202,19 @@ var attentionOptions = new AttentionOptions();
 // project memory, kept under the agent's workspace so the repository itself stays clean.
 var generalProfile = new AgentProfile("general", options, childOptions, workspace, workspaceTools, projectMemoryPath);
 var codeProfiles = new Dictionary<string, AgentProfile>(StringComparer.OrdinalIgnoreCase);
+var sandboxOptions = config.SandboxRunner is null
+    ? null
+    : new SandboxOptions(
+        config.SandboxRunner, config.SandboxImage ?? "", TimeSpan.FromSeconds(config.SandboxTimeoutSeconds),
+        config.SandboxMemory, config.SandboxCpus);
+var sandboxRunner = new SystemProcessRunner();
 foreach (var repo in config.CodeRepos)
 {
+    if (sandboxOptions is not null && sandboxOptions.Image.Length == 0)
+    {
+        Console.Error.WriteLine($"  ✖ code repo '{repo.Name}' skipped: SANDBOX_RUNNER is set but SANDBOX_IMAGE is not");
+        continue;
+    }
     var root = Path.GetFullPath(repo.Path).TrimEnd(Path.DirectorySeparatorChar);
     if (!Directory.Exists(root))
     {
@@ -226,7 +238,8 @@ AgentProfile BuildCodeProfile(string name, string root)
     var repoIndexPath = Path.Combine(state, "index.json");
     var repoIndex = VectorIndex.Load(repoIndexPath);
 
-    var tools = Toolset.CreateCode(repoWorkspace, search)
+    var sandbox = sandboxOptions is null ? null : new SandboxLauncher(sandboxRunner, sandboxOptions, name);
+    var tools = Toolset.CreateCode(repoWorkspace, search, sandbox)
         .Register(new IndexWorkspaceTool(new WorkspaceIndexer(repoWorkspace, embeddings, repoIndex), repoIndex, repoIndexPath))
         .Register(new SearchIndexTool(embeddings, repoIndex))
         .Register(new SummarizeFileTool(repoWorkspace, summarizer));

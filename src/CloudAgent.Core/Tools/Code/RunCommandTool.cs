@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CloudAgent.Core.Sandbox;
 using CloudAgent.Core.Workspaces;
 
 namespace CloudAgent.Core.Tools.Code;
@@ -14,9 +15,10 @@ namespace CloudAgent.Core.Tools.Code;
 /// Runs one allowed program in the workspace and returns its exit code and output. There is no
 /// shell: the command is split into a program and arguments, the program must be allowed by the
 /// workspace's execution policy, standard input is closed so nothing waits for a prompt, and
-/// environment variables that look like secrets are not passed on.
+/// environment variables that look like secrets are not passed on. With a sandbox launcher the program runs in
+/// a disposable container instead of on this machine, and the allowed programs are those the image has.
 /// </summary>
-public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30_000) : ITool
+public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30_000, SandboxLauncher? sandbox = null) : ITool
 {
     private const int DefaultTimeoutSeconds = 120;
     private const int MaxTimeoutSeconds = 600;
@@ -58,22 +60,59 @@ public sealed class RunCommandTool(IWorkspace workspace, int maxOutputChars = 30
         if (!workspace.Execution.Allows(program))
             return ToolResult.Fail($"'{program}' is not allowed here. Allowed programs: {Allowed}.");
 
+        var arguments = parts.Skip(1).ToList();
+        var relative = input.GetStringOrNull("directory");
+        var directory = workspace.Resolve(relative ?? "");
+        var seconds = Math.Clamp(input.GetInt("timeout_seconds", DefaultTimeoutSeconds), 1, MaxTimeoutSeconds);
+
+        if (sandbox is not null)
+        {
+            if (!Directory.Exists(directory))
+                return ToolResult.Fail($"Directory not found: {relative}");
+            return await RunSandboxedAsync(program, arguments, directory, TimeSpan.FromSeconds(seconds), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var executable = CommandLine.Find(program);
         if (executable is null)
             return ToolResult.Fail($"'{program}' was not found on this machine.");
 
-        var arguments = parts.Skip(1).ToList();
         if (IsBatchFile(executable) && arguments.Any(a => a.IndexOfAny(BatchUnsafe) >= 0))
             return ToolResult.Fail($"'{program}' runs through cmd.exe, so its arguments cannot contain & | < > ^ % or quotes.");
 
-        var relative = input.GetStringOrNull("directory");
-        var directory = workspace.Resolve(relative ?? "");
         if (!Directory.Exists(directory))
             return ToolResult.Fail($"Directory not found: {relative}");
 
-        var seconds = Math.Clamp(input.GetInt("timeout_seconds", DefaultTimeoutSeconds), 1, MaxTimeoutSeconds);
         return await RunAsync(executable, arguments, directory, TimeSpan.FromSeconds(seconds), cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task<ToolResult> RunSandboxedAsync(
+        string program, IReadOnlyList<string> arguments, string directory, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        var relative = Path.GetRelativePath(workspace.Root, directory);
+        var command = new SandboxCommand(
+            "cmd-" + Guid.NewGuid().ToString("N")[..12],
+            sandbox!.Repository,
+            workspace.Root,
+            relative == "." ? "" : relative,
+            Path.GetFileNameWithoutExtension(program),
+            arguments,
+            new Dictionary<string, string>
+            {
+                ["GIT_TERMINAL_PROMPT"] = "0",
+                ["GIT_PAGER"] = "cat",
+                ["PAGER"] = "cat",
+                ["MSBUILDDISABLENODEREUSE"] = "1",
+            });
+
+        var watch = Stopwatch.StartNew();
+        var result = await sandbox.RunAsync(command, timeout, cancellationToken).ConfigureAwait(false);
+        var text = Cut(string.Join('\n', new[] { result.Output.TrimEnd(), result.Error.TrimEnd() }.Where(s => s.Length > 0)));
+        if (result.TimedOut)
+            return ToolResult.Fail($"Stopped after {watch.Elapsed.TotalSeconds:0} s without finishing.\n{text}");
+        return ToolResult.Ok(
+            $"Exit code {result.ExitCode} after {watch.Elapsed.TotalSeconds:0.0} s.\n{(text.Length == 0 ? "(no output)" : text)}");
     }
 
     private async Task<ToolResult> RunAsync(

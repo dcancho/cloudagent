@@ -1,0 +1,15 @@
+# Hosts the sandbox may reach through the egress proxy. A leading dot allows the domain and its subdomains.
+# After editing, run build-sandbox.sh again.
+
+# Git host
+.github.com
+.githubusercontent.com
+
+# NuGet
+.nuget.org
+
+# Coding agent API and sign-in
+api.anthropic.com
+console.anthropic.com
+platform.claude.com
+claude.ai
