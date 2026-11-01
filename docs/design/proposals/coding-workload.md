@@ -133,12 +133,17 @@ The runner takes its credentials from the environment so that the choice is conf
    automation.
 2. **A cloud provider the project already pays for.** The documentation lists Microsoft Foundry among the
    providers Claude Code reads credentials for; this depends on having the models deployed there.
-3. **A personal subscription login.** Not verified. The documentation says `--bare`, the
+3. **A personal subscription login.** As of 2026-10-31 the maintainer reports that `claude -p` is
+   still included in the subscription. The documentation does not say so: it says `--bare`, the
    recommended mode for scripts and the planned default for `-p`, does not use the subscription
    login, and it does not say whether programmatic runs are covered by a plan. Third-party reports
-   disagree and are not confirmed. A shared service would also spend one person's plan limits on
-   behalf of several people. Do not depend on this option until the terms and the plan's behavior
-   are checked directly.
+   disagree. What stays open is whether this depth of indirection fits the terms: a person asks an
+   agent, the agent runs a harness, the harness starts the CLI. The reading in its favor is that
+   a human request starts every run and the CLI is the official one. The risks are different from
+   the indirection itself: an always-on server rather than a person at a keyboard, and several people
+   spending one account's limits. While it runs on a login, coding tasks are limited to the account
+   holder, and the runner keeps authentication in configuration so that a change in the terms or
+   the plan costs a setting, not code.
 
 ## Open questions
 
