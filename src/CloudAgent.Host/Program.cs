@@ -11,10 +11,12 @@ using CloudAgent.Core.Indexing;
 using CloudAgent.Core.Memory;
 using CloudAgent.Core.People;
 using CloudAgent.Core.Providers;
+using CloudAgent.Core.Sandbox;
 using CloudAgent.Core.Surfaces;
 using CloudAgent.Surfaces;
 using CloudAgent.Core.Tools;
 using CloudAgent.Core.Tools.Agents;
+using CloudAgent.Core.Tools.Code;
 using CloudAgent.Core.Tools.Compute;
 using CloudAgent.Core.Tools.Index;
 using CloudAgent.Core.Tools.Results;
@@ -201,8 +203,21 @@ var attentionOptions = new AttentionOptions();
 // project memory, kept under the agent's workspace so the repository itself stays clean.
 var generalProfile = new AgentProfile("general", options, childOptions, workspace, workspaceTools, projectMemoryPath);
 var codeProfiles = new Dictionary<string, AgentProfile>(StringComparer.OrdinalIgnoreCase);
+var sandboxOptions = config.SandboxRunner is null
+    ? null
+    : new SandboxOptions(
+        config.SandboxRunner, config.SandboxImage ?? "", TimeSpan.FromSeconds(config.SandboxTimeoutSeconds),
+        config.SandboxMemory, config.SandboxCpus, config.SandboxTmpSize, config.SandboxMaxSessions);
+var sandboxHost = sandboxOptions is null ? null : new SandboxHost(new SystemProcessRunner(), sandboxOptions);
+if (sandboxHost is not null)
+    await sandboxHost.ReapAsync();
 foreach (var repo in config.CodeRepos)
 {
+    if (sandboxOptions is not null && sandboxOptions.Image.Length == 0)
+    {
+        Console.Error.WriteLine($"  ✖ code repo '{repo.Name}' skipped: SANDBOX_RUNNER is set but SANDBOX_IMAGE is not");
+        continue;
+    }
     var root = Path.GetFullPath(repo.Path).TrimEnd(Path.DirectorySeparatorChar);
     if (!Directory.Exists(root))
     {
@@ -226,7 +241,7 @@ AgentProfile BuildCodeProfile(string name, string root)
     var repoIndexPath = Path.Combine(state, "index.json");
     var repoIndex = VectorIndex.Load(repoIndexPath);
 
-    var tools = Toolset.CreateCode(repoWorkspace, search)
+    var tools = (sandboxHost is null ? Toolset.CreateCode(repoWorkspace, search) : Toolset.CreateCodeWithoutCommands(repoWorkspace, search))
         .Register(new IndexWorkspaceTool(new WorkspaceIndexer(repoWorkspace, embeddings, repoIndex), repoIndex, repoIndexPath))
         .Register(new SearchIndexTool(embeddings, repoIndex))
         .Register(new SummarizeFileTool(repoWorkspace, summarizer));
@@ -559,6 +574,9 @@ AgentConversation CreateConversation(InboundMessage first)
     var agentTools = new ToolRegistry();
     foreach (var tool in profile.Tools.All)
         agentTools.Register(tool);
+    if (sandboxHost is not null && !ReferenceEquals(profile, generalProfile))
+        agentTools.Register(new RunCommandTool(
+            profile.Workspace, sandbox: sandboxHost.SessionFor(profile.Name, profile.Workspace.Root)));
     agentTools
         .Register(new RememberTool(mem))
         .Register(new ListConsolidationsTool(pendingConsolidations, handle.Id))
@@ -823,6 +841,20 @@ Console.WriteLine($"Routing:   {decisionModel?.Name ?? "off (full pipeline every
 Console.WriteLine($"Groups:    answers when mentioned or replied to, then for {config.GroupEngagementSeconds}s with that person; other messages are kept as context");
 Console.WriteLine($"Turns:     {(config.TurnTakingEnabled ? $"bursts (wait {turnTaking.DefaultWait.TotalSeconds:0.#}s until measured; cli immediate)" : "one message per turn")}");
 
-await router.RunAsync(cts.Token);
+if (sandboxHost is not null)
+{
+    Console.WriteLine($"Sandbox:   commands run in {sandboxOptions!.Image} through {sandboxOptions.RunnerPath}; {sandboxOptions.MaxSessions} session(s) at a time");
+    _ = Task.Run(() => sandboxHost.RunMonitorAsync(cts.Token));
+}
+
+try
+{
+    await router.RunAsync(cts.Token);
+}
+finally
+{
+    if (sandboxHost is not null)
+        await sandboxHost.DisposeAsync();
+}
 
 Console.WriteLine("\nAgent stopped.");
