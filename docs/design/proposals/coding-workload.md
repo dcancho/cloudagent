@@ -248,10 +248,12 @@ request unchanged.
 
 - Which acceptance commands can the conversation agent write reliably from a request, and what
   fraction of requests have none?
+- Whether the coding agent's transcript should enter memory at all, or only the outcome the
   conversation agent saw.
 - How to give the coding agent project knowledge that lives in our memory without handing it the
   memory database: a generated brief per task, or a read-only tool.
-- Concurrency: how many sandboxes may run at once on the pilot machine (two vCPU, 4 GB).
+- When to allow more than one session or more than one coding agent per session, and what the pilot
+  machine (two vCPU, 4 GB) can carry.
 
 ## Order of work
 
