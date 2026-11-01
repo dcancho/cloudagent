@@ -133,17 +133,24 @@ The runner takes its credentials from the environment so that the choice is conf
    automation.
 2. **A cloud provider the project already pays for.** The documentation lists Microsoft Foundry among the
    providers Claude Code reads credentials for; this depends on having the models deployed there.
-3. **A personal subscription login.** As of 2026-10-31 the maintainer reports that `claude -p` is
-   still included in the subscription. The documentation does not say so: it says `--bare`, the
-   recommended mode for scripts and the planned default for `-p`, does not use the subscription
-   login, and it does not say whether programmatic runs are covered by a plan. Third-party reports
-   disagree. What stays open is whether this depth of indirection fits the terms: a person asks an
-   agent, the agent runs a harness, the harness starts the CLI. The reading in its favor is that
-   a human request starts every run and the CLI is the official one. The risks are different from
-   the indirection itself: an always-on server rather than a person at a keyboard, and several people
-   spending one account's limits. While it runs on a login, coding tasks are limited to the account
-   holder, and the runner keeps authentication in configuration so that a change in the terms or
-   the plan costs a setting, not code.
+3. **A personal subscription login.** The terms Anthropic publishes for Claude Code
+   ([legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), read 2026-10-31)
+   say that plan limits "assume ordinary, individual usage of Claude Code and the Agent SDK", that
+   OAuth login is meant for "ordinary use of Claude Code and other native Anthropic applications",
+   and that developers building products or services, including with the Agent SDK, should use API
+   keys or a supported cloud provider. They do not permit routing requests "through Free, Pro, Max, or
+   Ultra plan credentials on behalf of their users", or collecting, storing, or intermediating
+   subscription credentials. They do not stop a person from signing in to the unmodified binary with
+   their own subscription. The maintainer reports that `claude -p` is still included in the plan; the
+   page does not say so. The page does not use the word interactive. Third-party accounts describe a
+   2026 enforcement against subscription tokens in third-party tools and disagree on the details.
+
+   What follows for this design: the login is acceptable only for the account holder's own tasks,
+   through the unmodified binary signed in by its own flow inside the sandbox, with the credential
+   never read, stored, or passed on by our code. Tasks started by anyone else, or on behalf of anyone
+   else, use an API key or a cloud provider, which the terms explicitly allow for "the customer's own
+   authorized users" when the usage is billed to the key owner. The runner keeps authentication in
+   configuration so that a change in the terms costs a setting, not code.
 
 ## Open questions
 
