@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# The only way the host drives a sandbox session container. Installed as /usr/local/bin/cloudagent-sandbox-run
+# and run by the service user through sudo as cloudagent-sandbox. Every input is validated here and the docker
+# command lines are built here, so a caller can choose a session, a repository and an image from the
+# allowlists and a command to run inside, and nothing else.
+#
+#   start --session ID --repo NAME --image IMAGE [--memory 2g] [--cpus 1.5] [--tmp-size 1g]
+#   exec  --session ID --as runner --timeout SEC [--workdir /work/sub] [--env NAME=VALUE]... -- PROGRAM [ARGS...]
+#   stop  --session ID
+#   reap
+#
+# DRY_RUN=1 prints the docker command instead of running it, and reads the allowlists from
+# SANDBOX_CONFIG_DIR (default /etc/cloudagent).
+set -euo pipefail
+PATH=/usr/bin:/bin
+
+config_dir=/etc/cloudagent
+if [ "${DRY_RUN:-}" = 1 ]; then
+    config_dir="${SANDBOX_CONFIG_DIR:-/etc/cloudagent}"
+fi
+repos_file="$config_dir/sandbox-repos"
+images_file="$config_dir/sandbox-images"
+
+network=cloudagent-sandbox-internal
+proxy=http://cloudagent-egress:3128
+no_proxy=localhost,127.0.0.1
+name_prefix=cloudagent-sbx-
+mount_point=/work
+runner_user=1000:1000
+pids_limit=512
+max_life_seconds=14400
+max_command_seconds=1200
+allowed_env=(CI GIT_PAGER GIT_TERMINAL_PROMPT MSBUILDDISABLENODEREUSE PAGER TERM)
+
+die() {
+    echo "cloudagent-sandbox-run: $*" >&2
+    exit 2
+}
+
+# Prints the value of the first "key=value" line whose key is exactly $2.
+lookup() {
+    local file="$1" key="$2" k v
+    [ -r "$file" ] || return 1
+    while IFS='=' read -r k v || [ -n "$k" ]; do
+        case "$k" in '' | '#'*) continue ;; esac
+        if [ "$k" = "$key" ]; then
+            printf '%s\n' "$v"
+            return 0
+        fi
+    done < "$file"
+    return 1
+}
+
+listed() {
+    local file="$1" item="$2" line
+    [ -r "$file" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in '' | '#'*) continue ;; esac
+        [ "$line" = "$item" ] && return 0
+    done < "$file"
+    return 1
+}
+
+rootless_environment() {
+    [ "$(id -u)" -ne 0 ] || die "refusing to run as root"
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    export DOCKER_HOST="unix://$XDG_RUNTIME_DIR/docker.sock"
+}
+
+# Prints the command in dry-run mode, otherwise replaces this process with docker.
+docker_do() {
+    if [ "${DRY_RUN:-}" = 1 ]; then
+        printf 'docker'
+        printf ' %s' "$@"
+        printf '\n'
+        exit 0
+    fi
+    rootless_environment
+    exec /usr/bin/docker "$@"
+}
+
+[ "$#" -ge 1 ] || die "usage: start|exec|stop|reap ..."
+mode="$1"
+shift
+
+session="" repo="" image="" memory=2g cpus=1.5 tmp_size=1g workdir="$mount_point" as="" seconds=""
+caller_env=()
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --session | --repo | --image | --memory | --cpus | --tmp-size | --workdir | --as | --timeout | --env)
+            [ "$#" -ge 2 ] || die "$1 needs a value"
+            case "$1" in
+                --session) session="$2" ;;
+                --repo) repo="$2" ;;
+                --image) image="$2" ;;
+                --memory) memory="$2" ;;
+                --cpus) cpus="$2" ;;
+                --tmp-size) tmp_size="$2" ;;
+                --workdir) workdir="$2" ;;
+                --as) as="$2" ;;
+                --timeout) seconds="$2" ;;
+                --env) caller_env+=("$2") ;;
+            esac
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+if [ "$mode" = reap ]; then
+    [ "$#" -eq 0 ] && [ -z "$session" ] || die "reap takes no arguments"
+    if [ "${DRY_RUN:-}" = 1 ]; then
+        echo "docker ps -a --filter name=^$name_prefix --format {{.Names}}"
+        exit 0
+    fi
+    rootless_environment
+    names="$(/usr/bin/docker ps -a --filter "name=^$name_prefix" --format '{{.Names}}')"
+    while IFS= read -r n; do
+        [[ "$n" =~ ^$name_prefix[a-z0-9][a-z0-9-]{2,39}$ ]] || continue
+        /usr/bin/docker rm -f "$n" > /dev/null
+    done <<< "$names"
+    exit 0
+fi
+
+[[ "$session" =~ ^[a-z0-9][a-z0-9-]{2,39}$ ]] || die "invalid session id"
+name="$name_prefix$session"
+
+case "$mode" in
+    stop)
+        [ "$#" -eq 0 ] || die "stop takes no command"
+        docker_do rm -f "$name"
+        ;;
+
+    start)
+        [ "$#" -eq 0 ] || die "start takes no command"
+        [[ "$repo" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || die "invalid repository name"
+        task_dir="$(lookup "$repos_file" "$repo")" || die "repository not allowed: $repo"
+        [[ "$task_dir" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "invalid directory for repository: $repo"
+        case "$task_dir/" in */../* | */./*) die "invalid directory for repository: $repo" ;; esac
+
+        [[ "$image" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,200}$ ]] || die "invalid image name"
+        listed "$images_file" "$image" || die "image not allowed: $image"
+
+        [[ "$memory" =~ ^[1-9][0-9]{0,3}[mg]$ ]] || die "invalid memory limit"
+        [[ "$cpus" =~ ^[0-9]{1,2}(\.[0-9]{1,2})?$ ]] || die "invalid cpu limit"
+        [[ "$tmp_size" =~ ^[1-9][0-9]{0,3}[mg]$ ]] || die "invalid tmp size"
+        [ "${#caller_env[@]}" -eq 0 ] || die "start takes no environment"
+        if [ "${DRY_RUN:-}" != 1 ]; then
+            [ -d "$task_dir" ] || die "directory missing for repository: $repo"
+        fi
+
+        docker_do run -d --rm --init --pull never \
+            --name "$name" \
+            --network "$network" \
+            --cap-drop=ALL \
+            --security-opt no-new-privileges \
+            --pids-limit "$pids_limit" \
+            --memory "$memory" \
+            --cpus "$cpus" \
+            --read-only \
+            --tmpfs "/tmp:rw,exec,nosuid,size=$tmp_size" \
+            --user "$runner_user" \
+            -v "$task_dir:$mount_point:rw" \
+            -w "$mount_point" \
+            -e HOME=/tmp \
+            -e DOTNET_CLI_HOME=/tmp \
+            -e NUGET_PACKAGES=/tmp/.nuget/packages \
+            -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+            -e DOTNET_NOLOGO=1 \
+            -e DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+            -e "HTTP_PROXY=$proxy" \
+            -e "HTTPS_PROXY=$proxy" \
+            -e "NO_PROXY=$no_proxy" \
+            -e "http_proxy=$proxy" \
+            -e "https_proxy=$proxy" \
+            -e "no_proxy=$no_proxy" \
+            --entrypoint timeout \
+            "$image" "$max_life_seconds" sleep infinity
+        ;;
+
+    exec)
+        [ "$as" = runner ] || die "invalid user"
+        [[ "$seconds" =~ ^[1-9][0-9]{0,3}$ ]] && [ "$seconds" -le "$max_command_seconds" ] || die "invalid timeout"
+        [[ "$workdir" =~ ^/work(/[A-Za-z0-9._-]+)*$ ]] || die "invalid working directory"
+        case "$workdir/" in */../* | */./*) die "invalid working directory" ;; esac
+
+        env_args=()
+        for entry in "${caller_env[@]}"; do
+            var_name="${entry%%=*}"
+            var_value="${entry#*=}"
+            [ "$var_name" != "$entry" ] || die "invalid environment entry"
+            ok=0
+            for allowed in "${allowed_env[@]}"; do
+                [ "$var_name" = "$allowed" ] && ok=1
+            done
+            [ "$ok" -eq 1 ] || die "environment variable not allowed: $var_name"
+            [[ "$var_value" =~ ^[A-Za-z0-9._:/,@+=-]*$ ]] || die "invalid value for $var_name"
+            env_args+=(-e "$entry")
+        done
+
+        [ "$#" -ge 1 ] || die "no command given"
+        program="$1"
+        [[ "$program" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || die "invalid program name"
+
+        docker_do exec -u "$runner_user" -w "$workdir" "${env_args[@]}" "$name" timeout -k 10 "$seconds" "$@"
+        ;;
+
+    *) die "unknown mode: $mode" ;;
+esac

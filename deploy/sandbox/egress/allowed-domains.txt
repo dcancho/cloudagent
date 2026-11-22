@@ -1,0 +1,7 @@
+# Hosts the sandbox may reach through the egress proxy. A leading dot allows the domain and its subdomains.
+# After editing, run build-sandbox.sh again.
+# The host does every git operation, so no git host is listed. The coding agent's hosts are added with the
+# coding agent (step 2).
+
+# NuGet
+.nuget.org

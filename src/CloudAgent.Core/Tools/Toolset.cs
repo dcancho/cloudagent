@@ -23,11 +23,17 @@ public static class Toolset
 
     /// <summary>
     /// The default set plus what working on code needs: exact edits, exact search, and running
-    /// the programs <paramref name="workspace"/> allows.
+    /// the programs <paramref name="workspace"/> allows on this machine.
     /// </summary>
     public static ToolRegistry CreateCode(IWorkspace workspace, IWebSearchProvider search) =>
+        CreateCodeWithoutCommands(workspace, search).Register(new RunCommandTool(workspace));
+
+    /// <summary>
+    /// <see cref="CreateCode"/> without <c>run_command</c>, for a workspace whose commands run in a sandbox
+    /// that belongs to each conversation and is registered per conversation.
+    /// </summary>
+    public static ToolRegistry CreateCodeWithoutCommands(IWorkspace workspace, IWebSearchProvider search) =>
         CreateDefault(workspace, search)
             .Register(new EditFileTool(workspace))
-            .Register(new SearchFilesTool(workspace))
-            .Register(new RunCommandTool(workspace));
+            .Register(new SearchFilesTool(workspace));
 }

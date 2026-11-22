@@ -152,6 +152,70 @@ sudo ufw status verbose
 Discord and Telegram only need outbound connections, so no other rule is needed. If you lock
 yourself out, the OVHcloud KVM console from the control panel still reaches the machine.
 
+## Sandbox for coding commands (optional)
+
+`CODE_REPOS` stays unset until this is in place, because `run_command` would otherwise execute on the
+server as `cloudagent`. With the sandbox, each repository gets one session container under a separate user,
+`cloudagent-sandbox`, in rootless Docker. It starts with the first command and serves the later ones from
+any conversation on that repository, so restored packages and build output persist. There is one session
+at a time (`SANDBOX_MAX_SESSIONS`): a command for another repository removes the idle session and starts
+its own, or is refused, naming the busy repository, while a command is running. A session is removed
+after 30 minutes without commands, after 4 hours, and when the host stops, never because a conversation
+ends; leftovers from a crashed host are removed at the next start. Its directory is kept.
+
+```bash
+cd ~/deploy/sandbox
+sudo bash provision-sandbox.sh
+sudo bash build-sandbox.sh
+```
+
+`provision-sandbox.sh` creates the user with subuid and subgid ranges and lingering, installs rootless
+Docker for it, installs `/usr/local/bin/cloudagent-sandbox-run`, creates the two allowlists
+`/etc/cloudagent/sandbox-images` and `/etc/cloudagent/sandbox-repos`, and lets `cloudagent` run only that
+script as `cloudagent-sandbox`. Because `sudo` cannot switch users under `NoNewPrivileges`, it also
+adds a drop-in that turns that setting off for the service. `build-sandbox.sh` builds the .NET image
+and starts the egress proxy; run it again after editing `deploy/sandbox/egress/allowed-domains.txt`.
+
+Then:
+
+1. Add the repository to `/etc/cloudagent/sandbox-repos` as `name=/absolute/path`, the same name and path
+   as in `CODE_REPOS`. This directory is the only thing mounted in the container, as `/work`.
+2. Rootless Docker maps the container users to unprivileged ids of `cloudagent-sandbox`: uid 1000
+   (`runner`) to the first id of its range in `/etc/subuid` plus 999, and uid 1001 (`coder`, used by
+   the coding agent later) to that plus 1000. Give both ids, and the service user `cloudagent`, read and
+   write access to the directory, as access and as default ACL, so the service can edit files the
+   container creates:
+
+   ```bash
+   first=$(awk -F: '$1=="cloudagent-sandbox" {print $2}' /etc/subuid)
+   sudo setfacl -R -m u:$((first+999)):rwX,u:$((first+1000)):rwX,u:cloudagent:rwX <path>
+   sudo setfacl -R -d -m u:$((first+999)):rwX,u:$((first+1000)):rwX,u:cloudagent:rwX <path>
+   ```
+3. In `/etc/cloudagent/cloudagent.env` set `CODE_REPOS`, `SANDBOX_RUNNER=/usr/local/bin/cloudagent-sandbox-run`
+   and `SANDBOX_IMAGE=cloudagent-sandbox-dotnet:latest`, then restart the service.
+
+What it protects: a command runs with no capabilities, a read-only root filesystem, no new privileges,
+limits on processes, memory and CPUs, and one writable mount. Its network is internal to Docker; the
+only way out is a Squid proxy that allows the hosts in `allowed-domains.txt`, for now the NuGet hosts
+only (the host does every git operation, and the coding agent's hosts come with the coding agent). The
+wrapper accepts only a session id, a repository and an image from the allowlists, and a command; it
+builds the docker command lines itself, never mounts the Docker socket, and never uses host networking
+or `--privileged`. A container escape lands in `cloudagent-sandbox`, which owns nothing the host owns.
+Every command runs under `timeout` inside the container, which stops the process itself and not only
+the `docker exec` client, and a session container ends by itself after 4 hours. `/tmp` is a tmpfs
+(`SANDBOX_TMP_SIZE`, 1g) that holds the package cache and build temp for the session's whole life.
+
+What it does not protect:
+
+- The mounted repository is writable by the commands, and an allowed host can still receive whatever
+  they send it.
+- `provision-sandbox.sh` turns `NoNewPrivileges` off for the whole `cloudagent` service so `sudo` can
+  switch users. That weakens the host unit. A socket-activated wrapper would avoid it; it is planned,
+  not done.
+- The rootless Docker containers run outside the service's `MemoryMax`, so the sandbox's 2 GB comes on
+  top of it on a 4 GB machine.
+- Once the coding agent exists, its own shell can read its own login.
+
 ## Updating and rolling back
 
 Deploy a new version by running `publish.ps1` again.
