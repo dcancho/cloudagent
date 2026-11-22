@@ -26,6 +26,8 @@ Proposals are ideas that are reasoned through but not built. Each states its sta
   have to end in a message, and what streaming publishes.
 - [Context routing](proposals/context-routing.md): a decision model chooses how much of the
   pipeline each turn needs, and falls back to all of it when unsure.
+- [Coding workload](proposals/coding-workload.md): running code in a disposable sandbox and delegating
+  implementation to a coding agent such as `claude -p`, verified before anyone reviews it.
 - [Fidelity ladder](proposals/fidelity-ladder.md): perceiving a source as a summary, a query, or
   the source itself, and climbing only as far as needed.
 
